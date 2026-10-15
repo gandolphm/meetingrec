@@ -1,0 +1,39 @@
+# Meetings.base — starter Obsidian Base for meeting notes.
+#
+# Obsidian's Base file format is still evolving across versions. If this file
+# doesn't render as expected, just recreate it via the GUI: open the Command
+# Palette → "Bases: New base", point it at the meeting-notes folder, and add the
+# columns/filter shown below by hand. It takes about 30 seconds and is the
+# canonical no-code way to build a Base.
+#
+# This Base reads the YAML frontmatter the meeting-notes skill writes, so every
+# new note appears automatically. Filter by company, group by attendee, sort by
+# date — all in the GUI, no query language.
+
+filters:
+  and:
+    - 'file.inFolder("meeting-notes")'
+
+views:
+  - type: table
+    name: All Meetings
+    order:
+      - file.name
+      - date
+      - type
+      - company
+      - attendees
+    sort:
+      - property: date
+        direction: DESC
+
+  - type: table
+    name: By Company
+    group_by: company
+    order:
+      - file.name
+      - date
+      - type
+    sort:
+      - property: date
+        direction: DESC

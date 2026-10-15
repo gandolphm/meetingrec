@@ -1,0 +1,701 @@
+#!/usr/bin/env bash
+#
+# meetingrec — record both sides of a virtual meeting as two separate tracks.
+#
+#   meetingrec start [title] [--mic-only]
+#   meetingrec stop
+#   meetingrec status
+#
+# Captures only. Transcription is a separate, later process (the `meeting-notes`
+# skill) so a bad transcription run can never cost a recording.
+#
+# Output: $OUTPUT_ROOT/<ISO>_<slug>/{mic.wav,system.wav,session.json}
+#   mic.wav     you only        — 16 kHz mono s16le
+#   system.wav  everyone else   — 16 kHz mono s16le
+#
+set -uo pipefail
+
+# Hammerspoon's hs.task starts with a minimal environment, so PATH is set
+# explicitly rather than inherited. ffmpeg lives in Homebrew, python3 in
+# /usr/local.
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH
+
+CONFIG="${MEETINGREC_CONFIG:-$HOME/.config/meetingrec/config.sh}"
+# shellcheck source=/dev/null
+[ -f "$CONFIG" ] && . "$CONFIG"
+
+AUDIOTEE_BIN="${AUDIOTEE_BIN:-$HOME/bin/audiotee}"
+AUDIOTEE_SHA="${AUDIOTEE_SHA:-unknown}"
+# Default inbox is scribe/input/ in this repo, wherever it was cloned. realpath
+# follows a symlink (e.g. ~/bin/meetingrec -> repo/bin/meetingrec) back to the repo.
+REPO_ROOT="$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$REPO_ROOT/scribe/input}"
+SAMPLE_RATE=16000
+
+# 16000 samples/s x 2 bytes x 1 channel. Every format change moves this number,
+# which is what makes it a usable assertion without parsing audiotee's stderr.
+EXPECTED_BYTES_PER_SEC=32000
+# Tolerance is wide on purpose. ffmpeg writes in buffered blocks, so a short
+# measurement window is jittery, and a false alarm before a call is expensive.
+# It can afford to be wide because the failures are far away: the nearest
+# plausible wrong format is 22.05 kHz mono s16le at 44100 B/s (+38%), and the
+# common ones are multiples (2x stereo, 6x the 48 kHz float32 default).
+RATE_TOLERANCE_PCT=25
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/meetingrec"
+STATE_FILE="$STATE_DIR/current"
+
+die()  { printf 'meetingrec: %s\n' "$*" >&2; exit 1; }
+warn() { printf 'meetingrec: %s\n' "$*" >&2; }
+alive() { kill -0 "$1" 2>/dev/null; }
+
+notify() {
+  # Visible whether the caller was Terminal or Hammerspoon.
+  local title="$1" msg="$2"
+  osascript -e "display notification \"${msg//\"/\\\"}\" with title \"${title//\"/\\\"}\"" \
+    >/dev/null 2>&1 || true
+}
+
+slugify() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+    | cut -c1-60
+}
+
+# --------------------------------------------------------------------------
+# The format assertion.
+#
+# Measures actual throughput of a growing WAV instead of parsing audiotee's
+# (undocumented, unstable) stderr. Catches wrong sample rate, wrong bit depth,
+# wrong channel count, and a silent/denied tap — all as a single number.
+#
+# Runs detached so `start` returns immediately: several seconds of dead time
+# while you are trying to hit record before a call is its own failure mode.
+# --------------------------------------------------------------------------
+byte_rate_check() {
+  local dir="$1" file="$2" label="$3"
+  local lo hi s1 s2 s3 rate i size
+  lo=$(( EXPECTED_BYTES_PER_SEC * (100 - RATE_TOLERANCE_PCT) / 100 ))
+  hi=$(( EXPECTED_BYTES_PER_SEC * (100 + RATE_TOLERANCE_PCT) / 100 ))
+
+  # Wait for audio to actually start flowing before measuring anything.
+  #
+  # A fixed sampling window does not work: measured on a real run, audiotee
+  # takes ~4s between "stream_start" and "Audio device started successfully"
+  # (Core Audio device startup, longer over Bluetooth). Sampling at a fixed
+  # T+2s/T+5s straddles that gap and reports roughly a third of the true rate —
+  # a false "wrong format" alarm on every single recording.
+  #
+  # Polling for first data also sharpens the permissions signal: "no bytes at
+  # all within 25s" is far stronger evidence of a denied tap than one low
+  # reading taken while the device was still spinning up.
+  for i in $(seq 1 50); do
+    size=$(stat -f%z "$dir/$file" 2>/dev/null || echo 0)
+    [ "$size" -gt 16000 ] && break
+    sleep 0.5
+  done
+
+  size=$(stat -f%z "$dir/$file" 2>/dev/null || echo 0)
+  if [ "$size" -le 16000 ]; then
+    printf '%s FAIL silent (no audio within 25s)\n' "$label" >> "$dir/format-check.txt"
+    notify "MeetingRec — NOT RECORDING" \
+      "$label track produced no audio in 25s. Likely a System Audio Recording permission problem. Stop, fix, restart."
+    return
+  fi
+
+  # Now that data is flowing, a 3s delta gives a clean rate.
+  s1=$(stat -f%z "$dir/$file" 2>/dev/null || echo 0)
+  sleep 3
+  s2=$(stat -f%z "$dir/$file" 2>/dev/null || echo 0)
+  rate=$(( (s2 - s1) / 3 ))
+
+  # Then one more sample, to ask a different question: is it *still* going?
+  #
+  # The average rate cannot tell a stall from a wrong format. A stream that dies
+  # a second into the window still leaves enough bytes to clear any "too slow"
+  # threshold, and it then gets reported as a format problem — which tells you
+  # the opposite of the truth, since wrong-format means "keep recording, the data
+  # is recoverable" and a stall means the recording is over. Growth over the last
+  # second answers it directly: a live stream always grows (~16 KB per 0.5 s with
+  # -flush_packets), a dead one never does.
+  sleep 1
+  s3=$(stat -f%z "$dir/$file" 2>/dev/null || echo 0)
+
+  if [ "$s3" -le "$s2" ]; then
+    # Started, then stalled — the device went away mid-stream.
+    printf '%s FAIL stalled (%s B/s after starting)\n' \
+      "$label" "$rate" >> "$dir/format-check.txt"
+    notify "MeetingRec — recording stalled" \
+      "$label track started then stopped producing audio. Did the output device change?"
+  elif [ "$rate" -lt "$lo" ] || [ "$rate" -gt "$hi" ]; then
+    # Recoverable: the bytes are fine, only the WAV header is lying about them.
+    printf '%s FAIL format (%s B/s, expected %s)\n' \
+      "$label" "$rate" "$EXPECTED_BYTES_PER_SEC" >> "$dir/format-check.txt"
+    notify "MeetingRec — wrong audio format" \
+      "$label track is $rate B/s, expected $EXPECTED_BYTES_PER_SEC. Still recording; raw data is recoverable."
+  else
+    printf '%s OK (%s B/s)\n' "$label" "$rate" >> "$dir/format-check.txt"
+  fi
+}
+
+# --------------------------------------------------------------------------
+# Primary format assertion: audiotee's own metadata.
+#
+# audiotee writes newline-delimited JSON to stderr, and its first `metadata`
+# message states the format it actually negotiated:
+#
+#   {"message_type":"metadata","data":{"sample_rate":16000,
+#    "channels_per_frame":1,"bits_per_channel":16,"is_float":false,
+#    "device_name":"...","encoding":"..."}}
+#
+# That is knowable within a second of launch, before meaningful audio exists, so
+# it beats the byte-rate check on latency and precision — it can name the wrong
+# value rather than infer one from throughput. The byte-rate check stays as the
+# backstop, because metadata reports the *intended* format and would look
+# perfectly correct while a permission-denied tap produced silence.
+#
+# Echoes: ok|<rate>|<ch>|<bits>|<float>|<device>   or   mismatch|... or unknown|
+# --------------------------------------------------------------------------
+audiotee_metadata() {
+  MR_LOG="$1" MR_RATE="$SAMPLE_RATE" python3 - <<'PY' 2>/dev/null || echo "unknown|||||"
+import json, os, sys
+want = int(os.environ["MR_RATE"])
+meta = None
+try:
+    for line in open(os.environ["MR_LOG"], encoding="utf-8", errors="replace"):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if msg.get("message_type") == "metadata" and msg.get("data"):
+            meta = msg["data"]
+            break
+except OSError:
+    pass
+if not meta:
+    print("unknown|||||"); sys.exit(0)
+rate  = meta.get("sample_rate")
+ch    = meta.get("channels_per_frame")
+bits  = meta.get("bits_per_channel")
+flt   = meta.get("is_float")
+dev   = meta.get("device_name") or "unknown"
+ok = (int(rate or 0) == want and int(ch or 0) == 1
+      and int(bits or 0) == 16 and not flt)
+print(f"{'ok' if ok else 'mismatch'}|{rate}|{ch}|{bits}|{flt}|{dev}")
+PY
+}
+
+# FLUSH: both ffmpeg outputs take `-flush_packets 1`.
+#
+# By default ffmpeg fills a 256 KB AVIO buffer before writing anything, which at
+# 32 KB/s means the WAV only touches disk every ~8 seconds. On-disk size is then
+# a step function with 8-second plateaus, and a short sampling window lands
+# inside a plateau and measures 0 B/s — which is what made the byte-rate check
+# report "stalled" on a recording that was in fact perfect.
+#
+# Flushing per packet makes file size a faithful real-time signal, which is what
+# the check needs. It also means an unexpected kill loses a fraction of a second
+# rather than up to eight.
+
+# Which devices were actually in play, recorded read-only before capture starts.
+#
+# `:default` follows the system default input, so this answers "was that the
+# AirPods or the built-in mic?" without guessing. The default *output* matters
+# too: audiotee taps it, so if the system track comes back silent this is the
+# forensic fact you want. Both are read at start because both can change later.
+audio_devices() {
+  system_profiler -json SPAudioDataType 2>/dev/null | python3 -c '
+import json, sys
+try:
+    items = json.load(sys.stdin).get("SPAudioDataType", [])
+except Exception:
+    print("unknown|unknown"); sys.exit(0)
+def walk(nodes):
+    for it in nodes:
+        yield it
+        for sub in (it.get("_items") or []):
+            yield sub
+inp = out = "unknown"
+for it in walk(items):
+    name = it.get("_name", "unknown")
+    if "coreaudio_default_audio_input_device" in it:  inp = name
+    if "coreaudio_default_audio_output_device" in it: out = name
+print(f"{inp}|{out}")
+' || echo "unknown|unknown"
+}
+
+write_session_json() {
+  local dir="$1" title="$2" tracks="$3" mic_device="$4" out_device="${5:-unknown}"
+  local tap_meta="${6:-}"
+  MR_DIR="$dir" MR_TITLE="$title" MR_TRACKS="$tracks" MR_MIC="$mic_device" \
+  MR_OUT="$out_device" MR_TAP="$tap_meta" \
+  MR_SHA="$AUDIOTEE_SHA" MR_RATE="$SAMPLE_RATE" python3 - <<'PY'
+import json, os, datetime
+d = os.environ["MR_DIR"]
+doc = {
+    "title": os.environ["MR_TITLE"],
+    "started": datetime.datetime.now(datetime.timezone.utc)
+                 .isoformat(timespec="seconds").replace("+00:00", "Z"),
+    "tracks": os.environ["MR_TRACKS"].split(","),
+    "mic_device": os.environ["MR_MIC"],
+    "output_device": os.environ["MR_OUT"],
+    "audiotee_sha": os.environ["MR_SHA"],
+    "format": {
+        "sample_rate": int(os.environ["MR_RATE"]),
+        "channels": 1,
+        "encoding": "s16le",
+    },
+}
+
+# What audiotee said it was actually producing. When this disagrees with
+# "format" above, the WAV header is wrong but the PCM is fine — these are the
+# values needed to re-wrap it.
+tap = os.environ.get("MR_TAP", "")
+if tap:
+    status, rate, ch, bits, flt, dev = (tap.split("|") + [""] * 6)[:6]
+    doc["tap"] = {"assertion": status, "device": dev or "unknown"}
+    if rate:
+        def num(v):
+            try:
+                return int(float(v))
+            except ValueError:
+                return v
+        doc["tap"]["reported_format"] = {
+            "sample_rate": num(rate), "channels": num(ch),
+            "bits_per_channel": num(bits), "is_float": flt == "True",
+        }
+with open(os.path.join(d, "session.json"), "w") as f:
+    json.dump(doc, f, indent=2)
+    f.write("\n")
+PY
+}
+
+# --------------------------------------------------------------------------
+# start
+# --------------------------------------------------------------------------
+cmd_start() {
+  local title="" mic_only=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --mic-only) mic_only=1 ;;
+      --*)        die "unknown option: $arg" ;;
+      *)          [ -z "$title" ] && title="$arg" ;;
+    esac
+  done
+
+  # A stale state file after a crash must not wedge the tool, so check that the
+  # recorded PIDs are actually alive rather than trusting the file's existence.
+  if [ -f "$STATE_FILE" ]; then
+    # shellcheck source=/dev/null
+    . "$STATE_FILE"
+    if alive "${MIC_PID:-0}" || alive "${SYS_FF_PID:-0}"; then
+      die "already recording: ${SESSION_DIR:-unknown} (run: meetingrec stop)"
+    fi
+    warn "clearing stale state from a previous run"
+    rm -f "$STATE_FILE"
+  fi
+
+  [ -z "$title" ] && title="untitled"
+  local slug dir
+  slug="$(slugify "$title")"
+  [ -z "$slug" ] && slug="untitled"
+  dir="$OUTPUT_ROOT/$(date +%Y-%m-%dT%H-%M)_$slug"
+
+  mkdir -p "$dir" "$STATE_DIR" || die "cannot create $dir"
+
+  # Read the devices *before* opening any stream: capturing can itself change
+  # things (opening the AirPods mic switches the Bluetooth profile), so a
+  # reading taken afterwards would describe the wrong state.
+  local devs mic_device out_device
+  devs="$(audio_devices)"
+  mic_device="${devs%%|*}"
+  out_device="${devs##*|}"
+
+  local tracks="mic,system"
+  local audiotee_pid=0 sys_ff_pid=0
+  local tap_meta=""
+
+  if [ "$mic_only" -eq 1 ]; then
+    tracks="mic"
+  else
+    [ -x "$AUDIOTEE_BIN" ] || die "audiotee not found or not executable: $AUDIOTEE_BIN
+Build it first — see "Install audiotee" in the README — then set AUDIOTEE_BIN in $CONFIG"
+
+    # A FIFO rather than a shell pipe, so both halves of the pipeline get
+    # individually addressable PIDs to signal at stop.
+    local fifo="$dir/.tap.pcm"
+    mkfifo "$fifo" || die "cannot create fifo"
+
+    # ffmpeg opens the fifo for read and blocks until audiotee opens for write.
+    # -flush_packets 1: see FLUSH note above write_session_json.
+    nohup ffmpeg -nostdin -f s16le -ar "$SAMPLE_RATE" -ac 1 -i "$fifo" \
+          -c:a pcm_s16le -flush_packets 1 "$dir/system.wav" \
+          >/dev/null 2>"$dir/system-ffmpeg.log" &
+    sys_ff_pid=$!
+
+    # No --include-processes: including or excluding a PID that is not currently
+    # playing audio fails to resolve to an Audio Object and exits the process,
+    # so starting before anyone unmutes would kill the recording. Global tap.
+    nohup "$AUDIOTEE_BIN" --sample-rate "$SAMPLE_RATE" \
+          >"$fifo" 2>"$dir/audiotee.log" &
+    audiotee_pid=$!
+
+    sleep 1
+    if ! alive "$audiotee_pid"; then
+      warn "audiotee exited immediately — its log says:"
+      sed 's/^/  /' "$dir/audiotee.log" >&2
+      kill -INT "$sys_ff_pid" 2>/dev/null
+      rm -f "$fifo"
+      die "aborting start"
+    fi
+
+    # audiotee has already announced its format by now.
+    local meta status
+    meta="$(audiotee_metadata "$dir/audiotee.log")"
+    status="${meta%%|*}"
+    tap_meta="$meta"
+    case "$status" in
+      ok)
+        printf 'audiotee metadata OK (%s)\n' "$meta" >> "$dir/format-check.txt" ;;
+      mismatch)
+        # Recoverable: the PCM is intact, only ffmpeg's header misdescribes it,
+        # and the true format is now on record in session.json. Killing the
+        # recording would turn a fixable file into a lost meeting.
+        printf 'audiotee metadata MISMATCH (%s)\n' "$meta" >> "$dir/format-check.txt"
+        warn "audiotee reports a format this build did not ask for: $meta"
+        warn "still recording — the raw PCM is recoverable using the values above"
+        notify "MeetingRec — wrong audio format" \
+               "audiotee reports $meta. Still recording; see session.json." ;;
+      *)
+        # A future audiotee that stops emitting metadata must be visible, not
+        # silently unchecked. The byte-rate check still covers this case.
+        printf 'audiotee metadata UNREADABLE\n' >> "$dir/format-check.txt"
+        warn "could not read audiotee's format metadata — relying on the byte-rate check" ;;
+    esac
+  fi
+
+  nohup ffmpeg -nostdin -f avfoundation -i ":default" \
+        -ar "$SAMPLE_RATE" -ac 1 -c:a pcm_s16le -flush_packets 1 "$dir/mic.wav" \
+        >/dev/null 2>"$dir/mic-ffmpeg.log" &
+  local mic_pid=$!
+
+  sleep 1
+  if ! alive "$mic_pid"; then
+    warn "mic ffmpeg exited immediately — its log says:"
+    sed 's/^/  /' "$dir/mic-ffmpeg.log" >&2
+    [ "$audiotee_pid" -ne 0 ] && kill -INT "$audiotee_pid" 2>/dev/null
+    die "aborting start"
+  fi
+
+  write_session_json "$dir" "$title" "$tracks" "$mic_device" "$out_device" "$tap_meta"
+
+  cat > "$STATE_FILE" <<EOF
+SESSION_DIR='$dir'
+AUDIOTEE_PID=$audiotee_pid
+SYS_FF_PID=$sys_ff_pid
+MIC_PID=$mic_pid
+STARTED_EPOCH=$(date +%s)
+TRACKS='$tracks'
+EOF
+
+  # Detached: the check must outlive this process.
+  if [ "$mic_only" -eq 1 ]; then
+    ( byte_rate_check "$dir" "mic.wav" "mic" >/dev/null 2>&1 & ) &
+  else
+    ( byte_rate_check "$dir" "system.wav" "system" >/dev/null 2>&1 & ) &
+    ( byte_rate_check "$dir" "mic.wav" "mic" >/dev/null 2>&1 & ) &
+  fi
+
+  printf 'recording: %s\n' "$dir"
+  printf '  tracks: %s\n' "$tracks"
+  printf '  mic:    %s\n' "$mic_device"
+  [ "$mic_only" -eq 0 ] && printf '  output: %s (do not change it mid-call)\n' "$out_device"
+  [ "$mic_only" -eq 1 ] && printf '  note:   mic-only — no speaker attribution downstream\n'
+  return 0
+}
+
+# --------------------------------------------------------------------------
+# stop
+# --------------------------------------------------------------------------
+cmd_stop() {
+  [ -f "$STATE_FILE" ] || die "not recording"
+  # shellcheck source=/dev/null
+  . "$STATE_FILE"
+
+  local dir="${SESSION_DIR:?}" i
+
+  # SIGINT, never SIGKILL: ffmpeg has to finalize the WAV header or the file is
+  # unreadable. Signal audiotee first and let ffmpeg close on EOF.
+  [ "${AUDIOTEE_PID:-0}" -ne 0 ] && kill -INT "$AUDIOTEE_PID" 2>/dev/null
+
+  if [ "${SYS_FF_PID:-0}" -ne 0 ]; then
+    for i in 1 2 3 4 5; do alive "$SYS_FF_PID" || break; sleep 1; done
+    alive "$SYS_FF_PID" && kill -INT "$SYS_FF_PID" 2>/dev/null
+  fi
+
+  # The mic ffmpeg reads from a device, so it never sees EOF — signal directly.
+  kill -INT "${MIC_PID:-0}" 2>/dev/null
+
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    alive "${MIC_PID:-0}" || alive "${SYS_FF_PID:-0}" || break
+    sleep 1
+  done
+  for i in "${MIC_PID:-0}" "${SYS_FF_PID:-0}"; do
+    if [ "$i" -ne 0 ] && alive "$i"; then
+      warn "pid $i did not exit on SIGINT; sending SIGTERM (its WAV may be truncated)"
+      kill -TERM "$i" 2>/dev/null
+    fi
+  done
+
+  rm -f "$dir/.tap.pcm"
+
+  local duration=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
+
+  MR_DIR="$dir" MR_DUR="$duration" MR_EXPECT="$EXPECTED_BYTES_PER_SEC" \
+  MR_STATE="$STATE_DIR" python3 - <<'PY'
+import json, os, datetime, glob, wave, array, math, re
+d, dur = os.environ["MR_DIR"], int(os.environ["MR_DUR"])
+
+_PROG = re.compile(r"time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)"
+                   r".*?elapsed=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
+
+
+def clock_error_ppm(log):
+    """How fast this track's capture clock ran, vs the wall clock, in ppm.
+
+    Recorded here because the ffmpeg logs do not survive: the meeting-notes skill
+    deletes the whole session directory once the note is written. Measuring at
+    stop means every recording leaves evidence about drift without anyone having
+    to remember to look, which is what answers the phase 5 question over time.
+
+    ffmpeg's progress lines carry both the audio timestamp (advanced by the
+    device clock) and the wall clock. If the device clock is fast or slow, the
+    difference grows linearly, and the slope is the error. Drift *between* the
+    two tracks is the difference of their two errors — a constant offset is
+    already corrected, a diverging one cannot be.
+    """
+    try:
+        raw = open(log, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None
+    pts = []
+    for m in _PROG.finditer(raw.replace("\r", "\n")):
+        t = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+        e = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + float(m.group(6))
+        if e >= 30.0:          # skip device startup and buffer priming
+            pts.append((e, t - e))
+    if len(pts) < 20:
+        return None            # too short to fit a slope worth reporting
+    n = len(pts)
+    mx = sum(p[0] for p in pts) / n
+    my = sum(p[1] for p in pts) / n
+    den = sum((x - mx) ** 2 for x, _ in pts)
+    if den == 0:
+        return None
+    return sum((x - mx) * (y - my) for x, y in pts) / den * 1e6
+
+
+def peak_dbfs(path):
+    """Loudest sample in the file, in dBFS. None if unreadable.
+
+    This is the actual silence test — the one phase 0 ran by hand with ffmpeg's
+    volumedetect, finally automated. Size alone cannot do it: a tap that TCC has
+    denied still streams zeros at the full 32,000 B/s, so it satisfies the
+    byte-rate check, the metadata check and the size guard while recording
+    nothing. Digital silence reads -91 dBFS or lower; anything real is far above.
+
+    Done with array.max rather than ffmpeg so stop stays instant on a long
+    recording: the per-chunk max runs in C, so an hour of audio costs well under
+    a second and adds no dependency to the stop path.
+    """
+    try:
+        peak = 0
+        with wave.open(path, "rb") as w:
+            if w.getsampwidth() != 2:
+                return None
+            while True:
+                chunk = w.readframes(1 << 16)
+                if not chunk:
+                    break
+                a = array.array("h")
+                a.frombytes(chunk[:len(chunk) - len(chunk) % 2])
+                if a:
+                    peak = max(peak, max(a), -min(a))
+    except Exception:
+        return None
+    if peak <= 0:
+        return -math.inf
+    return 20 * math.log10(peak / 32768.0)
+expect = int(os.environ["MR_EXPECT"])
+p = os.path.join(d, "session.json")
+try:
+    doc = json.load(open(p))
+except Exception:
+    doc = {}
+doc["ended"] = (datetime.datetime.now(datetime.timezone.utc)
+                .isoformat(timespec="seconds").replace("+00:00", "Z"))
+doc["duration_seconds"] = dur
+
+checks = {}
+cf = os.path.join(d, "format-check.txt")
+if os.path.exists(cf):
+    checks["startup_format"] = [l for l in open(cf).read().splitlines() if l.strip()]
+# Track start offsets. The two tracks do NOT begin at the same instant: each
+# ffmpeg only starts capturing once its device is open, and opening the mic can
+# take seconds — a Bluetooth headset renegotiates to the HFP voice profile
+# first. Measured on AirPods Pro: mic.wav began 4.7s after system.wav.
+#
+# Left uncorrected that offset lands straight in the merged transcript, tagging
+# every [Me] line seconds early and interleaving replies ahead of what they
+# replied to. So it is measured here, while the evidence still exists, rather
+# than guessed at later.
+#
+# Each track's first sample is (when ffmpeg finalized the file) minus (how much
+# audio it holds). The finalize mtime is exact: SIGINT makes ffmpeg seek back
+# and rewrite the RIFF header, so mtime is the moment capture ended. Frame count
+# comes from the header rather than from file size, because ffmpeg writes 78
+# bytes of header and chunks, not the canonical 44.
+#
+# Note this measures the offset between the tracks, not either one's offset from
+# when you clicked record — that is all the merge needs.
+first_sample = {}
+for name in ("mic.wav", "system.wav"):
+    fp = os.path.join(d, name)
+    if not os.path.exists(fp):
+        continue
+    try:
+        with wave.open(fp, "rb") as w:
+            audio_secs = w.getnframes() / float(w.getframerate())
+        first_sample[name] = (os.path.getmtime(fp) - audio_secs, audio_secs)
+    except Exception:
+        pass  # unreadable WAV is the silence guard's problem, not this one
+base = min((t for t, _ in first_sample.values()), default=0.0)
+
+warnings = []
+for name in ("mic.wav", "system.wav"):
+    fp = os.path.join(d, name)
+    if not os.path.exists(fp):
+        continue
+    size = os.path.getsize(fp)
+    checks[name] = {"bytes": size,
+                    "bytes_per_sec": round(size / dur) if dur else None}
+    if name in first_sample:
+        t0, audio_secs = first_sample[name]
+        checks[name]["audio_seconds"] = round(audio_secs, 3)
+        checks[name]["start_offset_seconds"] = round(t0 - base, 3)
+    ppm = clock_error_ppm(os.path.join(d, name[:-4] + "-ffmpeg.log"))
+    if ppm is not None:
+        checks[name]["clock_error_ppm"] = round(ppm, 1)
+    # Is the file the right size?
+    if dur > 5 and size < expect * dur * 0.5:
+        warnings.append(f"{name} is {size} bytes for {dur}s "
+                        f"(expected ~{expect*dur}) — likely a permissions problem")
+    # Does it contain anything? A full-size file of zeros passes every other
+    # check we have, so this is the one that catches a denied tap.
+    pk = peak_dbfs(fp)
+    if pk is not None:
+        checks[name]["peak_dbfs"] = (None if pk == -math.inf else round(pk, 1))
+        if pk < -60:
+            cause = ("System Audio Recording" if name == "system.wav"
+                     else "Microphone")
+            warnings.append(
+                f"{name} is silent (peak {'-inf' if pk == -math.inf else f'{pk:.0f}'} "
+                f"dBFS) — it recorded no audio at all. Either nothing was playing, "
+                f"or whatever launched meetingrec lacks {cause} permission. "
+                f"Permissions attach to the launcher, so a working Terminal does "
+                f"not mean a working menu bar.")
+doc["checks"] = checks
+
+# A large skew is not itself an error — the merge corrects for it — but it means
+# seconds of one side went uncaptured, so it is worth seeing.
+skew = max((c.get("start_offset_seconds", 0) for c in checks.values()
+            if isinstance(c, dict)), default=0)
+if skew > 8:
+    warnings.append(f"tracks started {skew:.1f}s apart — that much of the "
+                    f"later track was missed (connect headphones before recording)")
+if warnings:
+    doc["warnings"] = warnings
+with open(p, "w") as f:
+    json.dump(doc, f, indent=2); f.write("\n")
+
+# Keep the measurements after the recording itself is gone.
+#
+# The meeting-notes skill deletes the whole session directory once the note is
+# written — that is the retention policy, and it is correct for audio. But it
+# also takes session.json, so anything learned about the hardware would die with
+# every meeting and the drift question could never accumulate an answer. One
+# line per session, outside the vault so Obsidian never indexes it, costs
+# nothing and means the evidence outlives the recording.
+try:
+    state = os.environ.get("MR_STATE")
+    if state:
+        os.makedirs(state, exist_ok=True)
+        row = {"session": os.path.basename(d), "started": doc.get("started"),
+               "duration_seconds": dur,
+               "mic_device": doc.get("mic_device"),
+               "output_device": doc.get("output_device")}
+        for name in ("mic.wav", "system.wav"):
+            c = checks.get(name)
+            if isinstance(c, dict):
+                row[name] = {k: c.get(k) for k in
+                             ("clock_error_ppm", "start_offset_seconds",
+                              "peak_dbfs", "audio_seconds")}
+        if warnings:
+            row["warnings"] = warnings
+        with open(os.path.join(state, "metrics.jsonl"), "a") as f:
+            f.write(json.dumps(row) + "\n")
+except Exception:
+    pass  # never let bookkeeping fail a stop
+
+for w in warnings:
+    print("WARNING: " + w)
+PY
+
+  rm -f "$STATE_FILE"
+
+  printf 'stopped after %dm%02ds\n' $(( duration / 60 )) $(( duration % 60 ))
+  printf '  %s\n' "$dir"
+  ls -l "$dir"/*.wav 2>/dev/null | sed 's/^/  /'
+  [ -f "$dir/format-check.txt" ] && sed 's/^/  format-check: /' "$dir/format-check.txt"
+  return 0
+}
+
+# --------------------------------------------------------------------------
+# status
+# --------------------------------------------------------------------------
+cmd_status() {
+  if [ ! -f "$STATE_FILE" ]; then
+    echo "idle"
+    return 0
+  fi
+  # shellcheck source=/dev/null
+  . "$STATE_FILE"
+  if ! alive "${MIC_PID:-0}" && ! alive "${SYS_FF_PID:-0}"; then
+    echo "idle (stale state file — run: meetingrec stop)"
+    return 0
+  fi
+  local elapsed=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
+  printf 'recording %d %s\n' "$elapsed" "${SESSION_DIR:-?}"
+  return 0
+}
+
+case "${1:-}" in
+  start)  shift; cmd_start "$@" ;;
+  stop)   cmd_stop ;;
+  status) cmd_status ;;
+  *) cat >&2 <<EOF
+usage: meetingrec start [title] [--mic-only]
+       meetingrec stop
+       meetingrec status
+
+  --mic-only   Record the microphone only, no system tap. Use when you are on
+               speakers rather than headphones: the mic hears both sides, so one
+               track stays complete. Costs speaker attribution downstream.
+EOF
+     exit 64 ;;
+esac

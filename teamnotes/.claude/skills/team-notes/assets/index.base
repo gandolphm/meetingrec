@@ -1,0 +1,50 @@
+# index.base — starter Obsidian Base for team meeting notes.
+#
+# Obsidian's Base file format is still evolving across versions. If this file
+# doesn't render as expected, recreate it via the GUI: Command Palette →
+# "Bases: New base", point it at the meeting-notes folder, and add the columns
+# and filter shown below by hand.
+#
+# This Base reads the YAML frontmatter the team-notes skill writes, so every
+# new note appears automatically.
+
+filters:
+  and:
+    - 'file.inFolder("meeting-notes")'
+
+views:
+  - type: table
+    name: All Meetings
+    order:
+      - file.name
+      - date
+      - team
+      - type
+      - attendees
+      - absent
+    sort:
+      - property: date
+        direction: DESC
+
+  - type: table
+    name: By Team
+    group_by: team
+    order:
+      - file.name
+      - date
+      - type
+      - attendees
+    sort:
+      - property: date
+        direction: DESC
+
+  - type: table
+    name: By Type
+    group_by: type
+    order:
+      - file.name
+      - date
+      - team
+    sort:
+      - property: date
+        direction: DESC

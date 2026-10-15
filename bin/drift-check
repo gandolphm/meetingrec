@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""drift-check — does the gap between the two tracks grow over a long recording?
+
+    drift-check <session_dir>
+
+Answers the phase 0 step 6 question, which gates phase 5 (collapse to a single
+Swift binary using one aggregate device and one clock domain).
+
+The two tracks come from two independent clocks: the Core Audio process tap and
+the avfoundation mic. They start at different moments — that is the constant
+offset `meetingrec stop` already measures — but if the clocks also *run* at
+slightly different speeds, the gap between them widens as the call goes on. A
+constant offset is corrected with one subtraction. Drift cannot be, and at a
+half-second it starts reordering turns near the end of a long meeting.
+
+REQUIRES A RECORDING MADE ON SPEAKERS. On headphones the mic never hears the far
+end, so the two tracks share no signal and there is nothing to align. Played out
+loud, the mic picks up the system audio and the same event lands on both tracks;
+the delay between them can then be measured early and late, and compared.
+
+Alignment is done on the loudness envelope rather than the waveform, because the
+system track is the digital signal while the mic track is that signal after a
+speaker, a room and a microphone. That path wrecks the waveform — phase, room
+reflections, frequency response — but leaves the envelope, the pattern of loud
+and quiet, almost untouched.
+"""
+
+import array
+import math
+import os
+import sys
+import wave
+
+BIN_HZ = 100.0     # envelope resolution: 10 ms bins, far finer than the 0.5 s threshold
+WINDOW = 20.0      # seconds of audio compared at each end
+MAX_LAG = 3.0      # seconds of search either way
+EDGE = 30.0        # skip this much at each end (device startup, stop straggle)
+THRESHOLD = 0.5    # seconds of drift that makes phase 5 mandatory
+
+
+def die(msg):
+    sys.exit(f"drift-check: {msg}")
+
+
+def envelope(path):
+    """RMS per 10 ms bin, plus the sample rate."""
+    with wave.open(path, "rb") as w:
+        if w.getsampwidth() != 2 or w.getnchannels() != 1:
+            die(f"{path}: expected mono 16-bit")
+        rate = w.getframerate()
+        per_bin = int(rate / BIN_HZ)
+        env = []
+        while True:
+            raw = w.readframes(per_bin)
+            if len(raw) < per_bin * 2:
+                break
+            a = array.array("h")
+            a.frombytes(raw)
+            env.append(math.sqrt(sum(x * x for x in a) / len(a)))
+    return env, rate
+
+
+def best_lag(a, b, centre_bin, half_bins, max_lag_bins):
+    """Lag, in bins, that best aligns b onto a around centre_bin.
+
+    Returns (lag, correlation). Correlation is normalised, so it is comparable
+    between the early and late windows and says whether the match is real.
+    """
+    lo = centre_bin - half_bins
+    hi = centre_bin + half_bins
+    if lo < max_lag_bins or hi + max_lag_bins >= min(len(a), len(b)):
+        return None, 0.0
+
+    seg_a = a[lo:hi]
+    mean_a = sum(seg_a) / len(seg_a)
+    da = [x - mean_a for x in seg_a]
+    norm_a = math.sqrt(sum(x * x for x in da)) or 1e-9
+
+    best, best_r = 0, -2.0
+    for lag in range(-max_lag_bins, max_lag_bins + 1):
+        seg_b = b[lo + lag:hi + lag]
+        mean_b = sum(seg_b) / len(seg_b)
+        db = [x - mean_b for x in seg_b]
+        norm_b = math.sqrt(sum(x * x for x in db)) or 1e-9
+        r = sum(x * y for x, y in zip(da, db)) / (norm_a * norm_b)
+        if r > best_r:
+            best_r, best = r, lag
+    return best, best_r
+
+
+def main():
+    if len(sys.argv) != 2:
+        die("usage: drift-check <session_dir>")
+    d = sys.argv[1].rstrip("/")
+    paths = [os.path.join(d, f"{n}.wav") for n in ("mic", "system")]
+    for p in paths:
+        if not os.path.exists(p):
+            die(f"missing {p} — needs a two-track session")
+
+    mic, rate = envelope(paths[0])
+    sysenv, _ = envelope(paths[1])
+    dur = min(len(mic), len(sysenv)) / BIN_HZ
+    print(f"{dur/60:.1f} minutes of overlapping audio\n")
+
+    if dur < 4 * EDGE:
+        die(f"recording is only {dur/60:.1f} min; needs at least "
+            f"{4*EDGE/60:.0f} min to compare two separated windows")
+
+    half = int(WINDOW * BIN_HZ / 2)
+    maxlag = int(MAX_LAG * BIN_HZ)
+    early_c = int((EDGE + WINDOW / 2) * BIN_HZ)
+    late_c = int((dur - EDGE - WINDOW / 2) * BIN_HZ)
+
+    results = {}
+    for name, centre in (("early", early_c), ("late", late_c)):
+        lag, r = best_lag(mic, sysenv, centre, half, maxlag)
+        if lag is None:
+            die("windows do not fit inside the recording")
+        secs = lag / BIN_HZ
+        results[name] = (secs, r)
+        print(f"  {name:5s} window @ {centre/BIN_HZ/60:5.1f} min   "
+              f"lag {secs:+.3f}s   correlation {r:.2f}")
+
+    print()
+    weak = [k for k, (_, r) in results.items() if r < 0.3]
+    if weak:
+        print(f"INCONCLUSIVE — correlation too low in the {'/'.join(weak)} window.")
+        print("The tracks share no common signal there. Was this recorded on")
+        print("speakers, with audio playing for the whole recording?")
+        return 2
+
+    drift = results["late"][0] - results["early"][0]
+    span = (late_c - early_c) / BIN_HZ
+    print(f"drift: {drift:+.3f}s over {span/60:.1f} min "
+          f"({drift/(span/60):+.3f}s per minute)")
+    print()
+    if abs(drift) < THRESHOLD:
+        print(f"PASS — under the {THRESHOLD}s threshold. The offset is constant, so")
+        print("the correction meetingrec already applies is sufficient. Phase 5")
+        print("(single binary, one clock domain) stays optional.")
+        return 0
+    print(f"FAIL — exceeds {THRESHOLD}s. The clocks run at different speeds, which")
+    print("a single start-offset cannot fix. Phase 5 becomes mandatory: one")
+    print("aggregate device, one clock domain.")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,37 @@
+filters:
+  and:
+    - file.inFolder("meeting-notes")
+views:
+  - type: table
+    name: All Meetings
+    order:
+      - file.name
+      - date
+      - team
+      - type
+      - attendees
+      - absent
+    sort:
+      - property: date
+        direction: DESC
+  - type: table
+    name: By Team
+    order:
+      - file.name
+      - date
+      - type
+      - attendees
+    sort:
+      - property: date
+        direction: DESC
+    group_by: team
+  - type: table
+    name: By Type
+    order:
+      - file.name
+      - date
+      - team
+    sort:
+      - property: date
+        direction: DESC
+    group_by: type

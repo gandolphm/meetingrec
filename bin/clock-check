@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""clock-check — measure clock drift between the two tracks, from any recording.
+
+    clock-check <session_dir>
+
+Answers the same question as `drift-check` but works on a **headphones** session,
+where the two tracks share no audio and nothing can be cross-correlated.
+
+Drift is not really a property of the audio — it is the two capture clocks
+running at slightly different speeds. ffmpeg reports that directly and for free.
+Every progress line carries both:
+
+    time=00:12:03.52 ... elapsed=0:12:03.48
+         ^ audio timestamps, advanced by the device clock
+                              ^ wall clock
+
+For a capture, `time` counts samples the device actually delivered, so it
+advances at the device's true rate. `elapsed` is the wall clock, shared by both
+processes. If a device's clock is fast or slow, `time - elapsed` grows steadily,
+and the slope of that line is the clock error. The drift *between* the tracks is
+the difference of the two slopes, times the length of the meeting.
+
+Both ffmpeg processes write these logs on every recording, so this needs no
+special setup — just a long enough session, and the logs still present.
+
+    IMPORTANT: run this BEFORE `scribe`. The skill deletes the session directory
+    once the note is written, and takes the logs with it.
+
+The acoustic `drift-check` remains the ground-truth cross-check when a speakers
+recording is available: it measures the audio end to end, while this measures the
+clocks and infers the rest.
+"""
+
+import json
+import os
+import re
+import sys
+
+# Progress lines are separated by \r, and both fields appear on each one.
+PROG = re.compile(r"time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)"
+                  r".*?elapsed=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
+
+SETTLE = 30.0      # ignore the first N seconds: device startup, buffer priming
+MIN_SPAN = 300.0   # refuse to extrapolate from less than this much wall clock
+THRESHOLD = 0.5    # seconds of drift that makes phase 5 mandatory
+
+TRACKS = (("mic", "mic-ffmpeg.log"), ("system", "system-ffmpeg.log"))
+
+
+def die(msg):
+    sys.exit(f"clock-check: {msg}")
+
+
+def samples(path):
+    """[(elapsed, time - elapsed)] from an ffmpeg progress log."""
+    try:
+        raw = open(path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return []
+    out = []
+    for m in PROG.finditer(raw.replace("\r", "\n")):
+        t = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+        e = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + float(m.group(6))
+        out.append((e, t - e))
+    return out
+
+
+def slope(pts):
+    """Least-squares slope, in seconds of error per second of wall clock."""
+    n = len(pts)
+    mx = sum(p[0] for p in pts) / n
+    my = sum(p[1] for p in pts) / n
+    num = sum((x - mx) * (y - my) for x, y in pts)
+    den = sum((x - mx) ** 2 for x, _ in pts)
+    if den == 0:
+        return None
+    return num / den
+
+
+def verdict(rel, span_secs, span_label):
+    """Shared report for both the log path and the session.json path."""
+    hour = rel * 3600
+    print(f"\n  relative              {rel*1e6:+9.1f} ppm   ({hour:+.2f}s per hour)")
+    if span_secs:
+        print(f"\ndrift over this recording ({span_label}): {rel*span_secs:+.3f}s")
+    print(f"drift over a 60-minute call: {hour:+.3f}s\n")
+    if abs(hour) < THRESHOLD:
+        print(f"PASS — under {THRESHOLD}s even across a full hour. The offset between")
+        print("the tracks is constant, so the single correction `meetingrec stop`")
+        print("records is sufficient. Phase 5 stays optional.")
+        return 0
+    print(f"FAIL — exceeds {THRESHOLD}s over an hour. The clocks run at different")
+    print("speeds, which no single start-offset can fix. Phase 5 becomes")
+    print("mandatory: one aggregate device, one clock domain.")
+    return 1
+
+
+def from_session_json(d, missing):
+    p = os.path.join(d, "session.json")
+    try:
+        doc = json.load(open(p))
+        checks = doc["checks"]
+        err = {n: checks[f"{n}.wav"]["clock_error_ppm"] / 1e6 for n, _ in TRACKS}
+    except Exception:
+        die(f"missing {', '.join(missing)}, and {p} carries no clock measurement.\n"
+            f"             ffmpeg logs are deleted along with the session, and this\n"
+            f"             recording predates meetingrec measuring the clocks at stop.")
+    dur = doc.get("duration_seconds") or 0
+    print(f"ffmpeg logs are gone; using the measurement `meetingrec stop` recorded.\n")
+    for n, _ in TRACKS:
+        print(f"  {n:7s} clock error {err[n]*1e6:+9.1f} ppm   "
+              f"({err[n]*3600:+.2f}s per hour)")
+    if dur < MIN_SPAN:
+        print(f"\nINCONCLUSIVE — the recording was only {dur/60:.1f} min. A slope fitted")
+        print(f"over under {MIN_SPAN/60:.0f} minutes is not trustworthy.")
+        return 2
+    return verdict(err["mic"] - err["system"], dur, f"{dur/60:.1f} min")
+
+
+def main():
+    if len(sys.argv) != 2:
+        die("usage: clock-check <session_dir>")
+    d = sys.argv[1].rstrip("/")
+
+    results = {}
+    missing = [log for _, log in TRACKS if not os.path.exists(os.path.join(d, log))]
+    if missing:
+        # meetingrec measures this at stop precisely because the logs do not
+        # survive, so a session whose logs are gone can still answer.
+        return from_session_json(d, missing)
+
+    for name, log in TRACKS:
+        pts = [q for q in samples(os.path.join(d, log)) if q[0] >= SETTLE]
+        if len(pts) < 20:
+            die(f"{log}: only {len(pts)} usable progress samples; "
+                f"too short to measure a slope")
+        results[name] = pts
+
+    span = min(pts[-1][0] for pts in results.values())
+    print(f"{span/60:.1f} minutes of wall clock, "
+          f"{min(len(p) for p in results.values())} samples per track\n")
+
+    err = {}
+    for name, pts in results.items():
+        s = slope(pts)
+        if s is None:
+            die(f"{name}: degenerate fit")
+        err[name] = s
+        print(f"  {name:7s} clock error {s*1e6:+9.1f} ppm   "
+              f"({s*3600:+.2f}s per hour)")
+
+    if span < MIN_SPAN:
+        print(f"\nINCONCLUSIVE — only {span/60:.1f} min of wall clock. Extrapolating a")
+        print(f"slope from under {MIN_SPAN/60:.0f} minutes is not trustworthy; record longer.")
+        return 2
+
+    return verdict(err["mic"] - err["system"], span, f"{span/60:.1f} min")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
