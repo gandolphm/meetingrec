@@ -48,46 +48,245 @@ Recordings, transcripts and notes are git-ignored, so nothing you record gets co
 
 ## Setup
 
-Allow about 20 minutes. Do the steps in order.
+There are two ways to install. Both end up with the same result.
 
-### 1. Install the command-line tools
+- **[Quick install](#quick-install-recommended):** paste one command, then answer a few
+  prompts. About 20 minutes, mostly waiting.
+- **[Manual install](#manual-install):** run each step yourself. Use this if you'd rather
+  not run a script from the internet, or you want to see exactly what gets downloaded.
 
-Open **Terminal** and run each block.
+Either way, finish with [Finish setup](#finish-setup-both-ways): Obsidian and your names.
+
+In the expected outputs below, `you` stands for your Mac username, and dates, times,
+sizes and version numbers will differ.
+
+### Quick install (recommended)
+
+Open **Terminal** (press Cmd+Space, type *Terminal*, press Enter), paste this line and
+press Enter:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh | bash
+```
+
+The script goes through these steps and skips any that are already done:
+
+| Step | Downloaded from |
+| --- | --- |
+| Xcode Command Line Tools (git, Swift, python3) | Apple, via `xcode-select --install` |
+| Homebrew, if you don't have it | [brew.sh](https://brew.sh) |
+| ffmpeg, whisper.cpp, Hammerspoon | Homebrew |
+| meetingrec, cloned to `~/meetingrec` | this GitHub repo |
+| Whisper `small.en` model (465 MB), checked against its SHA-256 | [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) |
+| audiotee, built from source at the pinned commit | [GitHub](https://github.com/makeusabrew/audiotee) |
+| Claude Code | [claude.ai](https://docs.claude.com/en/docs/claude-code/overview) |
+
+It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
+Hammerspoon, and adds Homebrew to your PATH in `~/.zprofile`. It doesn't change anything
+else. You can [read the script](install.sh) first, or download it, look at it, then run
+it:
+```bash
+curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh -o install.sh
+less install.sh      # press q to quit
+bash install.sh
+```
+
+**What you'll be asked to do while it runs:**
+
+- **Install the command line developer tools.** If a window asks, click *Install* and
+  agree. The script waits until it finishes.
+- **Your Mac password.** Homebrew asks for it. Nothing appears while you type. That's
+  normal; press Enter when you've finished typing it.
+- **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
+  it.
+- **A test recording.** The script tells you to click the **○** in the menu bar, start a
+  recording called `test`, click **Allow** on the Microphone and System Audio Recording
+  prompts, play a video while you talk for 15 seconds, then stop it. Then press Enter in
+  Terminal and the script checks that both tracks captured audio.
+
+You should see something like this (each line starting with ✓ is a finished step):
+
+```text
+==> Checking this Mac
+  ✓ macOS 15.1 on Apple silicon
+
+==> Xcode Command Line Tools (git, Swift, python3)
+  ✓ already installed
+
+==> Homebrew (package manager)
+  ✓ already installed
+
+==> ffmpeg and whisper.cpp
+  ! installing ffmpeg (a few minutes)…
+  ✓ ffmpeg installed
+  ! installing whisper-cpp (a few minutes)…
+  ✓ whisper-cpp installed
+
+==> Hammerspoon (menu-bar button)
+  ✓ installed
+
+==> meetingrec
+  ✓ downloaded to /Users/you/meetingrec
+
+==> Whisper model (small.en, 465 MB)
+######################################################################## 100.0%
+  ✓ downloaded and verified
+
+==> audiotee (system-audio capture)
+  ! building (a minute or two)…
+  ✓ built commit 56ac954 → /Users/you/bin/audiotee
+
+==> Recorder config
+  ✓ created /Users/you/.config/meetingrec/config.sh
+
+==> Claude Code
+  ✓ installed
+
+==> Menu-bar button config
+  ✓ wrote /Users/you/.hammerspoon/init.lua
+  ✓ started Hammerspoon. A ○ should appear in your menu bar
+  ! If Hammerspoon asks for Accessibility access, you can click Deny. It isn't needed.
+
+==> Test recording (gives the menu-bar button its permissions)
+  ...
+  Press Enter when you've clicked Stop (or type s to skip):
+  ✓ both tracks recorded audio. Test recording deleted
+
+Done. meetingrec is installed in /Users/you/meetingrec
+```
+
+**If a step fails**, the script stops with a red **✗** and a message that says what went
+wrong. Fix that, then paste the same command again. Steps that already finished are
+skipped.
+
+**If the test says a track is silent**, a permission is missing. Open **System Settings →
+Privacy & Security** and:
+- **Microphone** → turn on Hammerspoon.
+- **Screen & System Audio Recording** → in the *System Audio Recording Only* list, add and
+  turn on Hammerspoon.
+
+Quit Hammerspoon (click its icon in the menu bar → *Quit Hammerspoon*), then run the
+install command again to repeat the test.
+
+**Then sign in to Claude Code.** Open a **new** Terminal window, so it picks up the new
+PATH, and run:
+```bash
+claude
+```
+Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
+prompts. When you reach the `>` prompt, type `/exit`.
+
+Then go to [Finish setup](#finish-setup-both-ways).
+
+<details>
+<summary>Options</summary>
+
+- Install somewhere other than `~/meetingrec`:
+  `curl -fsSL …/install.sh | MEETINGREC_DIR=~/Documents/meetingrec bash`
+- Skip the menu-bar button (you'll use `bin/meetingrec` from Terminal):
+  `curl -fsSL …/install.sh | NO_HAMMERSPOON=1 bash`
+- Already cloned the repo? Run `./install.sh` from inside it. That copy is used instead of
+  a fresh clone.
+
+</details>
+
+---
+
+### Manual install
+
+Do the steps in order. Every command runs in **Terminal**.
+
+#### 1. Install the command-line tools
 
 **Xcode Command Line Tools** (provides git, Swift and python3):
 ```bash
 xcode-select --install
 ```
-If it says they're already installed, move on.
+Expected, if they're not installed yet:
+```text
+xcode-select: note: install requested for command line developer tools
+```
+A window then opens. Click *Install*, agree, and wait for it to finish (5–15 minutes).
+If instead you get a message saying the command line tools are already installed, move on.
 
 **Homebrew**, if you don't have it ([brew.sh](https://brew.sh)):
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
-At the end, the installer prints two lines that start with `echo` or `eval`. Run them so
-`brew` is on your PATH. Then close Terminal and open it again.
+It asks for your Mac password, then shows what it will install and asks you to press
+Enter. It ends with:
+```text
+==> Installation successful!
+...
+==> Next steps:
+- Run these commands in your terminal to add Homebrew to your PATH:
+    echo >> /Users/you/.zprofile
+    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/you/.zprofile
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+```
+Run the lines it prints under *Next steps*. They print nothing. Then close Terminal and
+open it again. To check:
+```bash
+brew --version
+```
+Expected:
+```text
+Homebrew 4.6.0
+```
 
 **ffmpeg and Whisper:**
 ```bash
 brew install ffmpeg whisper.cpp
 ```
+This prints a lot and takes a few minutes. It ends with lines like:
+```text
+==> Summary
+🍺  /opt/homebrew/Cellar/whisper-cpp/1.8.0: 45 files, 12MB
+```
+To check:
+```bash
+which ffmpeg whisper-cli
+```
+Expected:
+```text
+/opt/homebrew/bin/ffmpeg
+/opt/homebrew/bin/whisper-cli
+```
 
-**The Whisper model** (`small.en`, about 470 MB):
+**The Whisper model** (`small.en`, 465 MB):
 ```bash
 mkdir -p ~/.whisper-models
 curl -L -o ~/.whisper-models/ggml-small.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
 ```
+`mkdir` prints nothing. `curl` shows a progress table while it downloads. When it
+finishes, the `% Total` column reads `100` and the size is `465M`. To check the file isn't
+damaged:
+```bash
+shasum -a 256 ~/.whisper-models/ggml-small.en.bin
+```
+Expected:
+```text
+c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d  /Users/you/.whisper-models/ggml-small.en.bin
+```
+If the long number is different, delete the file and download it again.
 
 **Claude Code:**
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 ```
-Then run `claude` once and sign in. See the
-[Claude Code docs](https://docs.claude.com/en/docs/claude-code/overview) for other ways
-to install it.
+Expected: it ends by saying Claude Code was installed successfully. If it also tells you
+to add `~/.local/bin` to your PATH, run the command it shows. Then open a new Terminal
+window and run:
+```bash
+claude
+```
+Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
+prompts. When you reach the `>` prompt, type `/exit`. See the
+[Claude Code docs](https://docs.claude.com/en/docs/claude-code/overview) for other ways to
+install it.
 
-### 2. Clone this repo
+#### 2. Clone this repo
 
 Clone it wherever you like. Nothing in the tool depends on where it lives. Commands in
 this guide that start with `bin/`, `scribe/` or `teamnotes/` are run **from the repo
@@ -99,8 +298,16 @@ cd meetingrec
 chmod +x bin/*
 pwd                            # this is your <repo> path; note it down
 ```
+Expected (`cd` and `chmod` print nothing):
+```text
+Cloning into 'meetingrec'...
+remote: Enumerating objects: ...
+Receiving objects: 100% ..., done.
+Resolving deltas: 100% ..., done.
+/Users/you/meetingrec
+```
 
-### 3. Install audiotee (system-audio capture)
+#### 3. Install audiotee (system-audio capture)
 
 [audiotee](https://github.com/makeusabrew/audiotee) is a small open-source tool. It
 captures the audio your Mac is playing, which during a call is everyone else's voice.
@@ -113,23 +320,41 @@ git -C ~/src/audiotee checkout 56ac954
 cd ~/src/audiotee && swift build -c release && cd -
 cp ~/src/audiotee/.build/release/audiotee ~/bin/audiotee
 ```
+The build takes a minute or two. Expected (`mkdir` and `cp` print nothing):
+```text
+Cloning into '/Users/you/src/audiotee'...
+...
+Note: switching to '56ac954'.
+...
+HEAD is now at 56ac954 ...
+Building for production...
+...
+Build complete! (52.31s)
+/Users/you/meetingrec
+```
+The last line is `cd -` taking you back to the repo folder.
 
-The build takes a minute or two. Check that the binary is in place:
+Check that the binary is in place:
 ```bash
 ls -l ~/bin/audiotee
 ```
+Expected (the `x`s in `-rwxr-xr-x` mean it can run):
+```text
+-rwxr-xr-x  1 you  staff  412496 Oct 26 14:02 /Users/you/bin/audiotee
+```
 
-### 4. Configure the recorder
+#### 4. Configure the recorder
 
 ```bash
 mkdir -p ~/.config/meetingrec
 cp config.example.sh ~/.config/meetingrec/config.sh
 ```
+Expected: no output.
 
 The defaults work if you followed steps 2 and 3 exactly. If you put audiotee somewhere
 else, edit `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`.
 
-### 5. Do a test recording and grant permissions
+#### 5. Do a test recording and grant permissions
 
 macOS asks for permission the first time each app records audio. Do a short test run from
 Terminal so you can answer the prompts now, not at the start of a real call:
@@ -137,16 +362,35 @@ Terminal so you can answer the prompts now, not at the start of a real call:
 ```bash
 bin/meetingrec start "test"
 ```
+Allow the **Microphone** and **System Audio Recording** prompts. Expected:
+```text
+recording: /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test
+  tracks: mic,system
+  mic:    MacBook Pro Microphone
+  output: MacBook Pro Speakers (do not change it mid-call)
+```
+The `mic` and `output` lines show your own devices, e.g. your headphones.
 
-Allow the **Microphone** and **System Audio Recording** prompts. Play a YouTube video and
-talk for 15 seconds, then run:
+Play a YouTube video and talk for 15 seconds, then run:
 
 ```bash
 bin/meetingrec stop
 ```
+`stop` reports what it captured. Expected:
+```text
+stopped after 0m18s
+  /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test
+  -rw-r--r--  1 you  staff  576044 Oct 26 14:05 /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test/mic.wav
+  -rw-r--r--  1 you  staff  450604 Oct 26 14:05 /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test/system.wav
+  format-check: audiotee metadata OK (ok|16000|1|16|...)
+  format-check: system OK (32000 B/s)
+  format-check: mic OK (32000 B/s)
+```
+The `B/s` numbers can be a little off 32000. The `format-check` lines can be in a different
+order.
 
-`stop` reports what it captured. If it prints a **WARNING** that a track is silent, a
-permission is missing. Fix it in **System Settings → Privacy & Security**:
+If it prints a line starting with **WARNING** saying a track is silent, a permission is
+missing. Fix it in **System Settings → Privacy & Security**:
 - **Microphone** → turn on Terminal.
 - **Screen & System Audio Recording** → in the *System Audio Recording Only* list, add
   and turn on Terminal.
@@ -157,8 +401,9 @@ Delete the test session afterwards:
 ```bash
 rm -rf scribe/input/*_test
 ```
+Expected: no output.
 
-### 6. Install Hammerspoon (menu-bar button)
+#### 6. Install Hammerspoon (menu-bar button)
 
 [Hammerspoon](https://www.hammerspoon.org) is a free macOS automation app. Here it adds a
 small **○** button to your menu bar that starts and stops recordings. It's optional, since
@@ -168,17 +413,25 @@ the terminal commands work too, but it's much easier mid-meeting.
    ```bash
    brew install --cask hammerspoon
    ```
+   Expected, at the end:
+   ```text
+   🍺  hammerspoon was successfully installed!
+   ```
    You can also download it from [hammerspoon.org](https://www.hammerspoon.org) and drag
    it into Applications.
-2. **Open Hammerspoon** from Applications. It asks for **Accessibility** access. You can
-   **decline**: this config doesn't use it.
-3. **Open its preferences** (click the Hammerspoon icon in the menu bar → *Preferences*)
-   and tick **Launch Hammerspoon at login**.
-4. **Install the config.** Run this **from the repo folder**. It copies the config and
+2. **Install the config.** Run this **from the repo folder**. It copies the config and
    fills in where you cloned the repo:
    ```bash
    mkdir -p ~/.hammerspoon
    sed "s|^local REPO = .*|local REPO = \"$PWD\"|" hammerspoon/init.lua > ~/.hammerspoon/init.lua
+   ```
+   Expected: no output. To check the path was filled in:
+   ```bash
+   grep '^local REPO' ~/.hammerspoon/init.lua
+   ```
+   Expected (your repo path from step 2):
+   ```text
+   local REPO = "/Users/you/meetingrec"
    ```
    If you already have your own `~/.hammerspoon/init.lua`, don't overwrite it. Write to
    `~/.hammerspoon/meetingrec.lua` instead (same command, different last path), then add
@@ -187,16 +440,24 @@ the terminal commands work too, but it's much easier mid-meeting.
    require("meetingrec")
    ```
    If you ever move the repo, run the command again.
-5. **Reload:** Hammerspoon menu-bar icon → *Reload Config*. A **○** appears in the menu bar.
-6. **Grant Hammerspoon its own permissions.** macOS gives permissions to the app that
+3. **Open Hammerspoon** from Applications. It asks for **Accessibility** access. You can
+   **decline**: this config doesn't use it. A **○** appears in the menu bar. The config
+   also turns on *Launch Hammerspoon at login*, so it comes back after a restart.
+   If Hammerspoon was already running, click its menu-bar icon → *Reload Config*.
+4. **Grant Hammerspoon its own permissions.** macOS gives permissions to the app that
    launches the recording, so Terminal's permissions don't carry over. Start a test
-   recording from the ○ menu, then allow the prompts. If no prompts appear, add
+   recording from the ○ menu, then allow the prompts. Stop it from the menu after 15
+   seconds. If a notification says *check this recording*, a permission is missing: add
    **Hammerspoon** under **Microphone** and **System Audio Recording Only** in System
-   Settings (see setup step 5).
+   Settings (see step 5). Delete the test session afterwards, as in step 5.
 
 If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
 
-### 7. Set up Obsidian
+---
+
+### Finish setup (both ways)
+
+#### 7. Set up Obsidian
 
 1. **Install Obsidian** from [obsidian.md](https://obsidian.md). It's free. You need
    version 1.9 or later for Bases.
@@ -215,7 +476,7 @@ If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
 
 `index.base` in `scribe/` is created automatically the first time you write a note.
 
-### 8. Personalise the names tables and team profile
+#### 8. Personalise the names tables and team profile
 
 Open `scribe/.claude/skills/meeting-notes/reference/names.md` and fill in the **Me** row
 with your name and the ways Whisper tends to mishear it. The skill uses it to know which
@@ -247,6 +508,21 @@ bin/meetingrec start "Acme check-in"   # title is optional
 bin/meetingrec status
 bin/meetingrec stop
 ```
+Expected from `start`:
+```text
+recording: /Users/you/meetingrec/scribe/input/2026-10-01T14-00_acme-check-in
+  tracks: mic,system
+  mic:    AirPods Pro
+  output: AirPods Pro (do not change it mid-call)
+```
+Expected from `status`: `recording` with the seconds elapsed and the folder, or `idle`
+when nothing is recording:
+```text
+recording 754 /Users/you/meetingrec/scribe/input/2026-10-01T14-00_acme-check-in
+```
+Expected from `stop`: the length, the folder and the two files, as in
+[setup step 5](#5-do-a-test-recording-and-grant-permissions). If it prints a line starting
+with `WARNING`, read it before the recording is gone: usually a track is silent.
 
 **Wear headphones** if you can. On speakers your mic also picks up the other side, and
 some lines get attributed to you. If you're on speakers, use *Start (mic only — on
@@ -263,7 +539,7 @@ Each recording is a folder in `scribe/input/`, like
 cd <repo>/scribe
 claude
 ```
-Then type **`scribe`**, or "write up notes from this meeting".
+Expected: Claude Code opens with a `>` prompt. Then type **`scribe`**, or "write up notes from this meeting".
 
 The skill:
 1. finds the newest recording in `input/`;
@@ -290,7 +566,7 @@ For a meeting whose notes go to the whole team:
    cd <repo>/teamnotes
    claude
    ```
-   Then type **"team notes"**.
+   Expected: Claude Code opens with a `>` prompt. Then type **"team notes"**.
 3. Pick the **team** profile (or **other**). Mark who was present, and confirm the action-item owners
    before anything is written.
 4. You get two files:
@@ -309,7 +585,12 @@ For a meeting whose notes go to the whole team:
 - **Another recurring group** (e.g. a partner working group): copy `profiles/other.md` to a
   new file and fill it in. No other changes are needed.
 - **Whisper model:** `small.en` is the default. For poor audio, ask the skill to re-run
-  with `medium.en`, after downloading `ggml-medium.en.bin` the same way as in step 1.
+  with `medium.en`, after downloading it (1.5 GB):
+  ```bash
+  curl -L -o ~/.whisper-models/ggml-medium.en.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
+  ```
+  Expected: a progress table that ends at `100` with a size of about `1462M`.
 - **New dashboard context:** to-dos are tagged with the note's `context` (default
   `work`). If you start using another context, add a `tags include <context>` block to
   `scribe/Tasks.md`.
@@ -320,15 +601,16 @@ For a meeting whose notes go to the whole team:
 
 | Symptom | Fix |
 | --- | --- |
-| `NO_ENGINE` | `brew install whisper.cpp` |
+| `NO_ENGINE` | `brew install whisper.cpp`, or run the quick install command again. |
 | `MODEL_NOT_FOUND` | Run the `curl` command it prints (see step 1). |
 | `NO_FFMPEG` | `brew install ffmpeg` |
-| `audiotee not found or not executable` | Redo step 3, or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
+| `audiotee not found or not executable` | Run the quick install command again, redo manual step 3, or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
 | "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See steps 5 and 6. |
-| Skill says the inbox is empty | Check `ls scribe/input`. If you set `OUTPUT_ROOT` in your config, it must point to `scribe/input`. |
+| Skill says the inbox is empty | Run `ls scribe/input` from the repo folder. It should list one folder per recording, like `2026-10-01T14-00_acme-check-in`; no output means it's empty. If you set `OUTPUT_ROOT` in your config, it must point to `scribe/input`. |
 | `meeting-notes` skill not found | Start `claude` from inside `scribe/` (or `teamnotes/` for team notes). |
 | ○ button missing or frozen | Hammerspoon → *Reload Config*. If that fails, quit and reopen Hammerspoon. Check `~/.hammerspoon/meetingrec.log`. |
 | Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault (setup step 7). |
+| `claude: command not found` | Open a new Terminal window. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and add that line to `~/.zprofile`. |
 
 Each recording's measurements (track levels, timing offsets, warnings) are also appended
 to `~/.local/state/meetingrec/metrics.jsonl`.

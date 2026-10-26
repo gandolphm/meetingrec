@@ -1,7 +1,7 @@
 -- MeetingRec menu bar.
 --
--- Deliberately uses only hs.menubar, hs.task, hs.timer, hs.dialog and
--- hs.notify. None of those need the Accessibility permission — that one covers
+-- Deliberately uses only hs.menubar, hs.task, hs.timer, hs.dialog, hs.notify
+-- and hs.autoLaunch. None of those need the Accessibility permission — that one covers
 -- hs.window, hs.eventtap and hs.uielement (window management, input synthesis,
 -- reading other apps' UI), which this build never touches. Accessibility is the
 -- broadest grant macOS offers, so it stays declined. If you ever add an API
@@ -246,6 +246,10 @@ menu:setMenu(guard("menu", function()
       end },
   }
 end))
+
+-- A button that's gone after a restart fails silently at the start of the next
+-- call, so launch-at-login isn't left as a preferences checkbox to remember.
+hs.autoLaunch(true)
 
 refreshTitle()
 resync()
