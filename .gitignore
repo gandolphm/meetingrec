@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Per-machine Claude Code permissions (contain absolute home-folder paths)
+**/.claude/settings.local.json
+
+# Obsidian per-user workspace and plugin state
+.obsidian/
+.trash/
+
+# Python
+__pycache__/
+
+# Recordings, transcripts and generated notes are personal — never commit them.
+# The folders themselves are kept via .gitkeep.
+scribe/input/*
+scribe/transcripts/*
+scribe/meeting-notes/*
+teamnotes/input/*
+teamnotes/meeting-notes/*
+teamnotes/share/*
+!**/.gitkeep
