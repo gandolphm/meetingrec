@@ -30,7 +30,8 @@ meetingrec/
     └── .claude/skills/team-notes/
 ```
 
-Recordings, transcripts and notes are git-ignored, so nothing you record gets committed.
+Recordings, transcripts and notes are git-ignored, so nothing you record gets committed. So
+are your name tables and team roster (see [step 8](#8-your-name-tables-and-team-profile)).
 
 > **Always tell people you're recording.** No bot appears in the participant list, so
 > nobody knows unless you say so.
@@ -55,7 +56,7 @@ There are two ways to install. Both end up with the same result.
 - **[Manual install](#manual-install):** run each step yourself. Use this if you'd rather
   not run a script from the internet, or you want to see exactly what gets downloaded.
 
-Either way, finish with [Finish setup](#finish-setup-both-ways): Obsidian and your names.
+Either way, finish with [Finish setup](#finish-setup-both-ways): Obsidian.
 
 In the expected outputs below, `you` stands for your Mac username, and dates, times,
 sizes and version numbers will differ.
@@ -138,6 +139,9 @@ You should see something like this (each line starting with ✓ is a finished st
 
 ==> Recorder config
   ✓ created /Users/you/.config/meetingrec/config.sh
+
+==> Your name tables and team profile
+  ✓ created. Claude fills them in the first time you write up a meeting
 
 ==> Claude Code
   ✓ installed
@@ -476,22 +480,36 @@ If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
 
 `index.base` in `scribe/` is created automatically the first time you write a note.
 
-#### 8. Personalise the names tables and team profile
+#### 8. Your name tables and team profile
 
-Open `scribe/.claude/skills/meeting-notes/reference/names.md` and fill in the **Me** row
-with your name and the ways Whisper tends to mishear it. The skill uses it to know which
-to-dos are yours.
+Claude sets these up the first time you use each skill.
 
-Both name tables hold the people, companies and terms Whisper gets wrong (e.g. an accented
-name, or a company name that sounds like ordinary words). One is `names.md` above, the other
-is in `teamnotes/CLAUDE.md`. Replace the example rows with your own, and add a row whenever
-you notice a new mishearing.
+- **Your name.** The first time you write up a meeting with `scribe`, Claude asks your name
+  and how Whisper tends to mishear it. It uses your name to tell which to-dos are yours.
+- **Your team.** The first time you pick the **team** profile for team notes, Claude asks
+  for the team's name and roster.
+- **Names Whisper gets wrong.** At the end of each write-up, Claude lists any names it had
+  to correct and offers to remember them, so the next transcript gets them right. Accented
+  names and company names that sound like ordinary words are the usual culprits.
 
-If you'll write team notes, fill in `teamnotes/.claude/skills/team-notes/profiles/team.md`
-with your team's name and roster.
+All of this is saved in files that **git ignores**, so your colleagues', customers' and
+partners' names are never committed, and updating meetingrec never overwrites them:
 
-> These files end up holding colleagues', customers' and partners' names. If your clone
-> has a public remote, don't push them.
+| What | File |
+| --- | --- |
+| Your name and names for your personal notes | `scribe/.claude/skills/meeting-notes/reference/names.local.md` |
+| Names for team notes | `teamnotes/.claude/skills/team-notes/reference/names.local.md` |
+| Your team's name and roster | `teamnotes/.claude/skills/team-notes/profiles/team.md` |
+
+You can edit any of them directly too. Each sits next to tracked files that must stay as
+they are, because git publishes them with the repo:
+
+- **Templates** (`*.example.md`): the starting point the skills copy your files from.
+- **`names.shared.md`**: empty in this repo, and it should stay that way. It's only for a
+  team that [forks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
+  meetingrec: the fork's maintainer fills it with names everyone on the team needs and
+  commits them, so each member gets them on their next update. Never put names in it in
+  your own copy of this repo.
 
 ---
 
@@ -543,11 +561,13 @@ Expected: Claude Code opens with a `>` prompt. Then type **`scribe`**, or "write
 
 The skill:
 1. finds the newest recording in `input/`;
-2. asks a few quick questions (title, attendees, type), using the names to help Whisper;
+2. asks a few quick questions (title, attendees, type), using the names to help Whisper.
+   The first time, it also asks your name;
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
 4. writes `meeting-notes/<Title>.md` and tells you the path;
 5. deletes the recording. Say **"keep the transcript"** to move it to `transcripts/`
-   instead.
+   instead;
+6. offers to remember any names Whisper got wrong.
 
 Open the note in Obsidian. To-dos are tagged `#work` and appear in `Tasks.md`.
 
@@ -567,7 +587,8 @@ For a meeting whose notes go to the whole team:
    claude
    ```
    Expected: Claude Code opens with a `>` prompt. Then type **"team notes"**.
-3. Pick the **team** profile (or **other**). Mark who was present, and confirm the action-item owners
+3. Pick the **team** profile (or **other**). The first time you pick **team**, Claude asks
+   for your team's name and roster. Mark who was present, and confirm the action-item owners
    before anything is written.
 4. You get two files:
    - `meeting-notes/<Team> — YYYY-MM-DD.md` for Obsidian.
@@ -582,8 +603,8 @@ For a meeting whose notes go to the whole team:
 
 - **Team roster:** edit `teamnotes/.claude/skills/team-notes/profiles/team.md` when people
   join or leave. Every note's attendee and absent lists come from it.
-- **Another recurring group** (e.g. a partner working group): copy `profiles/other.md` to a
-  new file and fill it in. No other changes are needed.
+- **Another recurring group** (e.g. a partner working group): pick the **other** profile and
+  say yes when Claude offers to save it as a profile. Next time it appears in the list.
 - **Whisper model:** `small.en` is the default. For poor audio, ask the skill to re-run
   with `medium.en`, after downloading it (1.5 GB):
   ```bash

@@ -20,11 +20,13 @@ template sections that team needs, the filename prefix, tag, and Whisper priming
 
 | Profile | Team                            | Org          |
 | ------- | ------------------------------- | ------------ |
-| `team`  | your team (fill in once)        | your org     |
+| `team`  | your team (set up on first use) | your org     |
 | `other` | anything else, asked at runtime | —            |
 
-To add a team, copy `other.md` to a new file and fill in the tables. Nothing in the skill
-needs editing.
+`team.md` is created from `team.example.md` the first time the `team` profile is picked, by
+asking the user for the team's name and roster. To add another team, pick `other` and accept
+the offer to save a profile at the end. Profiles you create are git-ignored: they're yours,
+never committed, and never overwritten by an update. Nothing in the skill needs editing.
 
 ## Who the notes are for
 
@@ -45,18 +47,8 @@ in the frontmatter, wikilinked, with their org or role in the Discussion text if
 
 ## Known names / spelling corrections
 
-Whisper mis-transcribes proper nouns. Always correct these before writing a note (the
-transcript will contain the wrong spelling). Shared across every profile because people
-and terms recur between meetings.
-
-| Heard as                   | Correct spelling    | Who / what                   | Team   |
-| -------------------------- | ------------------- | ---------------------------- | ------ |
-| {acme health / act me}     | **{Acme Health}**   | {our company}                | {team} |
-| {Jon Smith / John Smyth}   | **{Jan Smit}**      | {teammate — role}            | {team} |
-| {Kalibra / Calibra}        | **{Collibra}**      | {vendor, comes up often}     | {team} |
-
-Delete the example rows once you have real ones.
-
-Add new names here as they come up (customers, partners, guests, advisors) so future ingests
-stay consistent. Names shared with your personal notes belong in `../scribe/.claude/skills/meeting-notes/reference/names.md`
-too.
+Whisper mis-transcribes proper nouns. The correction tables live with the skill, in
+`.claude/skills/team-notes/reference/`: `names.shared.md` holds names shared by everyone using this copy of the repo (tracked in
+git, and empty unless a team has forked it), and
+`names.local.md` holds the ones the user has added, which git ignores. The skill loads both
+before transcribing, and offers to add new names to `names.local.md` as it catches them.

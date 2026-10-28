@@ -11,7 +11,7 @@ description: >-
   vault. When no file is given, the skill scans teamnotes/input/ for a phone recording, a
   transcript, or a meetingrec session directory. NOT for the user's own personal notes on a
   call or 1:1 — those use the separate meeting-notes skill in ../scribe/.
-allowed-tools: Bash, Read, Write, Glob, AskUserQuestion
+allowed-tools: Bash, Read, Write, Edit, Glob, AskUserQuestion
 ---
 
 # Team Notes (Obsidian)
@@ -42,8 +42,8 @@ This is **not** the scribe skill. The differences that matter:
 a local Whisper binary, so it must run in Claude Code on the user's machine, not the web
 sandbox.
 
-Read the vault's `CLAUDE.md` before writing anything: voice rules and the shared Whisper
-name-correction table live there.
+Read the vault's `CLAUDE.md` before writing anything: the voice rules live there. The Whisper
+name-correction tables are loaded in Step 0.1.
 
 ---
 
@@ -69,11 +69,37 @@ pwd   # must end in /teamnotes — confirm before continuing
 If `pwd` does not end in `teamnotes`, stop and ask the user where the vault is. Never fall
 back to `../scribe/`, never read its `input/`, and never write into it.
 
+### Step 0.1 — Load the name corrections
+
+**Read the name tables before transcribing or writing anything.** There are two:
+
+- **`names.shared.md`** — names shared by everyone using one copy of the repo, tracked in
+  git. Empty in the public repo; a team that forks it fills it in for its members.
+- **`names.local.md`** — the names the user has added. Git ignores it, so it is never
+  committed and an update never overwrites it. It doesn't exist until the first run, which
+  creates it from its template:
+
+```bash
+REF="${CLAUDE_SKILL_DIR}/reference"
+[ -f "$REF/names.local.md" ] || cp "$REF/names.local.example.md" "$REF/names.local.md"
+cat "$REF/names.shared.md" "$REF/names.local.md"
+```
+
+They feed the priming prompt in Step 1 and the corrections in Step 2. If both tables list
+the same name, `names.local.md` wins.
+
+**Every write goes to `names.local.md`.** Never edit `names.shared.md` or `names.local.example.md`:
+both are tracked, so an edit there would collide with the user's next update.
+
 ### Step 0.25 — Pick the profile
 
 ```bash
 ls "${CLAUDE_SKILL_DIR}/profiles/"
 ```
+
+Files ending in `.example.md` are templates, not profiles: never offer one. If `team.md` is
+missing, offer **team** anyway (label it "set up on first use"); picking it runs the first-run
+setup below.
 
 **Always ask which profile to use** — never infer it silently from the user's wording or
 from the input filename. Use `AskUserQuestion` with one option per profile file (label =
@@ -88,6 +114,31 @@ Step 0.75 can be built from the right roster.
 
 Then **read the chosen profile file in full** — it is the source for the roster, the extra
 sections, the filename prefix, the tag, and the priming terms used in every later step.
+
+**First-run setup of the `team` profile.** Profiles the user fills in are theirs: git ignores
+every file in `profiles/` except `other.md` and the templates, so a roster is never committed
+and an update never overwrites it. If `team.md` doesn't exist yet, create it from the template:
+
+```bash
+P="${CLAUDE_SKILL_DIR}/profiles"
+[ -f "$P/team.md" ] || cp "$P/team.example.md" "$P/team.md"
+```
+
+Then, if its field table or roster still holds `{…}` placeholders, fill them in by asking
+the user, in one round:
+
+- the **team name**, the **org**, and a **short name** for filenames (default: the team name);
+- the **roster**: everyone on the team, with the name they go by and their role. Let them
+  paste it as a list;
+- whether to keep the template's **extra sections** (*Pipeline & Accounts*, *Upcoming*).
+
+Write the answers into `team.md`: the field table (tag = the short name, slugified), one
+roster row per person, and the priming terms. Remove the template's placeholder ownership
+hints, keeping only the `[note: owner inferred]` line; hints can be added later. Drop the
+extra sections they don't want. Replace the "This is a template" paragraph with one line
+saying the file is the user's own and to edit it when the team changes. Then continue with
+the run. Only `{…}` in the field table and roster count as unfilled: the extra-section blocks
+contain `{…}` on purpose, as the template for each row.
 
 For `other`, the profile tells you what to ask the user for instead (team name, org,
 attendees). If that team is likely to recur, offer at the end to save a new profile file so
@@ -216,7 +267,7 @@ tags; everyone else's are still inferred from context.
 
 ### Step 2 — Analyse the transcript
 
-Apply the name corrections from `CLAUDE.md` first, then extract:
+Apply the name corrections from both tables (Step 0.1) first, then extract:
 
 - **TL;DR** — 3–6 one-line bullets: what was decided, what was planned, what's next.
 - **Action items for every member.** For each: owner, the task, a priority tier, and any
@@ -335,6 +386,18 @@ Add a line only when something affects how much to trust the note:
 - **Unresolved `[note: …]` flags** — list them; they must be fixed before sending.
 - **`warnings` in `session.json`** or **`track alignment: UNKNOWN`** — relay verbatim.
 - **`other` profile** — offer to save a profile file if the team will recur.
+
+**Then offer to remember new names.** Through the run, keep track of every proper noun that
+came through wrong and isn't in either table: ones the user corrected (including in Step
+2.5), and ones you fixed from the roster or context. If there are any, show them as rows and
+ask once which to add — all, some, or none:
+
+| Heard as | Correct spelling | Who / what | Team |
+| -------- | ---------------- | ---------- | ---- |
+| Kalibra / Calibra | **Collibra** | vendor, comes up often | {team} |
+
+Append the accepted rows to `names.local.md`. Never add a row the user didn't accept, and
+never write to `names.shared.md`.
 
 ---
 
@@ -466,8 +529,8 @@ Notes on the template:
   meaningful chunk was lost. Suggest `medium.en` for a re-run.
 - **Transcript already has speaker labels** (some phone apps produce them): trust the labels
   for ownership and say so in the report; still apply the name corrections.
-- **Profile roster still has placeholders** (e.g. `[[Name]]` rows): stop and ask the user to
-  fill in the profile before running; don't write a note with placeholder attendees.
+- **Profile roster still has placeholders** (e.g. `[[{Full Name}]]` rows): run the first-run
+  setup in Step 0.25 before going further; never write a note with placeholder attendees.
 - **Wrong environment:** if there's no shell or no Whisper, don't fake a transcript — explain
   that this skill needs Claude Code with Whisper installed, and offer to proceed if the user
   pastes a transcript.

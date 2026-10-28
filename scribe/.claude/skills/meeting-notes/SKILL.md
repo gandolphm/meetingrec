@@ -16,7 +16,7 @@ description: >-
   transcripts rather than improvising a summary.
   NOT for anything described as "for the team" or meant to be shared with everyone who
   attended — those use the separate team-notes skill in the teamnotes vault.
-allowed-tools: Bash, Read, Write, Glob
+allowed-tools: Bash, Read, Write, Edit, Glob
 ---
 
 # Meeting Notes (Obsidian)
@@ -68,20 +68,36 @@ and usually means `meetingrec`'s `OUTPUT_ROOT` points somewhere else.
 
 ### Step 0.1 — Load the name corrections
 
-**Read the name table before transcribing or writing anything:**
+**Read the name tables before transcribing or writing anything.** There are two:
+
+- **`names.shared.md`** — names shared by everyone using one copy of the repo, tracked in
+  git. Empty in the public repo; a team that forks it fills it in for its members.
+- **`names.local.md`** — the user's own: their `Me` row plus every name they've added. Git
+  ignores it, so it is never committed and an update never overwrites it. It doesn't exist
+  until the first run, which creates it from its template:
 
 ```bash
-cat "${CLAUDE_SKILL_DIR}/reference/names.md"
+REF="${CLAUDE_SKILL_DIR}/reference"
+[ -f "$REF/names.local.md" ] || cp "$REF/names.local.example.md" "$REF/names.local.md"
+cat "$REF/names.shared.md" "$REF/names.local.md"
 ```
 
-It lists proper nouns Whisper reliably mishears. They feed the priming prompt in Step 1 and the
-corrections in Step 2. This is not optional and nothing else loads it — skip it and the note
-comes out looking perfectly fine with every recurring name spelled wrong.
+Together they list proper nouns Whisper reliably mishears. They feed the priming prompt in
+Step 1 and the corrections in Step 2. This is not optional and nothing else loads them — skip
+it and the note comes out looking perfectly fine with every recurring name spelled wrong. If
+both tables list the same name, `names.local.md` wins.
 
-The table's **`Me` row** names the person running the skill — "the user" everywhere below.
-Their name always goes in the priming prompt, and on an untagged transcript it is how you
-recognise which lines are theirs. If the row still holds the `{Your Name}` placeholder, ask
-the user for their name once, use it for this run, and suggest they fill in the row.
+**Every write goes to `names.local.md`.** Never edit `names.shared.md` or `names.local.example.md`:
+both are tracked, so an edit there would collide with the user's next update.
+
+The **`Me` row** in `names.local.md` names the person running the skill — "the user"
+everywhere below. Their name always goes in the priming prompt, and on an untagged transcript
+it is how you recognise which lines are theirs.
+
+**If the row still holds the `{Your Name}` placeholder, this is the user's first run.** Ask
+for their name as it should be spelled, and how Whisper tends to mishear it (it's fine not to
+know yet). Then replace the placeholder row in `names.local.md` with theirs — `—` in *Heard
+as* if they don't know — and continue. They're asked once; every later run reads the row.
 
 ### Step 0.2 — Find the input
 
@@ -279,7 +295,7 @@ Two things worth knowing about `merged.txt`:
 
 ### Step 2 — Analyse the transcript
 
-Apply the name corrections from `reference/names.md` (Step 0.1) first, then extract:
+Apply the name corrections from both tables (Step 0.1) first, then extract:
 - **Attendees** (reconcile with what the user gave in Step 0)
 - **Key points** — important or new information, grouped by theme. Keep these as
   brief, scannable fragments — not full sentences, not a topic-by-topic recap. Just
@@ -445,6 +461,19 @@ Add a line only when something affects how much to trust the note:
   include` query in `$VAULT/Tasks.md`, say so and quote the block they'd need to add. Its
   to-dos are written correctly but will not surface anywhere until they do. Don't edit
   `Tasks.md`.
+
+**Then offer to remember new names.** Through the run, keep track of every proper noun that
+came through wrong and isn't in either table: ones the user corrected, and ones you fixed
+from the attendee list or context. If there are any, show them as rows and ask once which to
+add — all, some, or none:
+
+| Heard as | Correct spelling | Who |
+| -------- | ---------------- | --- |
+| Kalibra / Calibra | **Collibra** | vendor, comes up often |
+
+Append the accepted rows to the *People, companies and terms* table in `names.local.md`.
+Never add a row the user didn't accept, and never write to `names.shared.md`. This is how the table
+grows: each meeting's corrections make the next transcript better.
 
 ---
 

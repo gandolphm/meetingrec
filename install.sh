@@ -133,7 +133,7 @@ get_repo() {
   else
     REPO="${MEETINGREC_DIR:-$HOME/meetingrec}"
     if [ -f "$REPO/bin/meetingrec" ]; then
-      # Not pulled: names.md and the team profile hold local edits.
+      # Not pulled: re-running the installer never changes the code under you.
       ok "already downloaded: $REPO"
     elif [ -e "$REPO" ]; then
       die "$REPO already exists and isn't meetingrec. Move it, or set MEETINGREC_DIR to another folder."
@@ -195,6 +195,28 @@ install_config() {
     mkdir -p "$(dirname "$cfg")"
     cp "$REPO/config.example.sh" "$cfg"
     ok "created $cfg"
+  fi
+}
+
+install_personal_files() {
+  step "Your name tables and team profile"
+  # Git ignores these, so they can't come down with the clone: each is copied
+  # from its tracked template. The skills do the same on first run, so this
+  # only saves a step. Existing copies are never touched.
+  local tmpl copy made=0
+  for tmpl in \
+      "$REPO/scribe/.claude/skills/meeting-notes/reference/names.local.example.md" \
+      "$REPO/teamnotes/.claude/skills/team-notes/reference/names.local.example.md" \
+      "$REPO/teamnotes/.claude/skills/team-notes/profiles/team.example.md"; do
+    copy="${tmpl%.example.md}.md"
+    [ -f "$copy" ] && continue
+    cp "$tmpl" "$copy" || die "Couldn't create $copy."
+    made=1
+  done
+  if [ "$made" -eq 1 ]; then
+    ok "created. Claude fills them in the first time you write up a meeting"
+  else
+    ok "keeping your existing files"
   fi
 }
 
@@ -306,8 +328,9 @@ ${G}${B}Done.${N} meetingrec is installed in ${B}$REPO${N}
 What's left (see the README for details):
   1. Open a ${B}new${N} Terminal window, run ${B}claude${N} once and sign in.
   2. Set up Obsidian (README step 7).
-  3. Add your name to scribe/.claude/skills/meeting-notes/reference/names.md
-     (README step 8).
+
+The first time you write up a meeting, Claude asks your name (and, for team
+notes, your team's roster) and saves it for next time.
 
 To write notes after a meeting:  cd "$REPO/scribe" && claude   then type: scribe
 EOF
@@ -323,6 +346,7 @@ main() {
   install_model
   install_audiotee
   install_config
+  install_personal_files
   install_claude
   install_hammerspoon_config
   test_recording

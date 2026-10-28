@@ -7,7 +7,7 @@ and audience. Nothing here reads from or writes to the scribe vault.
 
 ```
 teamnotes/                      (Obsidian vault root, working dir for the skill)
-├── CLAUDE.md                   # voice rules, profile index, shared Whisper name corrections
+├── CLAUDE.md                   # voice rules, profile index
 ├── PIPELINE.md                 # this file
 ├── index.base                  # Obsidian Base — All Meetings, By Team, By Type
 ├── Action Items.md             # Tasks-plugin page — every open item, grouped by owner heading
@@ -17,7 +17,10 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 └── .claude/
     └── skills/team-notes/
         ├── SKILL.md                     # full workflow spec (profile-independent)
-        ├── profiles/team.md             # your team: roster, extra sections, prefix, tag (fill in once)
+        ├── reference/names.shared.md    # names shared across a fork of this repo (tracked; empty here)
+        ├── reference/names.local.md     # names you add (git-ignored, made on first run)
+        ├── profiles/team.example.md     # template for your team's profile (tracked; don't edit)
+        ├── profiles/team.md             # your team: roster, extra sections, prefix, tag (git-ignored, set up on first use)
         ├── profiles/other.md            # anything else, asked at runtime
         ├── scripts/transcribe.sh        # flat audio file → .srt (whisper.cpp or openai-whisper)
         ├── scripts/transcribe_session.py# meetingrec session dir → per-track .srt + merged.txt
@@ -28,8 +31,12 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 ## Pipeline (input → output)
 
 1. **Locate the vault** — the directory containing both `input/` and `share/`. Never `scribe/`.
+   Then load the name tables: `names.shared.md` and your `names.local.md` (created from its
+   template on the first run).
 2. **Pick a profile** — always asked via AskUserQuestion, one option per profile file plus `other`. Read it; it
-   supplies team, org, roster, ownership hints, extra sections, prefix, tag, priming terms.
+   supplies team, org, roster, ownership hints, extra sections, prefix, tag, priming terms. The
+   first time `team` is picked, `team.md` is created from its template and filled in by asking
+   for the team's name and roster.
 3. **Locate input** — newest flat audio/transcript file in `input/`, or a session directory
    moved in by hand. 0 → ask; >1 → ask which.
 4. **Gather context** — date, meeting type, roll call over the profile roster (absent =

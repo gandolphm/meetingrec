@@ -16,7 +16,8 @@ scribe/                         (Obsidian vault root — open this folder as a v
 └── .claude/
     └── skills/meeting-notes/
         ├── SKILL.md                     # full workflow spec
-        ├── reference/names.md           # Whisper name corrections + your own name (the "Me" row)
+        ├── reference/names.shared.md    # names shared across a fork of this repo (tracked; empty here)
+        ├── reference/names.local.md     # yours: the "Me" row + names you add (git-ignored, made on first run)
         ├── scripts/transcribe.sh        # flat audio file → .srt (whisper.cpp or openai-whisper)
         ├── scripts/transcribe_session.py# meetingrec session dir → per-track .srt + merged.txt
         └── assets/index.base            # starter Base, copied to the vault root if missing
@@ -26,7 +27,8 @@ scribe/                         (Obsidian vault root — open this folder as a v
 
 1. **Set roots** — vault, inbox and archive are all derived from the skill's own location,
    so the repo can live anywhere.
-2. **Load names** — `reference/names.md`, including the `Me` row that says whose notes these are.
+2. **Load names** — `reference/names.shared.md` and your `names.local.md` (created from its template on
+   the first run, when it also asks your name for the `Me` row that says whose notes these are).
 3. **Locate input** — newest meetingrec session directory in `input/`, else a single flat
    audio/transcript file. 0 → ask you to drop one in; >1 → ask which one.
 4. **Gather context (chat, before transcribing)** — title, date (default today), type
@@ -61,4 +63,5 @@ scribe/                         (Obsidian vault root — open this folder as a v
   in Claude Code on your machine, not a web sandbox.
 - Obsidian-specific conventions (wikilinks-in-frontmatter, Bases, callouts, Tasks-plugin
   checkboxes) are central — output is not generic Markdown.
-- The type vocabulary and the name-correction table are living and open-ended.
+- The type vocabulary and the name-correction table are living and open-ended. At the end of
+  each run the skill offers to add the names it had to correct to `names.local.md`.
