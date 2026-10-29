@@ -17,8 +17,8 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 └── .claude/
     └── skills/team-notes/
         ├── SKILL.md                     # full workflow spec (profile-independent)
-        ├── reference/names.shared.md    # names shared across a fork of this repo (tracked; empty here)
-        ├── reference/names.local.md     # names you add (git-ignored, made on first run)
+        ├── reference/shared.md          # names + rules shared across a fork of this repo (tracked; empty here)
+        ├── reference/personal.md        # your names and rules for every team (git-ignored, made on first run)
         ├── profiles/team.example.md     # template for your team's profile (tracked; don't edit)
         ├── profiles/team.md             # your team: roster, extra sections, prefix, tag (git-ignored, set up on first use)
         ├── profiles/other.md            # anything else, asked at runtime
@@ -34,7 +34,7 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
    for `meeting-notes/`, `share/`, `Action Items.md` and the Base is `TEAM_VAULT` from
    `~/.config/meetingrec/config.sh` (default this folder). The first run asks where team notes
    go; it can never be the scribe vault.
-   Then load the name tables: `names.shared.md` and your `names.local.md` (created from its
+   Then load the settings (names and rules): `shared.md` and your `personal.md` (created from its
    template on the first run).
 2. **Pick a profile** — always asked via AskUserQuestion, one option per profile file plus `other`. Read it; it
    supplies team, org, roster, ownership hints, extra sections, prefix, tag, priming terms. The

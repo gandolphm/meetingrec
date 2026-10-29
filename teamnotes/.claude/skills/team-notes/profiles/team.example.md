@@ -63,3 +63,15 @@ stage in the team's own words rather than mapping to a fixed list.
 
 {Org name}, plus the roster above and any customer, partner or product names that come up
 often, plus any from the agenda.
+
+## Rules
+
+How this team's notes should be written, in plain English, one bullet each. They apply to
+this team only and take priority over your rules in `reference/personal.md`. Say "from now
+on…" while writing up this team's meeting and Claude adds a rule here.
+
+Examples, not active (anything inside `<!-- -->` is ignored):
+<!--
+- A vote with no stated count gets `[note: tally not stated]`.
+- If the meeting had no quorum, say "no business conducted" in the TL;DR.
+-->

@@ -254,17 +254,19 @@ install_config() {
 }
 
 install_personal_files() {
-  step "Your name tables and team profile"
+  step "Your settings and team profile"
   # Git ignores these, so they can't come down with the clone: each is copied
   # from its tracked template. The skills do the same on first run, so this
-  # only saves a step. Existing copies are never touched.
+  # only saves a step. Existing copies are never touched, and a names.local.md
+  # from before personal.md existed is left for the skill to carry over.
   local tmpl copy made=0
   for tmpl in \
-      "$REPO/scribe/.claude/skills/meeting-notes/reference/names.local.example.md" \
-      "$REPO/teamnotes/.claude/skills/team-notes/reference/names.local.example.md" \
+      "$REPO/scribe/.claude/skills/meeting-notes/reference/personal.example.md" \
+      "$REPO/teamnotes/.claude/skills/team-notes/reference/personal.example.md" \
       "$REPO/teamnotes/.claude/skills/team-notes/profiles/team.example.md"; do
     copy="${tmpl%.example.md}.md"
     [ -f "$copy" ] && continue
+    [ -f "$(dirname "$tmpl")/names.local.md" ] && continue
     cp "$tmpl" "$copy" || die "Couldn't create $copy."
     made=1
   done

@@ -16,8 +16,8 @@ scribe/                         (Obsidian vault root — open this folder as a v
 └── .claude/
     └── skills/meeting-notes/
         ├── SKILL.md                     # full workflow spec
-        ├── reference/names.shared.md    # names shared across a fork of this repo (tracked; empty here)
-        ├── reference/names.local.md     # yours: the "Me" row + names you add (git-ignored, made on first run)
+        ├── reference/shared.md          # names + rules shared across a fork of this repo (tracked; empty here)
+        ├── reference/personal.md        # yours: the "Me" row, your names and rules (git-ignored, made on first run)
         ├── scripts/transcribe.sh        # flat audio file → .srt (whisper.cpp or openai-whisper)
         ├── scripts/transcribe_session.py# meetingrec session dir → per-track .srt + merged.txt
         └── assets/index.base            # starter Base, copied to the vault root if missing
@@ -29,7 +29,7 @@ scribe/                         (Obsidian vault root — open this folder as a v
    repo can live anywhere. The vault (`NOTES_VAULT`, default this folder) and the inbox
    (`OUTPUT_ROOT`, default `input/`) come from `~/.config/meetingrec/config.sh` via
    `bin/meetingrec config get`. The first run asks where notes go and saves the answer.
-2. **Load names** — `reference/names.shared.md` and your `names.local.md` (created from its template on
+2. **Load settings** — names and rules from `reference/shared.md` and your `personal.md` (created from its template on
    the first run, when it also asks your name for the `Me` row that says whose notes these are).
 3. **Locate input** — newest meetingrec session directory in `input/`, else a single flat
    audio/transcript file. 0 → ask you to drop one in; >1 → ask which one.
@@ -66,4 +66,5 @@ scribe/                         (Obsidian vault root — open this folder as a v
 - Obsidian-specific conventions (wikilinks-in-frontmatter, Bases, callouts, Tasks-plugin
   checkboxes) are central — output is not generic Markdown.
 - The type vocabulary and the name-correction table are living and open-ended. At the end of
-  each run the skill offers to add the names it had to correct to `names.local.md`.
+  each run the skill offers to add the names it had to correct, and rules suggested by your
+  corrections, to `personal.md`. "From now on…" during a run saves a rule straight away.

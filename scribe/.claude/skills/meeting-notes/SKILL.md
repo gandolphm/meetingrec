@@ -96,7 +96,7 @@ their notes somewhere else. Ask with `AskUserQuestion`, once:
 - Option 2, **"In an Obsidian vault I already use"**: "Type its folder path in Other, e.g.
   ~/Documents/My Vault. Notes go in a meeting-notes folder inside it."
 
-On a first run the name question from Step 0.1 is usually due as well (`names.local.md`
+On a first run the name question from Step 0.1 is usually due as well (`personal.md`
 doesn't exist yet, or its `Me` row still says `{Your Name}`). Ask both in the same turn so
 the user isn't stopped twice.
 
@@ -127,38 +127,65 @@ are. Count them (`find "<old vault>/meeting-notes" -name '*.md' | wc -l`) and, i
 any, offer to move them into `$VAULT/meeting-notes/`. Move only on a yes, and never over a
 file with the same name.
 
-### Step 0.1 — Load the name corrections
+### Step 0.1 — Load the user's settings: names and rules
 
-**Read the name tables before transcribing or writing anything.** There are two:
+**Read both settings files before transcribing or writing anything:**
 
-- **`names.shared.md`** — names shared by everyone using one copy of the repo, tracked in
+- **`shared.md`** — names and rules for everyone using one copy of the repo, tracked in
   git. Empty in the public repo; a team that forks it fills it in for its members.
-- **`names.local.md`** — the user's own: their `Me` row plus every name they've added. Git
-  ignores it, so it is never committed and an update never overwrites it. It doesn't exist
-  until the first run, which creates it from its template:
+- **`personal.md`** — the user's own: their `Me` row, the names they've added, and their
+  rules. Git ignores it, so it is never committed and an update never overwrites it. It
+  doesn't exist until the first run, which creates it from its template:
 
 ```bash
 REF="${CLAUDE_SKILL_DIR}/reference"
-[ -f "$REF/names.local.md" ] || cp "$REF/names.local.example.md" "$REF/names.local.md"
-cat "$REF/names.shared.md" "$REF/names.local.md"
+# Before the rules existed this file was names.local.md; carry it over.
+[ -f "$REF/personal.md" ] || { [ -f "$REF/names.local.md" ] && mv "$REF/names.local.md" "$REF/personal.md" \
+  && sed -i '' 's/^## People, companies and terms$/## Names/' "$REF/personal.md"; }
+[ -f "$REF/personal.md" ] || cp "$REF/personal.example.md" "$REF/personal.md"
+grep -q '^## Rules' "$REF/personal.md" || { echo; sed -n '/^## Rules/,$p' "$REF/personal.example.md"; } >> "$REF/personal.md"
+cat "$REF/shared.md" "$REF/personal.md"
 ```
 
-Together they list proper nouns Whisper reliably mishears. They feed the priming prompt in
-Step 1 and the corrections in Step 2. This is not optional and nothing else loads them — skip
-it and the note comes out looking perfectly fine with every recurring name spelled wrong. If
-both tables list the same name, `names.local.md` wins.
+**Names.** The two *Names* tables (and the `Me` row) list proper nouns Whisper reliably
+mishears. They feed the priming prompt in Step 1 and the corrections in Step 2. This is not
+optional and nothing else loads them — skip it and the note comes out looking perfectly fine
+with every recurring name spelled wrong.
 
-**Every write goes to `names.local.md`.** Never edit `names.shared.md` or `names.local.example.md`:
-both are tracked, so an edit there would collide with the user's next update.
+**Rules.** The two *Rules* sections say how this user wants their notes written: which
+context a meeting gets, words to avoid, how long a section should be. Apply them through
+every later step. Lines inside `<!-- -->` are examples, not rules.
 
-The **`Me` row** in `names.local.md` names the person running the skill — "the user"
+**Order of priority**, highest first: the protected rules below, then `personal.md`, then
+`shared.md`, then the rest of this file. If two rules at the same level contradict each
+other, say so and ask which one holds rather than picking one.
+
+**Protected rules.** No rule from either file can change these, because the user's data or
+the rest of meetingrec depends on them. When a rule conflicts with one, follow the protected
+rule and tell the user which rule was set aside and why:
+
+- The recording or transcript is never deleted or moved before the note is written and
+  verified (Step 5).
+- The frontmatter fields, their formats, and the to-do line format (`#{context}` tag,
+  priority, `⏳`, `📅`) stay as specified below: `index.base` and `Tasks.md` depend on them.
+  A rule can change their *values*, such as which context a meeting gets.
+- Never write to a tracked file: this `SKILL.md`, `shared.md`, `personal.example.md`, the
+  scripts, `Tasks.md` (Step 6). Every write goes to `personal.md`.
+- Never write into the team-notes vault, and never invent transcript content.
+
+The **`Me` row** in `personal.md` names the person running the skill — "the user"
 everywhere below. Their name always goes in the priming prompt, and on an untagged transcript
 it is how you recognise which lines are theirs.
 
 **If the row still holds the `{Your Name}` placeholder, this is the user's first run.** Ask
 for their name as it should be spelled, and how Whisper tends to mishear it (it's fine not to
-know yet). Then replace the placeholder row in `names.local.md` with theirs — `—` in *Heard
+know yet). Then replace the placeholder row in `personal.md` with theirs — `—` in *Heard
 as* if they don't know — and continue. They're asked once; every later run reads the row.
+
+**When the user states a lasting preference** during a run ("from now on…", "always…",
+"remember that…", "never…"), apply it to this note and add it as a bullet under *Rules* in
+`personal.md`, worded as a rule. Show them the line you added. If it would conflict with a
+protected rule, say so instead of adding it.
 
 ### Step 0.2 — Find the input
 
@@ -356,7 +383,7 @@ Two things worth knowing about `merged.txt`:
 
 ### Step 2 — Analyse the transcript
 
-Apply the name corrections from both tables (Step 0.1) first, then extract:
+Apply the name corrections from both settings files (Step 0.1) first, then extract:
 - **Attendees** (reconcile with what the user gave in Step 0)
 - **Key points** — important or new information, grouped by theme. Keep these as
   brief, scannable fragments — not full sentences, not a topic-by-topic recap. Just
@@ -524,18 +551,28 @@ Add a line only when something affects how much to trust the note:
   `Tasks.md`. If `$VAULT` has no `Tasks.md` at all (a vault of the user's own where they
   declined the dashboard), skip this.
 
-**Then offer to remember new names.** Through the run, keep track of every proper noun that
-came through wrong and isn't in either table: ones the user corrected, and ones you fixed
-from the attendee list or context. If there are any, show them as rows and ask once which to
-add — all, some, or none:
+**Then offer to remember what this run taught you**, in one message with up to two lists.
+Skip a list that would be empty, and skip the message if both are.
 
-| Heard as | Correct spelling | Who |
-| -------- | ---------------- | --- |
-| Kalibra / Calibra | **Collibra** | vendor, comes up often |
+- **New names.** Every proper noun that came through wrong and isn't in either *Names*
+  table: ones the user corrected, and ones you fixed from the attendee list or context.
+  Show them as rows:
 
-Append the accepted rows to the *People, companies and terms* table in `names.local.md`.
-Never add a row the user didn't accept, and never write to `names.shared.md`. This is how the table
-grows: each meeting's corrections make the next transcript better.
+  | Heard as | Correct spelling | Who |
+  | -------- | ---------------- | --- |
+  | Kalibra / Calibra | **Collibra** | vendor, comes up often |
+
+- **Possible rules.** Corrections the user made to *how* the note was written that look like
+  a lasting preference rather than a one-off fix: they changed the context you picked,
+  removed a kind of to-do, asked for shorter Key Points. Word each as a rule, the way it
+  would read under *Rules*. Don't suggest one the user already stated (Step 0.1 saved
+  those), one that conflicts with a protected rule, or one based on a single fact about
+  this meeting.
+
+Ask once which to keep — all, some, or none. Append accepted names to the *Names* table and
+accepted rules under *Rules* in `personal.md`. Never add anything the user didn't accept, and
+never write to `shared.md`. This is how the settings grow: each meeting makes the next note
+closer to what the user wants.
 
 ---
 

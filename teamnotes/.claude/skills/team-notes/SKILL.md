@@ -46,7 +46,7 @@ sandbox.
 
 Read `teamnotes/CLAUDE.md` (`$TEAMNOTES/CLAUDE.md` after Step 0) before writing anything:
 the voice rules live there. The Whisper
-name-correction tables are loaded in Step 0.1.
+names and the user's rules are loaded in Step 0.1.
 
 ---
 
@@ -131,27 +131,57 @@ copies stay where they are. Count them (`find "<old vault>/meeting-notes" "<old 
 -name '*.md' | wc -l`) and, if there are any, offer to move both folders' notes into the new
 vault. Move only on a yes, and never over a file with the same name.
 
-### Step 0.1 — Load the name corrections
+### Step 0.1 — Load the user's settings: names and rules
 
-**Read the name tables before transcribing or writing anything.** There are two:
+**Read both settings files before transcribing or writing anything:**
 
-- **`names.shared.md`** — names shared by everyone using one copy of the repo, tracked in
+- **`shared.md`** — names and rules for everyone using one copy of the repo, tracked in
   git. Empty in the public repo; a team that forks it fills it in for its members.
-- **`names.local.md`** — the names the user has added. Git ignores it, so it is never
-  committed and an update never overwrites it. It doesn't exist until the first run, which
-  creates it from its template:
+- **`personal.md`** — the names the user has added and their rules for every team. Git
+  ignores it, so it is never committed and an update never overwrites it. It doesn't exist
+  until the first run, which creates it from its template:
 
 ```bash
 REF="${CLAUDE_SKILL_DIR}/reference"
-[ -f "$REF/names.local.md" ] || cp "$REF/names.local.example.md" "$REF/names.local.md"
-cat "$REF/names.shared.md" "$REF/names.local.md"
+# Before the rules existed this file was names.local.md; carry it over.
+[ -f "$REF/personal.md" ] || { [ -f "$REF/names.local.md" ] && mv "$REF/names.local.md" "$REF/personal.md" \
+  && awk '!d && /^\| Heard as/ { print "## Names\n"; d = 1 } { print }' "$REF/personal.md" > "$REF/personal.md.tmp" \
+  && mv "$REF/personal.md.tmp" "$REF/personal.md"; }
+[ -f "$REF/personal.md" ] || cp "$REF/personal.example.md" "$REF/personal.md"
+grep -q '^## Rules' "$REF/personal.md" || { echo; sed -n '/^## Rules/,$p' "$REF/personal.example.md"; } >> "$REF/personal.md"
+cat "$REF/shared.md" "$REF/personal.md"
 ```
 
-They feed the priming prompt in Step 1 and the corrections in Step 2. If both tables list
-the same name, `names.local.md` wins.
+**Names.** The *Names* tables feed the priming prompt in Step 1 and the corrections in Step 2.
 
-**Every write goes to `names.local.md`.** Never edit `names.shared.md` or `names.local.example.md`:
-both are tracked, so an edit there would collide with the user's next update.
+**Rules.** The *Rules* sections say how this user wants team notes written. The chosen
+profile (Step 0.25) can have a *Rules* section too, for that team only. Apply all of them
+through every later step. Lines inside `<!-- -->` are examples, not rules.
+
+**Order of priority**, highest first: the protected rules below, then the profile's rules,
+then `personal.md`, then `shared.md`, then the rest of this file. If two rules at the same
+level contradict each other, say so and ask which one holds rather than picking one.
+
+**Protected rules.** No rule from any of those files can change these, because the user's
+data, the team, or the rest of meetingrec depends on them. When a rule conflicts with one,
+follow the protected rule and tell the user which rule was set aside and why:
+
+- The input is never deleted before both the note and the share copy are written and read
+  back (Step 5).
+- The frontmatter fields, their formats, and the action-item format (owner as the `###`
+  heading, priority then `📅`) stay as specified below: `index.base` and `Action Items.md`
+  depend on them. A rule can change their *values*.
+- Never write to a tracked file: this `SKILL.md`, `shared.md`, `personal.example.md`,
+  `other.md`, `team.example.md`, the scripts, `Action Items.md`. Writes go to `personal.md`
+  or to the user's own profile files.
+- Never write into the scribe vault or the user's personal-notes vault, never invent
+  transcript content, and every attendee in the roll call comes from the user's answers.
+
+**When the user states a lasting preference** during a run ("from now on…", "always…",
+"remember that…", "never…"), apply it to this note and save it as a rule, worded as a rule:
+under *Rules* in the profile if it's about this team only (the user's own profiles, never
+`other.md`), otherwise under *Rules* in `personal.md`. If it's unclear which, ask. Show them
+the line you added. If it would conflict with a protected rule, say so instead of adding it.
 
 ### Step 0.25 — Pick the profile
 
@@ -175,7 +205,8 @@ Ask this **before** scanning `$INBOX` and before any other question, so the roll
 Step 0.75 can be built from the right roster.
 
 Then **read the chosen profile file in full** — it is the source for the roster, the extra
-sections, the filename prefix, the tag, and the priming terms used in every later step.
+sections, the filename prefix, the tag, the priming terms, and any *Rules* for this team
+(see Step 0.1 for where they rank) used in every later step.
 
 **First-run setup of the `team` profile.** Profiles the user fills in are theirs: git ignores
 every file in `profiles/` except `other.md` and the templates, so a roster is never committed
@@ -329,7 +360,7 @@ tags; everyone else's are still inferred from context.
 
 ### Step 2 — Analyse the transcript
 
-Apply the name corrections from both tables (Step 0.1) first, then extract:
+Apply the name corrections from both settings files (Step 0.1) first, then extract:
 
 - **TL;DR** — 3–6 one-line bullets: what was decided, what was planned, what's next.
 - **Action items for every member.** For each: owner, the task, a priority tier, and any
@@ -449,17 +480,28 @@ Add a line only when something affects how much to trust the note:
 - **`warnings` in `session.json`** or **`track alignment: UNKNOWN`** — relay verbatim.
 - **`other` profile** — offer to save a profile file if the team will recur.
 
-**Then offer to remember new names.** Through the run, keep track of every proper noun that
-came through wrong and isn't in either table: ones the user corrected (including in Step
-2.5), and ones you fixed from the roster or context. If there are any, show them as rows and
-ask once which to add — all, some, or none:
+**Then offer to remember what this run taught you**, in one message with up to two lists.
+Skip a list that would be empty, and skip the message if both are.
 
-| Heard as | Correct spelling | Who / what | Team |
-| -------- | ---------------- | ---------- | ---- |
-| Kalibra / Calibra | **Collibra** | vendor, comes up often | {team} |
+- **New names.** Every proper noun that came through wrong and isn't in either *Names*
+  table: ones the user corrected (including in Step 2.5), and ones you fixed from the roster
+  or context. Show them as rows:
 
-Append the accepted rows to `names.local.md`. Never add a row the user didn't accept, and
-never write to `names.shared.md`.
+  | Heard as | Correct spelling | Who / what | Team |
+  | -------- | ---------------- | ---------- | ---- |
+  | Kalibra / Calibra | **Collibra** | vendor, comes up often | {team} |
+
+- **Possible rules.** Corrections the user made to *how* the note was written that look like
+  a lasting preference rather than a one-off fix: they moved an item to a different owner
+  for the same reason twice, asked for a section to be shorter, changed how votes or
+  decisions are worded. Word each as a rule and say where it would go: this team's profile,
+  or `personal.md` for every team. Don't suggest one the user already stated (Step 0.1 saved
+  those), one that conflicts with a protected rule, or one based on a single fact about
+  this meeting.
+
+Ask once which to keep — all, some, or none. Append accepted names to the *Names* table in
+`personal.md` and accepted rules where you proposed them. Never add anything the user didn't
+accept, and never write to `shared.md`, `other.md` or a template.
 
 ---
 

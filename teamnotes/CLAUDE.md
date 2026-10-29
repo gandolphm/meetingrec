@@ -48,10 +48,12 @@ share copy. Anything assigned on that basis gets `[note: owner inferred]`.
 Anyone not on the profile's roster who attends is a **guest** — list them under `guests:`
 in the frontmatter, wikilinked, with their org or role in the Discussion text if stated.
 
-## Known names / spelling corrections
+## Names and rules
 
-Whisper mis-transcribes proper nouns. The correction tables live with the skill, in
-`.claude/skills/team-notes/reference/`: `names.shared.md` holds names shared by everyone using this copy of the repo (tracked in
-git, and empty unless a team has forked it), and
-`names.local.md` holds the ones the user has added, which git ignores. The skill loads both
-before transcribing, and offers to add new names to `names.local.md` as it catches them.
+Whisper mis-transcribes proper nouns, and each user wants notes written a little
+differently. Both live with the skill, in `.claude/skills/team-notes/reference/`:
+`shared.md` holds names and rules for everyone using this copy of the repo (tracked in git,
+and empty unless a team has forked it), and `personal.md` holds the user's own, which git
+ignores. A team's profile can add rules for that team. The skill loads them all before
+transcribing, saves new rules when the user says "from now on…", and at the end of a run
+offers to add the names it corrected and rules its corrections suggest.
