@@ -284,6 +284,39 @@ local function checkForUpdates(interactive)
 end
 
 -- ---------------------------------------------------------------------------
+-- Writing notes
+--
+-- Opens Claude Code in the skill's folder with the request typed in, waiting
+-- for Enter: in the Claude app if it's installed, so no Terminal is needed,
+-- otherwise in Terminal. Both are a plain `open` of a link, so no macOS
+-- permission is involved. The skills work the same however Claude was started.
+-- ---------------------------------------------------------------------------
+
+local function urlEncode(s)
+  return (s:gsub("[^%w%-%._~/]", function(c) return string.format("%%%02X", string.byte(c)) end))
+end
+
+local function writeUp(folder, request)
+  local dir = REPO .. "/" .. folder
+  local query = "?folder=" .. urlEncode(dir) .. "&q=" .. urlEncode(request)
+  local _, opened = hs.execute('open "claude://code/new' .. query .. '"')
+  if opened then
+    log("write-up: Claude app in %s", dir)
+    return
+  end
+  -- No Claude app: Claude Code's own link opens it in Terminal instead.
+  query = "?cwd=" .. urlEncode(dir) .. "&q=" .. urlEncode(request)
+  _, opened = hs.execute('open "claude-cli://open' .. query .. '"')
+  if opened then
+    log("write-up: Claude Code in Terminal in %s", dir)
+    return
+  end
+  log("write-up: nothing handles claude:// or claude-cli:// links")
+  notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
+    folder .. " in Terminal.")
+end
+
+-- ---------------------------------------------------------------------------
 -- Menu
 -- ---------------------------------------------------------------------------
 
@@ -301,6 +334,9 @@ menu:setMenu(guard("menu", function()
   return {
     { title = "Start recording…", fn = function() doStart(false) end },
     { title = "Start (mic only — on speakers)", fn = function() doStart(true) end },
+    { title = "-" },
+    { title = "Write up notes…", fn = function() writeUp("scribe", "scribe") end },
+    { title = "Write up team notes…", fn = function() writeUp("teamnotes", "team notes") end },
     { title = "-" },
     -- Asked rather than assumed: OUTPUT_ROOT in config.sh can move it.
     { title = "Open recordings folder", fn = function()

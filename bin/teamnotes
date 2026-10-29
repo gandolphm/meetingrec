@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#
+# teamnotes — write up team notes from any folder: opens Claude Code in teamnotes/, where
+# the team-notes skill lives, and starts it.
+#
+#   teamnotes                       start the write-up
+#   teamnotes keep the transcript   anything after it goes along as extra instructions
+#
+# The same as: cd <repo>/teamnotes && claude, then typing: team notes
+set -euo pipefail
+
+# Follow the ~/.local/bin link back to the repo, wherever it was cloned.
+REPO_ROOT="$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")"
+CLAUDE="$(command -v claude || echo "$HOME/.local/bin/claude")"
+[ -x "$CLAUDE" ] || { echo "teamnotes: Claude Code isn't installed. Install it: curl -fsSL https://claude.ai/install.sh | bash" >&2; exit 1; }
+
+cd "$REPO_ROOT/teamnotes"
+exec "$CLAUDE" "team notes${*:+ $*}"

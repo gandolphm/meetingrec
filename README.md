@@ -83,8 +83,9 @@ The script goes through these steps and skips any that are already done:
 | Claude Code | [claude.ai](https://docs.claude.com/en/docs/claude-code/overview) |
 
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
-Hammerspoon, and adds Homebrew to your PATH in `~/.zprofile`. It doesn't change anything
-else. You can [read the script](install.sh) first, or download it, look at it, then run
+Hammerspoon, links the `meetingrec`, `scribe` and `teamnotes` commands into `~/.local/bin`,
+and adds Homebrew and `~/.local/bin` to your PATH in `~/.zprofile` if they aren't there
+already. It doesn't change anything else. You can [read the script](install.sh) first, or download it, look at it, then run
 it:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh -o install.sh
@@ -144,6 +145,9 @@ You should see something like this (each line starting with ✓ is a finished st
 
 ==> Claude Code
   ✓ installed
+
+==> Commands: meetingrec, scribe, teamnotes
+  ✓ meetingrec scribe teamnotes → /Users/you/.local/bin
 
 ==> Menu-bar button config
   ✓ wrote /Users/you/.hammerspoon/init.lua
@@ -563,11 +567,11 @@ because git publishes them with the repo:
 **From the menu bar:** click **○** → *Start recording…*, and type a title if you like. The
 button shows **● 12m** while recording. Click it → *Stop* when the call ends.
 
-**From the terminal:**
+**From the terminal**, in any folder (if you did the manual install, use `<repo>/bin/meetingrec`):
 ```bash
-bin/meetingrec start "Acme check-in"   # title is optional
-bin/meetingrec status
-bin/meetingrec stop
+meetingrec start "Acme check-in"   # title is optional
+meetingrec status
+meetingrec stop
 ```
 Expected from `start`:
 ```text
@@ -596,11 +600,19 @@ Each recording is a folder in `scribe/input/`, like
 
 ### Write your personal notes (scribe)
 
-```bash
-cd <repo>/scribe
-claude
-```
-Expected: Claude Code opens with a `>` prompt. Then type **`scribe`**, or "write up notes from this meeting".
+Any of these starts it; they all end up in the same place:
+
+- **Menu bar:** click **○** → *Write up notes…*. The Claude app opens a Claude Code session
+  in `scribe/` with `scribe` already typed. Press **Enter**. (Without the Claude app, it
+  opens Claude Code in Terminal instead.)
+- **Terminal, from any folder:** type `scribe`.
+- **By hand:**
+  ```bash
+  cd <repo>/scribe
+  claude
+  ```
+  Expected: Claude Code opens with a `>` prompt. Then type **`scribe`**, or "write up notes
+  from this meeting".
 
 The skill:
 1. finds the newest recording in `input/`;
@@ -625,12 +637,8 @@ For a meeting whose notes go to the whole team:
 1. Put the recording in `teamnotes/input/`. That can be a phone recording of an
    in-person meeting, a transcript, or a `meetingrec` session folder moved over from
    `scribe/input/`.
-2. Run:
-   ```bash
-   cd <repo>/teamnotes
-   claude
-   ```
-   Expected: Claude Code opens with a `>` prompt. Then type **"team notes"**.
+2. Click **○** → *Write up team notes…* and press **Enter**, or type `teamnotes` in
+   Terminal. By hand: `cd <repo>/teamnotes`, run `claude`, then type **"team notes"**.
 3. Pick the **team** profile (or **other**). The first time you pick **team**, Claude asks
    for your team's name and roster. Mark who was present, and confirm the action-item owners
    before anything is written.

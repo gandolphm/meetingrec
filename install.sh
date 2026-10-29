@@ -68,6 +68,12 @@ die()  {
   exit 1
 }
 
+# Whether either zsh startup file already mentions something. Missing files are
+# skipped: grep given a missing file reports an error even when the other matches.
+in_shell_startup() {
+  cat "$HOME/.zprofile" "$HOME/.zshrc" 2>/dev/null | grep -qF -- "$1"
+}
+
 # Add a line to a shell startup file unless it's already there.
 add_line() {
   local file="$1" line="$2"
@@ -116,8 +122,9 @@ install_brew() {
     ok "already installed"
   fi
   eval "$("$BREW" shellenv)"
-  # What the Homebrew installer's "Next steps" ask you to do by hand.
-  add_line "$HOME/.zprofile" "eval \"\$($BREW shellenv)\""
+  # What the Homebrew installer's "Next steps" ask you to do by hand, unless
+  # it's done already (e.g. in .zshrc).
+  in_shell_startup "brew shellenv" || add_line "$HOME/.zprofile" "eval \"\$($BREW shellenv)\""
 }
 
 install_formulae() {
@@ -288,10 +295,42 @@ install_claude() {
     curl -fsSL https://claude.ai/install.sh | bash || die "Claude Code didn't install."
     ok "installed"
   fi
-  if [ -x "$HOME/.local/bin/claude" ] \
-     && ! grep -qs '\.local/bin' "$HOME/.zprofile" "$HOME/.zshrc"; then
+  if [ -x "$HOME/.local/bin/claude" ] && ! in_shell_startup ".local/bin"; then
     add_line "$HOME/.zprofile" 'export PATH="$HOME/.local/bin:$PATH"'
   fi
+}
+
+install_commands() {
+  step "Commands: meetingrec, scribe, teamnotes"
+  # ~/.local/bin is where Claude Code installs itself, so it's normally on PATH
+  # already. Links rather than copies, so updates reach them.
+  local dir="$HOME/.local/bin" name target old made=() kept=() already=()
+  mkdir -p "$dir"
+  for name in meetingrec scribe teamnotes; do
+    target="$dir/$name"
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "$REPO/bin/$name" ]; then
+      already+=("$name"); continue
+    elif [ -L "$target" ]; then
+      old="$(readlink "$target")"
+      # Re-point a link to another meetingrec copy (e.g. after moving the repo);
+      # leave anything else alone.
+      if [ ! -f "$(dirname "$old")/meetingrec" ]; then
+        kept+=("$name"); continue
+      fi
+    elif [ -e "$target" ]; then
+      kept+=("$name"); continue
+    fi
+    ln -sfn "$REPO/bin/$name" "$target" || die "Couldn't link $target."
+    made+=("$name")
+  done
+  if ! in_shell_startup ".local/bin"; then
+    add_line "$HOME/.zprofile" 'export PATH="$HOME/.local/bin:$PATH"'
+    note "added ~/.local/bin to your PATH. Open a new Terminal window to use the commands."
+  fi
+  [ ${#made[@]} -gt 0 ] && ok "${made[*]} → $dir"
+  [ ${#already[@]} -gt 0 ] && ok "already set up: ${already[*]}"
+  [ ${#kept[@]} -gt 0 ] && note "left alone, because $dir already has something else with that name: ${kept[*]}"
+  return 0
 }
 
 install_hammerspoon_config() {
@@ -403,7 +442,8 @@ The first time you write up a meeting, Claude asks your name, where your notes
 should go (meetingrec's folder, or an Obsidian vault you already use) and, for
 team notes, your team's roster. It saves the answers for next time.
 
-To write notes after a meeting:  cd "$REPO/scribe" && claude   then type: scribe
+To write notes after a meeting: click ○ in the menu bar → Write up notes…
+(or type  scribe  in Terminal; team notes:  teamnotes).
 EOF
 }
 
@@ -423,6 +463,7 @@ main() {
   install_config
   install_personal_files
   install_claude
+  install_commands
   install_hammerspoon_config
   if [ -n "$UPDATE" ]; then
     finish_update
