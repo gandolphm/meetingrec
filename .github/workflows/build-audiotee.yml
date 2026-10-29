@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: macos-15  # Apple silicon
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Read the pinned commit
         id: pin
@@ -87,7 +87,7 @@ jobs:
           NOTICE
 
       - name: Attest
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/audiotee
 
