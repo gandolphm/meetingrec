@@ -264,11 +264,15 @@ the terminal commands work too, but it's much easier mid-meeting.
    also turns on *Launch Hammerspoon at login*, so it comes back after a restart.
    If Hammerspoon was already running, click its menu-bar icon → *Reload Config*.
 4. **Grant Hammerspoon its own permissions.** macOS gives permissions to the app that
-   launches the recording, so Terminal's permissions don't carry over. Start a test
-   recording from the ○ menu, then allow the prompts. Stop it from the menu after 15
-   seconds. If a notification says *check this recording*, a permission is missing: add
-   **Hammerspoon** under **Microphone** and **System Audio Recording Only** in System
-   Settings (see step 5). Delete the test session afterwards, as in step 5.
+   launches the recording, so Terminal's permissions don't carry over. First turn on
+   system audio by hand, because macOS never shows a prompt for it with Hammerspoon: in
+   **System Settings → Privacy & Security → Screen & System Audio Recording**, under
+   **System Audio Recording Only**, click **+**, choose **Hammerspoon**, and make sure its
+   switch is on. Quit Hammerspoon and open it again. Then start a test recording from the
+   ○ menu and allow the Microphone prompt. Stop it from the menu after 15 seconds. If a
+   notification says *check this recording*, a permission is missing: check **Hammerspoon**
+   under **Microphone** and **System Audio Recording Only** in System Settings (see step 5).
+   Delete the test session afterwards, as in step 5.
 
 If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
 

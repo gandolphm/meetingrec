@@ -97,7 +97,7 @@ unless you turn that off. These connections only download; nothing you record is
 ## Install
 
 Paste one command and answer a few prompts: the [quick install](#quick-install-recommended)
-below. About 5-10 minutes, mostly waiting with a few prompts. If you'd rather not run a script from the internet,
+below. Less than 5 minutes, mostly waiting with a few prompts. If you'd rather not run a script from the internet,
 or want to see exactly what gets downloaded, follow the
 **[manual install](docs/manual-install.md)** instead. Both end up with the same result.
 Either way, finish with [Set up Obsidian](#set-up-obsidian) (recommended).
@@ -147,10 +147,14 @@ bash install.sh
   agree. The script waits until it finishes.
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
   it.
+- **System audio permission for Hammerspoon.** macOS never shows a prompt for this one,
+  so the script opens System Settings for you: under *System Audio Recording Only*, click
+  **+**, choose **Hammerspoon** in Applications, and make sure its switch is on. Then press
+  Enter in Terminal.
 - **A test recording.** The script tells you to click the **○** in the menu bar, start a
-  recording called `test`, click **Allow** on the Microphone and System Audio Recording
-  prompts, play a video while you talk for 15 seconds, then stop it. Then press Enter in
-  Terminal and the script checks that both tracks captured audio.
+  recording called `test`, click **Allow** on the Microphone prompt, play a video while
+  you talk for 15 seconds, then stop it. Then press Enter in Terminal and the script checks
+  that both tracks captured audio.
 
 You should see something like this (each line starting with ✓ is a finished step):
 
@@ -194,6 +198,11 @@ You should see something like this (each line starting with ✓ is a finished st
   ✓ wrote /Users/you/.hammerspoon/init.lua
   ✓ started Hammerspoon. A ○ should appear in your menu bar
   ! If Hammerspoon asks for Accessibility access, you can click Deny. It isn't needed.
+
+==> System audio permission
+  ...
+  Press Enter when Hammerspoon is on (or type s to skip):
+  ✓ restarted Hammerspoon so the permission takes effect
 
 ==> Test recording (gives the menu-bar button its permissions)
   ...

@@ -458,19 +458,54 @@ install_hammerspoon_config() {
   note "If Hammerspoon asks for Accessibility access, you can click Deny. It isn't needed."
 }
 
+# Hammerspoon's Info.plist has no NSAudioCaptureUsageDescription, so macOS
+# never shows a System Audio Recording prompt for it: it silently denies, and
+# the system track records silence. The only way in is turning it on by hand.
+grant_system_audio() {
+  step "System audio permission"
+  local dir=/Applications
+  [ -d "$dir/Hammerspoon.app" ] || dir="$HOME/Applications"
+  cat <<EOF
+  Hammerspoon can't ask for this permission itself, so macOS never shows a
+  prompt for it. Turn it on by hand in System Settings (opening now):
+
+    1. Under ${B}System Audio Recording Only${N}, click ${B}+${N}.
+    2. Choose ${B}Hammerspoon${N} in ${dir/#$HOME/~} and click Open.
+    3. Make sure its switch is on.
+
+  If Hammerspoon is already listed there and on, there's nothing to do.
+
+EOF
+  open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null \
+    || note "Open System Settings → Privacy & Security → Screen & System Audio Recording."
+  local reply
+  read -r -p "  Press Enter when Hammerspoon is on (or type s to skip): " reply
+  if [ "$reply" = "s" ]; then
+    note "skipped. The system-audio track will be silent until it's on."
+    return
+  fi
+  # The permission applies from Hammerspoon's next start.
+  killall Hammerspoon 2>/dev/null
+  sleep 1
+  open -a Hammerspoon
+  ok "restarted Hammerspoon so the permission takes effect"
+}
+
 test_recording() {
   [ -n "${NO_HAMMERSPOON:-}" ] && return
   # No keyboard to answer with (e.g. CI): skip rather than hang.
   [ -t 0 ] || return
 
+  grant_system_audio
+
   step "Test recording (gives the menu-bar button its permissions)"
   cat <<EOF
-  macOS asks for permission the first time Hammerspoon records audio.
-  Do a short test now so the prompts don't appear during a real call:
+  macOS asks for microphone permission the first time Hammerspoon records.
+  Do a short test now so the prompt doesn't appear during a real call:
 
     1. Click ○ in the menu bar → Start recording…
     2. Type ${B}test${N} as the title and click Start.
-    3. Click ${B}Allow${N} on the Microphone and System Audio Recording prompts.
+    3. Click ${B}Allow${N} on the Microphone prompt.
     4. Play a YouTube video and talk for about 15 seconds.
     5. Click the ● in the menu bar → Stop.
 
