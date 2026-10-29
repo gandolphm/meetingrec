@@ -212,6 +212,78 @@ local function resync()
 end
 
 -- ---------------------------------------------------------------------------
+-- Updates
+--
+-- `meetingrec update --check` only asks GitHub what's new and changes nothing,
+-- so it's safe on a timer. Updating itself is always a click.
+-- ---------------------------------------------------------------------------
+
+local updatesAvailable = 0
+local CHECK_EVERY = 24 * 60 * 60
+local MAX_LISTED = 10
+
+-- The CLI's own error line, without the install log printed before it.
+local function cliError(stdErr, stdOut)
+  return stdErr:match("meetingrec: ([^\n]+)") or (stdErr ~= "" and stdErr or stdOut)
+end
+
+local function doUpdate()
+  notify("MeetingRec", "Updating…")
+  run({ "update", "--from-menu" }, function(exitCode, stdOut, stdErr)
+    if exitCode ~= 0 then
+      notify("MeetingRec — update failed", cliError(stdErr, stdOut))
+      return
+    end
+    updatesAvailable = 0
+    local now = stdOut:match("updated %S+ → (%x+)") or stdOut:match("already up to date %((%x+)%)")
+    notify("MeetingRec", now and ("Updated to " .. now) or "Updated")
+    -- install.sh may have rewritten this file. Deferred for the same reason
+    -- as "Reload config" in the menu below.
+    hs.timer.doAfter(0.1, hs.reload)
+  end)
+end
+
+-- interactive: the user clicked, so every outcome gets an answer. The daily
+-- check stays silent and only relabels the menu item.
+local function checkForUpdates(interactive)
+  if isRecording and not interactive then return end
+  run({ "update", "--check" }, function(exitCode, stdOut, stdErr)
+    if exitCode ~= 0 then
+      -- Being offline is normal for a laptop; only a click deserves a reply.
+      if interactive then
+        notify("MeetingRec — couldn't check for updates", cliError(stdErr, stdOut))
+      end
+      return
+    end
+    local n = tonumber(stdOut:match("^available (%d+)"))
+    updatesAvailable = n or 0
+    if n then log("update check: %d available", n) end
+    if not interactive then return end
+    if not n then
+      notify("MeetingRec", "MeetingRec is up to date")
+      return
+    end
+
+    local lines = {}
+    for line in stdOut:gmatch("[^\n]+") do
+      if line:sub(1, 2) == "  " then lines[#lines + 1] = line:sub(3) end
+    end
+    -- Cut long lists so the dialog stays on screen.
+    if #lines > MAX_LISTED then
+      local more = #lines - MAX_LISTED
+      for i = #lines, MAX_LISTED + 1, -1 do lines[i] = nil end
+      lines[#lines + 1] = "…and " .. more .. " more"
+    end
+    local button = hs.dialog.blockAlert(
+      n == 1 and "1 update available" or (n .. " updates available"),
+      "What's new:\n" .. table.concat(lines, "\n") ..
+        "\n\nUpdating takes a few seconds. Your recordings, notes, names and settings aren't changed.",
+      "Update", "Later")
+    if button == "Update" then doUpdate() end
+  end)
+end
+
+-- ---------------------------------------------------------------------------
 -- Menu
 -- ---------------------------------------------------------------------------
 
@@ -234,6 +306,8 @@ menu:setMenu(guard("menu", function()
         hs.execute('open "' .. REPO .. '/scribe/input"')
       end },
     { title = "Re-check status", fn = resync },
+    { title = updatesAvailable > 0 and "Update available…" or "Check for updates…",
+      fn = function() checkForUpdates(true) end },
     { title = "-" },
     -- hs.reload destroys the Lua state this callback is running inside, taking
     -- the menubar object with it mid-dispatch — the branch sawing off itself.
@@ -250,6 +324,12 @@ end))
 -- A button that's gone after a restart fails silently at the start of the next
 -- call, so launch-at-login isn't left as a preferences checkbox to remember.
 hs.autoLaunch(true)
+
+-- Once a day, and a minute after loading: at login the network may not be up
+-- yet. Global, like the menu, so the timers can't be garbage-collected.
+local function quietCheck() checkForUpdates(false) end
+_G.meetingrecUpdateTimer = hs.timer.doEvery(CHECK_EVERY, guard("update check", quietCheck))
+_G.meetingrecFirstCheck = hs.timer.doAfter(60, guard("update check", quietCheck))
 
 refreshTitle()
 resync()

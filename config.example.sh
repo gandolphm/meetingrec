@@ -12,6 +12,10 @@ AUDIOTEE_BIN="$HOME/bin/audiotee"
 # back as garbage, this hash is what lets you work backward to the code that
 # produced it. Keep the working tree pinned to it too (git checkout <sha>), so a
 # later pull + rebuild can't change behaviour silently.
+#
+# In this file (config.example.sh) it's the pin: install.sh and the GitHub Action
+# install and build this commit. In your config.sh it's only a fallback: when
+# install.sh installed audiotee, the commit it wrote to ~/bin/audiotee.commit wins.
 AUDIOTEE_SHA="56ac954"
 
 # SHA-256 of the prebuilt audiotee for that commit, published by the "Build

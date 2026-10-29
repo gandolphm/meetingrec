@@ -4,6 +4,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh | bash
 #   ./install.sh                      # or run it from a clone
+#   ./install.sh --update             # what `meetingrec update` runs after pulling
 #
 # Does the README's manual install steps 1–4 and 6, then walks you through a
 # test recording from the menu-bar button and checks it.
@@ -33,6 +34,20 @@ BREW="/opt/homebrew/bin/brew"
 # were run from a file or piped from curl.
 SCRIPT_PATH="${BASH_SOURCE[0]:-}"
 
+# --update: re-check every step after `meetingrec update` pulled new code, minus
+# the parts that only make sense once (the test recording, the welcome text).
+# --from-menu: the menu bar started the update and reloads itself afterwards, so
+# Hammerspoon must not be restarted underneath it.
+UPDATE="" FROM_MENU=""
+for arg in "$@"; do
+  case "$arg" in
+    --update)    UPDATE=1 ;;
+    --from-menu) FROM_MENU=1 ;;
+  esac
+done
+# NO_HAMMERSPOON isn't saved anywhere, so an update infers it: no app, no menu bar.
+[ -n "$UPDATE" ] && [ ! -d /Applications/Hammerspoon.app ] && NO_HAMMERSPOON=1
+
 if [ -t 1 ]; then
   B=$'\033[1m' G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m' N=$'\033[0m'
 else
@@ -44,7 +59,11 @@ ok()   { printf '  %s✓%s %s\n' "$G" "$N" "$*"; }
 note() { printf '  %s!%s %s\n' "$Y" "$N" "$*"; }
 die()  {
   printf '\n  %s✗ %s%s\n' "$R" "$*" "$N" >&2
-  printf '\n  Fix the problem above, then run the same install command again.\n' >&2
+  if [ -n "$UPDATE" ]; then
+    printf '\n  Fix the problem above, then run the update again.\n' >&2
+  else
+    printf '\n  Fix the problem above, then run the same install command again.\n' >&2
+  fi
   printf '  Steps that already finished will be skipped.\n' >&2
   exit 1
 }
@@ -177,15 +196,18 @@ install_audiotee() {
   if [ -n "$sha256" ] && [ -z "${AUDIOTEE_FROM_SOURCE:-}" ]; then
     if [ -x "$bin" ] && [ "$(shasum -a 256 "$bin" | cut -d' ' -f1)" = "$sha256" ]; then
       ok "already installed at commit $sha"
-      return
-    fi
-    if download_audiotee "$sha" "$sha256" "$bin"; then
+    elif download_audiotee "$sha" "$sha256" "$bin"; then
       ok "downloaded commit $sha (verified) → $bin"
-      return
+    else
+      note "couldn't download a verified copy; building it here instead"
+      build_audiotee "$sha" "$bin"
     fi
-    note "couldn't download a verified copy; building it here instead"
+  else
+    build_audiotee "$sha" "$bin"
   fi
-  build_audiotee "$sha" "$bin"
+  # bin/meetingrec reads this into session.json. Unlike the copy in config.sh,
+  # it's rewritten whenever an update installs a different commit.
+  printf '%s\n' "$sha" > "$bin.commit"
 }
 
 # The download is checked against AUDIOTEE_SHA256 before it replaces anything,
@@ -257,6 +279,9 @@ install_claude() {
   step "Claude Code"
   if command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; then
     ok "already installed"
+  elif [ -n "$UPDATE" ]; then
+    # Claude Code updates itself; an update shouldn't install it behind someone's back.
+    note "not installed. To install it: curl -fsSL https://claude.ai/install.sh | bash"
   else
     curl -fsSL https://claude.ai/install.sh | bash || die "Claude Code didn't install."
     ok "installed"
@@ -280,8 +305,18 @@ install_hammerspoon_config() {
     add_line "$dir/init.lua" 'require("meetingrec")'
     note "you already had a Hammerspoon config; added require(\"meetingrec\") to it"
   fi
-  sed "s|^local REPO = .*|local REPO = \"$REPO\"|" "$REPO/hammerspoon/init.lua" > "$target"
+  local new
+  new="$(sed "s|^local REPO = .*|local REPO = \"$REPO\"|" "$REPO/hammerspoon/init.lua")"
+  if [ -n "$UPDATE" ] && [ "$(cat "$target" 2>/dev/null)" = "$new" ]; then
+    ok "already up to date: $target"
+    return
+  fi
+  printf '%s\n' "$new" > "$target"
   ok "wrote $target"
+  if [ -n "$FROM_MENU" ]; then
+    ok "the menu bar reloads itself when the update finishes"
+    return
+  fi
 
   # Restart so the new config loads. killall rather than osascript: telling
   # another app to quit would trigger an Automation permission prompt.
@@ -369,6 +404,10 @@ To write notes after a meeting:  cd "$REPO/scribe" && claude   then type: scribe
 EOF
 }
 
+finish_update() {
+  printf '\n%s%sUpdate finished.%s Your recordings, notes, names and settings were not changed.\n' "$G" "$B" "$N"
+}
+
 main() {
   check_mac
   install_clt
@@ -382,8 +421,12 @@ main() {
   install_personal_files
   install_claude
   install_hammerspoon_config
-  test_recording
-  finish
+  if [ -n "$UPDATE" ]; then
+    finish_update
+  else
+    test_recording
+    finish
+  fi
 }
 
 # Everything is in functions so a partly downloaded script does nothing.

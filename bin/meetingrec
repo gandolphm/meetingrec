@@ -5,6 +5,7 @@
 #   meetingrec start [title] [--mic-only]
 #   meetingrec stop
 #   meetingrec status
+#   meetingrec update [--check]
 #
 # Captures only. Transcription is a separate, later process (the `meeting-notes`
 # skill) so a bad transcription run can never cost a recording.
@@ -26,6 +27,12 @@ CONFIG="${MEETINGREC_CONFIG:-$HOME/.config/meetingrec/config.sh}"
 [ -f "$CONFIG" ] && . "$CONFIG"
 
 AUDIOTEE_BIN="${AUDIOTEE_BIN:-$HOME/bin/audiotee}"
+# install.sh records the commit it installed next to the binary, and rewrites it
+# whenever an update installs a new one. The config's AUDIOTEE_SHA is a copy taken
+# at install time, so it only counts when that file is missing (a manual build).
+if [ -f "$AUDIOTEE_BIN.commit" ]; then
+  AUDIOTEE_SHA="$(cat "$AUDIOTEE_BIN.commit")"
+fi
 AUDIOTEE_SHA="${AUDIOTEE_SHA:-unknown}"
 # Default inbox is scribe/input/ in this repo, wherever it was cloned. realpath
 # follows a symlink (e.g. ~/bin/meetingrec -> repo/bin/meetingrec) back to the repo.
@@ -666,6 +673,68 @@ PY
 }
 
 # --------------------------------------------------------------------------
+# update
+# --------------------------------------------------------------------------
+# --check only asks GitHub what's new and changes nothing; the menu bar runs it
+# once a day. The first line is machine-read by hammerspoon/init.lua:
+#   up-to-date <sha>    or    available <count>
+# followed by one "  • <subject>" line per new commit.
+cmd_update() {
+  local check=0 from_menu=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --check)     check=1 ;;
+      --from-menu) from_menu=1 ;;
+      *) die "unknown option: $arg" ;;
+    esac
+  done
+  local git=(git -C "$REPO_ROOT")
+  "${git[@]}" rev-parse --abbrev-ref '@{u}' >/dev/null 2>&1 \
+    || die "$REPO_ROOT isn't a git clone of meetingrec, so it can't update itself. Install it again with the command in the README."
+  "${git[@]}" fetch --quiet || die "couldn't reach GitHub. Check your internet connection and try again."
+
+  local before count
+  before="$("${git[@]}" rev-parse --short HEAD)"
+  count="$("${git[@]}" rev-list --count 'HEAD..@{u}')"
+  if [ "$check" -eq 1 ]; then
+    if [ "$count" -eq 0 ]; then
+      echo "up-to-date $before"
+    else
+      echo "available $count"
+      "${git[@]}" log --reverse --format='  • %s' 'HEAD..@{u}'
+    fi
+    return 0
+  fi
+
+  # A stop or start while files are being swapped out would run half old, half
+  # new code, and the install step may restart the menu bar.
+  case "$(cmd_status)" in
+    recording*) die "a recording is running. Stop it first, then update." ;;
+  esac
+
+  if [ "$count" -gt 0 ]; then
+    # --ff-only never merges or rewrites anything. Git itself refuses, before
+    # touching a file, if an update would overwrite a change made on this Mac.
+    local out
+    if ! out="$("${git[@]}" merge --ff-only --quiet '@{u}' 2>&1)"; then
+      printf '%s\n' "$out" | sed 's/^/  /' >&2
+      die "couldn't update, so nothing was changed. Git's reason is above: usually a file in $REPO_ROOT was edited on this Mac and the update changes it too. Ask Claude (run claude in $REPO_ROOT) to help keep your edit, then try again."
+    fi
+    echo "updated $before → $("${git[@]}" rev-parse --short HEAD):"
+    "${git[@]}" log --reverse --format='  • %s' "$before..HEAD"
+  else
+    echo "already up to date ($before)"
+  fi
+
+  # Always, even with nothing new: it also finishes an earlier update whose
+  # install step failed. The script is the one just pulled, so it knows what
+  # this version needs (a new audiotee, a new Homebrew tool, a new menu bar).
+  local opts=(--update)
+  [ "$from_menu" -eq 1 ] && opts+=(--from-menu)
+  bash "$REPO_ROOT/install.sh" "${opts[@]}" || die "the update was downloaded, but finishing it failed (see above). Run: $REPO_ROOT/bin/meetingrec update"
+}
+
+# --------------------------------------------------------------------------
 # status
 # --------------------------------------------------------------------------
 cmd_status() {
@@ -688,14 +757,17 @@ case "${1:-}" in
   start)  shift; cmd_start "$@" ;;
   stop)   cmd_stop ;;
   status) cmd_status ;;
+  update) shift; cmd_update "$@" ;;
   *) cat >&2 <<EOF
 usage: meetingrec start [title] [--mic-only]
        meetingrec stop
        meetingrec status
+       meetingrec update [--check]
 
   --mic-only   Record the microphone only, no system tap. Use when you are on
                speakers rather than headphones: the mic hears both sides, so one
                track stays complete. Costs speaker attribution downstream.
+  --check      Only say whether an update is available; change nothing.
 EOF
      exit 64 ;;
 esac

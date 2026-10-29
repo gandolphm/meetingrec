@@ -622,6 +622,40 @@ For a meeting whose notes go to the whole team:
 
 ---
 
+## Updating
+
+**From the menu bar:** click **○** → *Check for updates…*. MeetingRec also checks by
+itself once a day. When there's an update, that item changes to *Update available…*.
+Clicking it lists what's new; click **Update** and the menu bar reloads when it's done,
+with a notification like `Updated to 7f7bfed`. It never updates on its own, and it can't
+update while you're recording.
+
+**From the terminal:**
+```bash
+~/meetingrec/bin/meetingrec update --check   # only see what's new
+~/meetingrec/bin/meetingrec update
+```
+Expected from `update`: the commits it downloaded, then the install steps, each one
+already done or quickly finished, and:
+```text
+updated aae6175 → 7f7bfed:
+  • Update workflow actions to their Node 24 versions
+...
+Update finished. Your recordings, notes, names and settings were not changed.
+```
+An update downloads the new code, then runs the installer's steps again to pick up
+anything the new version needs, like a new audiotee or a new menu bar. Your recordings,
+notes, name tables, team profiles and `~/.config/meetingrec/config.sh` are never
+touched.
+
+If you installed before updates existed (no *Check for updates…* in the menu), update
+once by hand:
+```bash
+git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
+```
+
+---
+
 ## Customising
 
 - **Team roster:** edit `teamnotes/.claude/skills/team-notes/profiles/team.md` when people
@@ -653,6 +687,7 @@ For a meeting whose notes go to the whole team:
 | Skill says the inbox is empty | Run `ls scribe/input` from the repo folder. It should list one folder per recording, like `2026-10-01T14-00_acme-check-in`; no output means it's empty. If you set `OUTPUT_ROOT` in your config, it must point to `scribe/input`. |
 | `meeting-notes` skill not found | Start `claude` from inside `scribe/` (or `teamnotes/` for team notes). |
 | ○ button missing or frozen | Hammerspoon → *Reload Config*. If that fails, quit and reopen Hammerspoon. Check `~/.hammerspoon/meetingrec.log`. |
+| `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Run `claude` in the repo folder and ask it to help keep your edit, then update again. |
 | Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault (setup step 7). |
 | `claude: command not found` | Open a new Terminal window. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and add that line to `~/.zprofile`. |
 
