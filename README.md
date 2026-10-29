@@ -24,7 +24,7 @@ meetingrec/
 ├── docs/manual-install.md      # the install, one step at a time
 ├── scribe/                     # notes folder #1 (an Obsidian vault) — personal notes
 │   ├── input/                  #   recordings land here
-│   ├── meeting-notes/          #   notes are written here
+│   ├── meeting-notes/          #   notes are written here, unless you pick your own vault (made on first write-up)
 │   ├── transcripts/            #   only used if you ask to keep a transcript
 │   ├── Tasks.md                #   to-do dashboard
 │   └── .claude/skills/meeting-notes/

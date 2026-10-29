@@ -12,7 +12,7 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 ├── index.base                  # Obsidian Base — All Meetings, By Team, By Type
 ├── Action Items.md             # Tasks-plugin page — every open item, grouped by owner heading
 ├── input/                      # drop zone: phone .m4a/.mp3, a .txt/.srt transcript, or a meetingrec session dir
-├── meeting-notes/              # output — one Obsidian note per meeting, "<prefix> — YYYY-MM-DD.md"
+├── meeting-notes/              # output — one Obsidian note per meeting, "<prefix> — YYYY-MM-DD.md" (created on the first run)
 ├── share/                      # output — plain-Markdown copy of each note for the team
 └── .claude/
     └── skills/team-notes/
