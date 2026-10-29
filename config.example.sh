@@ -18,7 +18,7 @@ AUDIOTEE_SHA="56ac954"
 # audiotee" GitHub Action. install.sh downloads it and refuses any file that
 # doesn't match. Empty means no prebuilt copy yet: install.sh builds from source.
 # Change it together with AUDIOTEE_SHA, after running the Action for the new commit.
-AUDIOTEE_SHA256=""
+AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f9"
 
 # Where recordings go. Leave this commented out to use the default, scribe/input/
 # inside this repo — which is where the meeting-notes skill looks for them.
