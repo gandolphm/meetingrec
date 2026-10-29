@@ -13,7 +13,8 @@
 # if anything fails, fix it and run the same command again.
 #
 # Environment:
-#   MEETINGREC_DIR    where to clone the repo when piped from curl (default ~/meetingrec)
+#   MEETINGREC_DIR    where to clone the repo when piped from curl, instead of asking
+#                     (default ~/meetingrec)
 #   NO_HAMMERSPOON=1  skip the menu-bar button (use bin/meetingrec from Terminal)
 #   AUDIOTEE_FROM_SOURCE=1  build audiotee yourself instead of downloading it
 #   USE_HOMEBREW=1    use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of
@@ -252,6 +253,36 @@ install_hammerspoon_app() {
   ok "installed in $dest"
 }
 
+# Where to clone meetingrec when piped from curl. MEETINGREC_DIR answers ahead
+# of time; with no keyboard to answer with, the default is used.
+choose_repo_dir() {
+  local default="$HOME/meetingrec" link reply
+  # Re-running after a finished install: offer the folder it's already in.
+  link="$(readlink "$HOME/.local/bin/meetingrec" 2>/dev/null)"
+  [ -n "$link" ] && [ -f "$link" ] && default="$(dirname "$(dirname "$link")")"
+  REPO="${MEETINGREC_DIR:-$default}"
+  [ -n "${MEETINGREC_DIR:-}" ] && return
+  [ -t 0 ] || return
+  read -r -p "  Where should meetingrec go? Press Enter for ${default/#$HOME/~}, or type a folder: " reply
+  reply="${reply%/}"
+  [ -n "$reply" ] || return
+  case "$reply" in
+    "~")    reply="$HOME" ;;
+    "~/"*)  reply="$HOME/${reply#"~/"}" ;;
+    /*)     ;;
+    *)      reply="$HOME/$reply" ;;
+  esac
+  # These would break the menu-bar config, which has the path written into it.
+  case "$reply" in
+    *[\"\|\\\$\`]*) die "Pick a folder whose path has none of these characters: \" | \\ \$ \`" ;;
+  esac
+  # A folder that already holds other things, like ~/Projects: go inside it.
+  if [ -d "$reply" ] && [ ! -f "$reply/bin/meetingrec" ] && [ -n "$(ls -A "$reply")" ]; then
+    reply="$reply/meetingrec"
+  fi
+  REPO="$reply"
+}
+
 get_repo() {
   step "meetingrec"
   local here=""
@@ -260,12 +291,12 @@ get_repo() {
     REPO="$here"
     ok "using this copy: $REPO"
   else
-    REPO="${MEETINGREC_DIR:-$HOME/meetingrec}"
+    choose_repo_dir
     if [ -f "$REPO/bin/meetingrec" ]; then
       # Not pulled: re-running the installer never changes the code under you.
       ok "already downloaded: $REPO"
-    elif [ -e "$REPO" ]; then
-      die "$REPO already exists and isn't meetingrec. Move it, or set MEETINGREC_DIR to another folder."
+    elif [ -e "$REPO" ] && [ -n "$(ls -A "$REPO" 2>/dev/null)" ]; then
+      die "$REPO already exists and isn't meetingrec. Move it, or pick another folder."
     else
       git clone --quiet "$REPO_URL" "$REPO" || die "Couldn't download meetingrec from $REPO_URL."
       ok "downloaded to $REPO"

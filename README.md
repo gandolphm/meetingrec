@@ -143,6 +143,9 @@ bash install.sh
 
 **What you'll be asked to do while it runs:**
 
+- **Where to put meetingrec.** Press Enter for `~/meetingrec`, or type another folder, such
+  as `~/Projects/meetingrec`. If you type a folder that already holds other things, like
+  `~/Projects`, meetingrec goes in a `meetingrec` folder inside it.
 - **Install the command line developer tools.** If a window asks, click *Install* and
   agree. The script waits until it finishes.
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
@@ -166,6 +169,7 @@ You should see something like this (each line starting with ✓ is a finished st
   ✓ already installed
 
 ==> meetingrec
+  Where should meetingrec go? Press Enter for ~/meetingrec, or type a folder:
   ✓ downloaded to /Users/you/meetingrec
 
 ==> Whisper model (small.en, 465 MB)
@@ -238,7 +242,7 @@ Then [set up Obsidian](#set-up-obsidian) (recommended).
 <details>
 <summary>Options</summary>
 
-- Install somewhere other than `~/meetingrec`:
+- Choose the folder without being asked (for example in a script):
   `curl -fsSL …/install.sh | MEETINGREC_DIR=~/Documents/meetingrec bash`
 - Skip the menu-bar button (you'll use `meetingrec` from Terminal):
   `curl -fsSL …/install.sh | NO_HAMMERSPOON=1 bash`
