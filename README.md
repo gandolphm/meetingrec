@@ -9,7 +9,7 @@ There are three parts:
 | Part | What it does | Where |
 | --- | --- | --- |
 | **Recorder** | Records a virtual meeting as two tracks: your mic (`mic.wav`) and everyone else (`system.wav`). Start and stop it from the menu bar or the terminal. | `bin/meetingrec`, `hammerspoon/init.lua` |
-| **scribe** | Your **personal** notes: TL;DR, your to-dos (at most five), decisions and questions to ask. | `scribe/` (an Obsidian vault), or a vault you already use |
+| **scribe** | Your **personal** notes: TL;DR, your to-dos, decisions and questions to ask. | `scribe/` (an Obsidian vault), or a vault you already use |
 | **teamnotes** | **Team-facing** notes: third person, action items for everyone grouped by owner, and a plain-Markdown copy you can paste into Slack or email. | `teamnotes/` (a second Obsidian vault), or another vault of yours |
 
 ```
