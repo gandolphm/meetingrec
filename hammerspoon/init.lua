@@ -1,9 +1,9 @@
 -- MeetingRec menu bar.
 --
--- Deliberately uses only hs.menubar, hs.task, hs.timer, hs.dialog, hs.notify
--- and hs.autoLaunch. None of those need the Accessibility permission — that one covers
--- hs.window, hs.eventtap and hs.uielement (window management, input synthesis,
--- reading other apps' UI), which this build never touches. Accessibility is the
+-- Deliberately uses only hs.menubar, hs.task, hs.timer, hs.dialog, hs.notify,
+-- hs.focus and hs.autoLaunch. None of those need the Accessibility permission —
+-- that one covers hs.window, hs.eventtap and hs.uielement (window management,
+-- input synthesis, reading other apps' UI), which this build never touches. Accessibility is the
 -- broadest grant macOS offers, so it stays declined. If you ever add an API
 -- from that list, this comment is the thing that stopped being true.
 --
@@ -317,6 +317,150 @@ local function writeUp(folder, request)
 end
 
 -- ---------------------------------------------------------------------------
+-- Settings
+--
+-- Stored in ~/.config/meetingrec/config.sh and read and written through
+-- `meetingrec config`, the command the skills use too, so the menu, Terminal
+-- and Claude never disagree and the checks (the folder exists, personal and
+-- team notes in separate vaults) live in one place. Values are cached: the menu
+-- is rebuilt on every click, and asking the CLI each time would make it slow
+-- to open.
+-- ---------------------------------------------------------------------------
+
+local HOME = os.getenv("HOME")
+local settings = {}   -- NAME -> { value = "…", isDefault = true|false }
+
+local function loadSettings(after)
+  run({ "config", "list" }, function(exitCode, stdOut)
+    if exitCode == 0 then
+      for name, value, kind in stdOut:gmatch("([%w_]+)\t([^\t\n]*)\t(%a+)") do
+        settings[name] = { value = value, isDefault = (kind == "default") }
+      end
+    end
+    if after then after() end
+  end)
+end
+
+-- Global, like the menu, so the timers can't be garbage-collected.
+local function startAutoCheck()
+  if _G.meetingrecUpdateTimer then return end
+  local function quietCheck() checkForUpdates(false) end
+  _G.meetingrecUpdateTimer = hs.timer.doEvery(CHECK_EVERY, guard("update check", quietCheck))
+  -- A minute after loading as well: at login the network may not be up yet.
+  _G.meetingrecFirstCheck = hs.timer.doAfter(60, guard("update check", quietCheck))
+end
+
+local function stopAutoCheck()
+  if _G.meetingrecUpdateTimer then _G.meetingrecUpdateTimer:stop() end
+  if _G.meetingrecFirstCheck then _G.meetingrecFirstCheck:stop() end
+  _G.meetingrecUpdateTimer, _G.meetingrecFirstCheck = nil, nil
+end
+
+local function saveSetting(name, value, onSaved)
+  run({ "config", "set", name, value }, function(exitCode, stdOut, stdErr)
+    if exitCode ~= 0 then
+      notify("MeetingRec — setting not changed", cliError(stdErr, stdOut))
+      return
+    end
+    loadSettings(onSaved)
+  end)
+end
+
+local function tilde(path)
+  if path:sub(1, #HOME + 1) == HOME .. "/" then return "~" .. path:sub(#HOME + 1) end
+  return path
+end
+
+local function exists(path)
+  local f = io.open(path, "r")
+  if f then f:close() end
+  return f ~= nil
+end
+
+local function countNotes(dir)
+  local out = hs.execute('find "' .. dir .. '/meeting-notes" -name "*.md" 2>/dev/null | wc -l')
+  return tonumber(out and out:match("%d+")) or 0
+end
+
+-- The skill moves notes safely when asked; the menu only says they exist.
+local function folderChanged(name, label, old)
+  local new = settings[name].value
+  local msg = label .. " → " .. tilde(new) .. (settings[name].isDefault and " (default)" or "")
+  if name ~= "OUTPUT_ROOT" and old ~= new and countNotes(old) > 0 then
+    msg = msg .. ". The notes already in " .. tilde(old) ..
+      " stay there; ask Claude to move them if you like."
+  end
+  notify("MeetingRec", msg)
+end
+
+local function chooseFolder(name, label)
+  local old = settings[name] and settings[name].value or HOME
+  hs.focus()   -- otherwise the picker can open behind the frontmost app
+  local picked = hs.dialog.chooseFileOrFolder("Choose the folder for " .. label:lower(),
+                                              old, false, true, false)
+  local path = picked and (picked["1"] or picked[1])
+  if not path then return end
+  path = path:gsub("^file://", ""):gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
+  path = path:gsub("(.)/$", "%1")
+  saveSetting(name, path, function() folderChanged(name, label, old) end)
+end
+
+local function folderMenu(name, label)
+  local s = settings[name]
+  local shown = s and (tilde(s.value) .. (s.isDefault and " (default)" or "")) or "…"
+  return { title = label .. ": " .. shown, menu = {
+    { title = "Choose folder…", fn = function() chooseFolder(name, label) end },
+    { title = "Use default", disabled = (s == nil or s.isDefault), fn = function()
+        if not s then return end
+        local old = s.value
+        saveSetting(name, "", function() folderChanged(name, label, old) end)
+      end },
+    { title = "Show in Finder", disabled = (s == nil), fn = function()
+        if s then hs.execute('open "' .. s.value .. '"') end
+      end },
+  } }
+end
+
+-- The skill creates personal.md on its first run; if someone opens it first,
+-- make it now. A names.local.md from before is opened as-is: the skill carries
+-- it over properly on its next run.
+local function openPersonal(folder, skill)
+  local ref = REPO .. "/" .. folder .. "/.claude/skills/" .. skill .. "/reference"
+  local file = ref .. "/personal.md"
+  if not exists(file) then
+    if exists(ref .. "/names.local.md") then
+      file = ref .. "/names.local.md"
+    else
+      hs.execute('cp -n "' .. ref .. '/personal.example.md" "' .. file .. '"')
+    end
+  end
+  hs.execute('open -t "' .. file .. '"')
+end
+
+local function settingsMenu()
+  local auto = settings.AUTO_UPDATE_CHECK
+  local autoOn = not auto or auto.value ~= "off"
+  return {
+    { title = "Check for updates daily", checked = autoOn, fn = function()
+        local want = autoOn and "off" or "on"
+        saveSetting("AUTO_UPDATE_CHECK", want, function()
+          if want == "on" then startAutoCheck() else stopAutoCheck() end
+        end)
+      end },
+    { title = "-" },
+    folderMenu("NOTES_VAULT", "Personal notes"),
+    folderMenu("TEAM_VAULT", "Team notes"),
+    folderMenu("OUTPUT_ROOT", "Recordings"),
+    { title = "-" },
+    { title = "Edit my rules and names…", fn = function() openPersonal("scribe", "meeting-notes") end },
+    { title = "Edit team rules and names…", fn = function() openPersonal("teamnotes", "team-notes") end },
+    { title = "Team profiles…", fn = function()
+        hs.execute('open "' .. REPO .. '/teamnotes/.claude/skills/team-notes/profiles"')
+      end },
+  }
+end
+
+-- ---------------------------------------------------------------------------
 -- Menu
 -- ---------------------------------------------------------------------------
 
@@ -347,6 +491,7 @@ menu:setMenu(guard("menu", function()
         end)
       end },
     { title = "Re-check status", fn = resync },
+    { title = "Settings", menu = settingsMenu() },
     { title = updatesAvailable > 0 and "Update available…" or "Check for updates…",
       fn = function() checkForUpdates(true) end },
     { title = "-" },
@@ -366,11 +511,12 @@ end))
 -- call, so launch-at-login isn't left as a preferences checkbox to remember.
 hs.autoLaunch(true)
 
--- Once a day, and a minute after loading: at login the network may not be up
--- yet. Global, like the menu, so the timers can't be garbage-collected.
-local function quietCheck() checkForUpdates(false) end
-_G.meetingrecUpdateTimer = hs.timer.doEvery(CHECK_EVERY, guard("update check", quietCheck))
-_G.meetingrecFirstCheck = hs.timer.doAfter(60, guard("update check", quietCheck))
+-- The daily update check runs unless AUTO_UPDATE_CHECK is "off". Settings load
+-- in the background, so the timers start once they're known.
+loadSettings(function()
+  local auto = settings.AUTO_UPDATE_CHECK
+  if not auto or auto.value ~= "off" then startAutoCheck() end
+end)
 
 refreshTitle()
 resync()

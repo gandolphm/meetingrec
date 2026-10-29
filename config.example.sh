@@ -32,7 +32,12 @@ AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f
 # team-notes (TEAM_VAULT) skills write into. Each skill asks once, on its first
 # run, and saves the answer here. "" means the default: scribe/ or teamnotes/ in
 # this repo, which are vaults already. Any other folder works, such as a vault you
-# already use, but not the same one for both. To change it later, edit the line
-# or run: bin/meetingrec config set NOTES_VAULT ~/path/to/vault
+# already use, but not the same one for both. To change it later, edit the line,
+# use ○ → Settings, or run: meetingrec config set NOTES_VAULT ~/path/to/vault
 # NOTES_VAULT=""
 # TEAM_VAULT=""
+
+# Whether the menu bar checks GitHub for a new version once a day and, when
+# there is one, relabels its menu item "Update available…". It never updates by
+# itself. "off" leaves only ○ → Check for updates…. Also in ○ → Settings.
+# AUTO_UPDATE_CHECK="on"

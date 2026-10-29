@@ -366,21 +366,38 @@ For a meeting whose notes go to the whole team:
 
 Everything personal lives in files that **git ignores**: your colleagues', customers' and
 partners' names are never committed, and updating meetingrec never overwrites them. You
-rarely need to open them. Most changes are a sentence to Claude while you write up a
-meeting.
+rarely need to open them: most changes are a sentence to Claude while you write up a
+meeting, or a click in **○ → Settings**.
+
+```
+○ → Settings
+    ✓ Check for updates daily
+      Personal notes: ~/meetingrec/scribe (default)   ▸  Choose folder… · Use default · Show in Finder
+      Team notes: ~/meetingrec/teamnotes (default)    ▸  …
+      Recordings: ~/meetingrec/scribe/input (default) ▸  …
+      Edit my rules and names…
+      Edit team rules and names…
+      Team profiles…
+```
 
 | I want to… | Say to Claude | Or |
 | --- | --- | --- |
-| Keep my notes in a vault I already use | "keep my notes in ~/Documents/My Vault" | `meetingrec config set NOTES_VAULT ~/Documents/My\ Vault` |
-| Keep team notes somewhere else | "keep team notes in ~/…" | `meetingrec config set TEAM_VAULT ~/…` |
-| Change how my notes are written | "from now on, keep Key Points to five bullets" | edit *Rules* in `personal.md` |
-| Give a company's meetings their own to-do tag | "from now on, Acme calls get the context `acme`" | edit *Rules* in `personal.md` |
-| Fix a name Whisper keeps getting wrong | accept it in the list at the end of a write-up | edit *Names* in `personal.md` |
-| Change my team's roster | "Sam left the team, Pat joined" | edit `profiles/team.md` |
-| Add another team or group | pick **other**, then say yes to "save as a profile" | copy a profile file |
-| Set rules for one team only | "from now on, for this team, record vote counts" | edit *Rules* in that team's profile |
-| Record somewhere else | — | set `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` |
+| Keep my notes in a vault I already use | "keep my notes in ~/Documents/My Vault" | ○ → Settings → *Personal notes* → *Choose folder…* |
+| Keep team notes somewhere else | "keep team notes in ~/…" | ○ → Settings → *Team notes* |
+| Change how my notes are written | "from now on, keep Key Points to five bullets" | ○ → Settings → *Edit my rules and names…* |
+| Give a company's meetings their own to-do tag | "from now on, Acme calls get the context `acme`" | the same, under *Rules* |
+| Fix a name Whisper keeps getting wrong | accept it in the list at the end of a write-up | the same, under *Names* |
+| Change my team's roster | "Sam left the team, Pat joined" | ○ → Settings → *Team profiles…* |
+| Add another team or group | pick **other**, then say yes to "save as a profile" | copy a profile file in *Team profiles…* |
+| Set rules for one team only | "from now on, for this team, record vote counts" | *Rules* in that team's profile |
+| Record somewhere else | — | ○ → Settings → *Recordings* |
+| Stop the daily update check | — | ○ → Settings → untick *Check for updates daily* |
 | Use a more accurate Whisper model | "re-run with medium.en" (download it first, below) | — |
+
+Settings saves to `~/.config/meetingrec/config.sh`. From Terminal, `meetingrec config list`
+shows every setting and `meetingrec config set NOTES_VAULT ~/path` changes one (also
+`TEAM_VAULT`, `OUTPUT_ROOT`, and `AUTO_UPDATE_CHECK` with `on` or `off`). Changing a notes
+folder doesn't move the notes already in the old one; ask Claude to move them.
 
 ### What Claude asks the first time
 
@@ -439,7 +456,8 @@ with the repo:
 itself once a day. When there's an update, that item changes to *Update available…*.
 Clicking it lists what's new; click **Update** and the menu bar reloads when it's done,
 with a notification like `Updated to 7f7bfed`. It never updates on its own, and it can't
-update while you're recording.
+update while you're recording. To stop the daily check, untick ○ → Settings → *Check for
+updates daily*.
 
 **From the terminal:**
 ```bash

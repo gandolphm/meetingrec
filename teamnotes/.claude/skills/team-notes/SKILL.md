@@ -116,15 +116,9 @@ usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says 
 already the personal-notes vault, explain that team and personal notes need separate vaults
 (each has its own to-do page, and they would show each other's items) and ask again.
 
-For a folder of their own:
-
-- If it has no `.obsidian/` folder, tell the user to open it once with Obsidian → *Open
-  folder as vault*.
-- If it has no `Action Items.md` in its root, offer to copy the page in:
-  `cp -n "$TEAMNOTES/Action Items.md" "$VAULT/Action Items.md"`. Only on a yes, and never
-  over an existing file.
-- Claude Code asks permission the first time it writes outside the meetingrec folder. Say
-  so, so the prompt isn't a surprise.
+For a folder of their own, mention that Claude Code asks permission the first time it
+writes outside the meetingrec folder, so the prompt isn't a surprise. Whether the folder is
+set up as a vault is checked in Step 0.15, on every run.
 
 When the folder **changed** from one that already holds notes, the old notes and share
 copies stay where they are. Count them (`find "<old vault>/meeting-notes" "<old vault>/share"
@@ -182,6 +176,30 @@ follow the protected rule and tell the user which rule was set aside and why:
 under *Rules* in the profile if it's about this team only (the user's own profiles, never
 `other.md`), otherwise under *Rules* in `personal.md`. If it's unclear which, ask. Show them
 the line you added. If it would conflict with a protected rule, say so instead of adding it.
+
+### Step 0.15 — Check the vault is set up (every run)
+
+The team vault isn't always chosen through Step 0.05: the user can also pick it in
+○ → Settings or edit `config.sh`, and neither of those sets the vault up. So check on every
+run:
+
+```bash
+[ -d "$VAULT/.obsidian" ] || echo "NOT A VAULT YET"
+[ -f "$VAULT/Action Items.md" ] || echo "NO ACTION ITEMS PAGE"
+```
+
+- **`NOT A VAULT YET`** — Obsidian hasn't opened the folder. Tell the user, in one line, to
+  open it once with Obsidian → *Open folder as vault*, and carry on.
+- **`NO ACTION ITEMS PAGE`** — there's no page collecting everyone's action items, so this
+  note's items won't show up on one. Unless a rule in `personal.md` says not to offer it for
+  this vault, offer once to copy the starter page in. On a yes, copy it with
+  `cp -n "$TEAMNOTES/Action Items.md" "$VAULT/Action Items.md"` (never over an existing
+  file). On a no, add a rule to `personal.md` so the offer isn't repeated: *"Don't offer to
+  copy Action Items.md into <vault path>."* Tell the user you saved it and that deleting the
+  rule brings the offer back.
+
+Neither check stops the run. Ask the offer in the same `AskUserQuestion` call as the
+profile question in Step 0.25 when you can, so the user isn't stopped twice.
 
 ### Step 0.25 — Pick the profile
 

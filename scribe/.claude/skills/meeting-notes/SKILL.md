@@ -112,15 +112,9 @@ usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says 
 already the team-notes vault, explain that personal and team notes need separate folders and
 ask again. Other errors: relay them and ask again.
 
-For a folder of their own:
-
-- If it has no `.obsidian/` folder, Obsidian hasn't opened it as a vault yet: tell the user
-  to open it once with Obsidian → *Open folder as vault*.
-- If it has no `Tasks.md` in its root, offer to copy the to-do dashboard in:
-  `cp -n "$SCRIBE/Tasks.md" "$VAULT/Tasks.md"`. Only on a yes, and never over an existing
-  file: a `Tasks.md` that exists is theirs.
-- Claude Code asks permission the first time it writes outside the meetingrec folder. Say
-  so, so the prompt isn't a surprise.
+For a folder of their own, mention that Claude Code asks permission the first time it
+writes outside the meetingrec folder, so the prompt isn't a surprise. Whether the folder is
+set up as a vault is checked in Step 0.15, on every run.
 
 When the folder **changed** from one that already holds notes, the old notes stay where they
 are. Count them (`find "<old vault>/meeting-notes" -name '*.md' | wc -l`) and, if there are
@@ -186,6 +180,30 @@ as* if they don't know — and continue. They're asked once; every later run rea
 "remember that…", "never…"), apply it to this note and add it as a bullet under *Rules* in
 `personal.md`, worded as a rule. Show them the line you added. If it would conflict with a
 protected rule, say so instead of adding it.
+
+### Step 0.15 — Check the vault is set up (every run)
+
+The notes folder isn't always chosen through Step 0.05: the user can also pick it in
+○ → Settings or edit `config.sh`, and neither of those sets the vault up. So check on every
+run:
+
+```bash
+[ -d "$VAULT/.obsidian" ] || echo "NOT A VAULT YET"
+[ -f "$VAULT/Tasks.md" ] || echo "NO DASHBOARD"
+```
+
+- **`NOT A VAULT YET`** — Obsidian hasn't opened the folder. Tell the user, in one line, to
+  open it once with Obsidian → *Open folder as vault*, and carry on: the note is written
+  either way.
+- **`NO DASHBOARD`** — there's no to-do page, so this note's to-dos won't show up on one.
+  Unless a rule in `personal.md` says not to offer it for this vault, offer once to copy the
+  starter dashboard in. On a yes, copy it with `cp -n "$SCRIBE/Tasks.md" "$VAULT/Tasks.md"`
+  (never over an existing file: a `Tasks.md` that exists is theirs). On a no, add a rule to
+  `personal.md` so the offer isn't repeated: *"Don't offer to copy Tasks.md into
+  <vault path>."* Tell the user you saved it and that deleting the rule brings the offer back.
+
+Neither check stops the run. On a first run, make this offer in the same turn as the Step
+0.05 questions if the answer to those is already known, so the user isn't stopped twice.
 
 ### Step 0.2 — Find the input
 
