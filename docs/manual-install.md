@@ -7,7 +7,7 @@ exactly what gets downloaded.
 Do the steps in order. Every command runs in **Terminal**. In the expected outputs, `you`
 stands for your Mac username, and dates, times, sizes and version numbers will differ.
 
-When you've finished, go back to the README and [set up Obsidian](../README.md#set-up-obsidian).
+When you've finished, go back to the README and [set up Obsidian](../README.md#set-up-obsidian) (recommended).
 
 ## 1. Install the command-line tools
 
@@ -293,4 +293,4 @@ If it prints nothing, `~/.local/bin` isn't on your PATH: run
 these commands, use `<repo>/bin/meetingrec`, and start note-writing from the ○ menu or with
 `cd <repo>/scribe && claude`.
 
-Now go back to the README and [set up Obsidian](../README.md#set-up-obsidian).
+Now go back to the README and [set up Obsidian](../README.md#set-up-obsidian) (recommended).
