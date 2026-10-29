@@ -31,9 +31,9 @@ AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f
 # SHA-256 means no prebuilt copy yet: install.sh uses Homebrew for that tool.
 # Change a version together with its SHA-256, after running the Action for it.
 FFMPEG_VERSION="9.0.2"
-FFMPEG_SHA256=""
+FFMPEG_SHA256="8f1f0460aa33cea88365f238d60cd12d46485486f0d2119e8ab420a4b28c6821"
 WHISPER_CPP_VERSION="v1.9.5"
-WHISPER_CLI_SHA256=""
+WHISPER_CLI_SHA256="6db71de03c6266947dbfcf92fea691624bf968b452c058976a2a091ad34b28db"
 HAMMERSPOON_VERSION="1.1.1"
 HAMMERSPOON_SHA256="11bb1c90faf5427f37c7bd4fe7eab9774ae43e1d5cb020c5b3088dac32849efa"
 
