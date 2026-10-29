@@ -6,7 +6,7 @@
 #   ./install.sh                      # or run it from a clone
 #   ./install.sh --update             # what `meetingrec update` runs after pulling
 #
-# Does the README's manual install steps 1–4 and 6, then walks you through a
+# Does the steps in docs/manual-install.md, then walks you through a
 # test recording from the menu-bar button and checks it.
 #
 # Safe to re-run: every step checks whether it's already done and skips it, so
@@ -391,7 +391,7 @@ EOF
   while :; do
     read -r -p "  Press Enter when you've clicked Stop (or type s to skip): " reply
     if [ "$reply" = "s" ]; then
-      note "skipped. Do it later; see step 6 of the README."
+      note "skipped. To do it later, run this installer again."
       return
     fi
     # Checking (and deleting) a session that's still recording would lose it.
@@ -405,7 +405,7 @@ EOF
   session="$(ls -1d "$inbox"/*_test 2>/dev/null | tail -n 1)"
   if [ -z "$session" ] || [ ! -f "$session/session.json" ]; then
     note "No finished test recording found in $inbox."
-    note "Do the test later; see step 6 of the README."
+    note "To do the test later, run this installer again."
     return
   fi
 
@@ -436,7 +436,7 @@ ${G}${B}Done.${N} meetingrec is installed in ${B}$REPO${N}
 
 What's left (see the README for details):
   1. Open a ${B}new${N} Terminal window, run ${B}claude${N} once and sign in.
-  2. Set up Obsidian (README step 7).
+  2. Set up Obsidian ("Set up Obsidian" in the README).
 
 The first time you write up a meeting, Claude asks your name, where your notes
 should go (meetingrec's folder, or an Obsidian vault you already use) and, for

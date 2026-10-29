@@ -2,7 +2,7 @@
 # Copy to ~/.config/meetingrec/config.sh and edit:
 #   mkdir -p ~/.config/meetingrec && cp config.example.sh ~/.config/meetingrec/config.sh
 
-# Path to the audiotee binary (see "Install audiotee" in the README).
+# Path to the audiotee binary (install.sh puts it here; see docs/manual-install.md step 3).
 AUDIOTEE_BIN="$HOME/bin/audiotee"
 
 # The audiotee commit in use. If you built it yourself: git -C ~/src/audiotee rev-parse --short HEAD

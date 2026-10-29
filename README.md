@@ -14,27 +14,45 @@ There are three parts:
 
 ```
 meetingrec/
-├── bin/meetingrec              # the recorder CLI
+├── bin/meetingrec              # the recorder
+├── bin/scribe, teamnotes       # start writing notes from any Terminal window
 ├── bin/clock-check, drift-check  # diagnostics for track timing (rarely needed)
-├── hammerspoon/init.lua        # menu-bar start/stop button
-├── config.example.sh           # copy to ~/.config/meetingrec/config.sh
+├── hammerspoon/init.lua        # the ○ menu-bar button
+├── config.example.sh           # template for ~/.config/meetingrec/config.sh
+├── docs/manual-install.md      # the install, one step at a time
 ├── scribe/                     # Obsidian vault #1 — personal notes
 │   ├── input/                  #   recordings land here
 │   ├── meeting-notes/          #   notes are written here
 │   ├── transcripts/            #   only used if you ask to keep a transcript
 │   ├── Tasks.md                #   to-do dashboard
 │   └── .claude/skills/meeting-notes/
+│       └── reference/          #   your personal.md (names, rules) lives here
 └── teamnotes/                  # Obsidian vault #2 — team notes
     ├── input/  meeting-notes/  share/
     ├── Action Items.md         #   everyone's open items, by owner
     └── .claude/skills/team-notes/
+        ├── reference/          #   your personal.md for team notes
+        └── profiles/           #   one file per team: roster, sections, rules
 ```
 
 Recordings, transcripts and notes are git-ignored, so nothing you record gets committed. So
-are your settings and team roster (see [step 8](#8-your-settings-and-team-profile)).
+are your settings and team rosters (see [Make it yours](#make-it-yours)).
 
 > **Always tell people you're recording.** No bot appears in the participant list, so
 > nobody knows unless you say so.
+
+## Contents
+
+- [Requirements](#requirements)
+- [Install](#install)
+  - [Quick install](#quick-install-recommended) · [Manual install](docs/manual-install.md)
+  - [Set up Obsidian](#set-up-obsidian)
+- [Your first meeting](#your-first-meeting)
+- [Usage](#usage): [record](#record-a-virtual-meeting) ·
+  [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
+- [Make it yours](#make-it-yours): where notes go, names, rules, teams
+- [Updating](#updating)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -43,20 +61,23 @@ are your settings and team roster (see [step 8](#8-your-settings-and-team-profil
 - A Mac with **Apple silicon**, running **macOS 14.2 or later**. System-audio capture uses
   Core Audio taps, which first shipped in 14.2.
 - A **Claude Code** subscription or API access.
-- About 1 GB of disk space for the Whisper model and build tools.
+- **Disk space:** about **0.7 GB** for the Whisper model (465 MB), ffmpeg and whisper.cpp,
+  and Hammerspoon. If your Mac doesn't have them yet, add about 1.3 GB for Apple's Command
+  Line Tools, a few hundred MB for Homebrew, and about 0.3 GB for Claude Code, which grows
+  toward 0.8 GB as it keeps previous versions: about **2.5–3 GB** in all. Recordings take
+  about 230 MB per hour of meeting until their notes are written.
+- *Optional:* the **[Claude app](https://claude.ai/download)** for Mac, so *Write up notes…*
+  in the menu bar opens there instead of in Terminal.
 
 ---
 
-## Setup
+## Install
 
-There are two ways to install. Both end up with the same result.
-
-- **[Quick install](#quick-install-recommended):** paste one command, then answer a few
-  prompts. About 20 minutes, mostly waiting.
-- **[Manual install](#manual-install):** run each step yourself. Use this if you'd rather
-  not run a script from the internet, or you want to see exactly what gets downloaded.
-
-Either way, finish with [Finish setup](#finish-setup-both-ways): Obsidian.
+Paste one command and answer a few prompts: the [quick install](#quick-install-recommended)
+below. About 20 minutes, mostly waiting. If you'd rather not run a script from the internet,
+or want to see exactly what gets downloaded, follow the
+**[manual install](docs/manual-install.md)** instead. Both end up with the same result.
+Either way, finish with [Set up Obsidian](#set-up-obsidian).
 
 In the expected outputs below, `you` stands for your Mac username, and dates, times,
 sizes and version numbers will differ.
@@ -74,7 +95,7 @@ The script goes through these steps and skips any that are already done:
 
 | Step | Downloaded from |
 | --- | --- |
-| Xcode Command Line Tools (git, Swift, python3) | Apple, via `xcode-select --install` |
+| Xcode Command Line Tools (git and python3) | Apple, via `xcode-select --install` |
 | Homebrew, if you don't have it | [brew.sh](https://brew.sh) |
 | ffmpeg, whisper.cpp, Hammerspoon | Homebrew |
 | meetingrec, cloned to `~/meetingrec` | this GitHub repo |
@@ -85,8 +106,8 @@ The script goes through these steps and skips any that are already done:
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
 Hammerspoon, links the `meetingrec`, `scribe` and `teamnotes` commands into `~/.local/bin`,
 and adds Homebrew and `~/.local/bin` to your PATH in `~/.zprofile` if they aren't there
-already. It doesn't change anything else. You can [read the script](install.sh) first, or download it, look at it, then run
-it:
+already. It doesn't change anything else. You can [read the script](install.sh) first, or
+download it, look at it, then run it:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh -o install.sh
 less install.sh      # press q to quit
@@ -112,7 +133,7 @@ You should see something like this (each line starting with ✓ is a finished st
 ==> Checking this Mac
   ✓ macOS 15.1 on Apple silicon
 
-==> Xcode Command Line Tools (git, Swift, python3)
+==> Xcode Command Line Tools (git, python3)
   ✓ already installed
 
 ==> Homebrew (package manager)
@@ -183,18 +204,19 @@ claude
 Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
 prompts. When you reach the `>` prompt, type `/exit`.
 
-Then go to [Finish setup](#finish-setup-both-ways).
+Then [set up Obsidian](#set-up-obsidian).
 
 <details>
 <summary>Options</summary>
 
 - Install somewhere other than `~/meetingrec`:
   `curl -fsSL …/install.sh | MEETINGREC_DIR=~/Documents/meetingrec bash`
-- Skip the menu-bar button (you'll use `bin/meetingrec` from Terminal):
+- Skip the menu-bar button (you'll use `meetingrec` from Terminal):
   `curl -fsSL …/install.sh | NO_HAMMERSPOON=1 bash`
 - Build audiotee on your Mac instead of downloading the prebuilt copy (takes a minute or
-  two longer): `curl -fsSL …/install.sh | AUDIOTEE_FROM_SOURCE=1 bash`. The installer also
-  does this by itself if the download fails or doesn't match its SHA-256.
+  two longer, and uses Swift from the Command Line Tools):
+  `curl -fsSL …/install.sh | AUDIOTEE_FROM_SOURCE=1 bash`. The installer also does this by
+  itself if the download fails or doesn't match its SHA-256.
 - Already cloned the repo? Run `./install.sh` from inside it. That copy is used instead of
   a fresh clone.
 
@@ -202,293 +224,7 @@ Then go to [Finish setup](#finish-setup-both-ways).
 
 ---
 
-### Manual install
-
-Do the steps in order. Every command runs in **Terminal**.
-
-#### 1. Install the command-line tools
-
-**Xcode Command Line Tools** (provides git, Swift and python3):
-```bash
-xcode-select --install
-```
-Expected, if they're not installed yet:
-```text
-xcode-select: note: install requested for command line developer tools
-```
-A window then opens. Click *Install*, agree, and wait for it to finish (5–15 minutes).
-If instead you get a message saying the command line tools are already installed, move on.
-
-**Homebrew**, if you don't have it ([brew.sh](https://brew.sh)):
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-It asks for your Mac password, then shows what it will install and asks you to press
-Enter. It ends with:
-```text
-==> Installation successful!
-...
-==> Next steps:
-- Run these commands in your terminal to add Homebrew to your PATH:
-    echo >> /Users/you/.zprofile
-    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/you/.zprofile
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-```
-Run the lines it prints under *Next steps*. They print nothing. Then close Terminal and
-open it again. To check:
-```bash
-brew --version
-```
-Expected:
-```text
-Homebrew 4.6.0
-```
-
-**ffmpeg and Whisper:**
-```bash
-brew install ffmpeg whisper.cpp
-```
-This prints a lot and takes a few minutes. It ends with lines like:
-```text
-==> Summary
-🍺  /opt/homebrew/Cellar/whisper-cpp/1.8.0: 45 files, 12MB
-```
-To check:
-```bash
-which ffmpeg whisper-cli
-```
-Expected:
-```text
-/opt/homebrew/bin/ffmpeg
-/opt/homebrew/bin/whisper-cli
-```
-
-**The Whisper model** (`small.en`, 465 MB):
-```bash
-mkdir -p ~/.whisper-models
-curl -L -o ~/.whisper-models/ggml-small.en.bin \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
-```
-`mkdir` prints nothing. `curl` shows a progress table while it downloads. When it
-finishes, the `% Total` column reads `100` and the size is `465M`. To check the file isn't
-damaged:
-```bash
-shasum -a 256 ~/.whisper-models/ggml-small.en.bin
-```
-Expected:
-```text
-c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d  /Users/you/.whisper-models/ggml-small.en.bin
-```
-If the long number is different, delete the file and download it again.
-
-**Claude Code:**
-```bash
-curl -fsSL https://claude.ai/install.sh | bash
-```
-Expected: it ends by saying Claude Code was installed successfully. If it also tells you
-to add `~/.local/bin` to your PATH, run the command it shows. Then open a new Terminal
-window and run:
-```bash
-claude
-```
-Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
-prompts. When you reach the `>` prompt, type `/exit`. See the
-[Claude Code docs](https://docs.claude.com/en/docs/claude-code/overview) for other ways to
-install it.
-
-#### 2. Clone this repo
-
-Clone it wherever you like. Nothing in the tool depends on where it lives. Commands in
-this guide that start with `bin/`, `scribe/` or `teamnotes/` are run **from the repo
-folder** (the one containing this README). `<repo>` means that folder's full path.
-
-```bash
-git clone https://github.com/gandolphm/meetingrec.git   # creates a folder called meetingrec
-cd meetingrec
-chmod +x bin/*
-pwd                            # this is your <repo> path; note it down
-```
-Expected (`cd` and `chmod` print nothing):
-```text
-Cloning into 'meetingrec'...
-remote: Enumerating objects: ...
-Receiving objects: 100% ..., done.
-Resolving deltas: 100% ..., done.
-/Users/you/meetingrec
-```
-
-#### 3. Install audiotee (system-audio capture)
-
-[audiotee](https://github.com/makeusabrew/audiotee) is a small open-source tool. It
-captures the audio your Mac is playing, which during a call is everyone else's voice.
-Use the commit this tool was tested with, `56ac954`. Either download the copy this repo
-publishes (**A**) or build it yourself (**B**). Both give you the same program.
-
-**A. Download it.** It's built from audiotee's source by a
-[GitHub Action](.github/workflows/build-audiotee.yml) in this repo:
-```bash
-mkdir -p ~/bin
-curl -fL --progress-bar -o ~/bin/audiotee https://github.com/gandolphm/meetingrec/releases/download/audiotee-56ac954/audiotee
-chmod +x ~/bin/audiotee
-shasum -a 256 ~/bin/audiotee
-grep AUDIOTEE_SHA256 config.example.sh
-```
-Expected: a download progress bar, then the same 64-character code twice:
-```text
-######################################################################## 100.0%
-<64-character code>  /Users/you/bin/audiotee
-AUDIOTEE_SHA256="<the same 64-character code>"
-```
-If the two codes differ, the download is damaged: delete it with `rm ~/bin/audiotee` and
-use **B** instead.
-
-**B. Build it from source:**
-
-```bash
-mkdir -p ~/src ~/bin
-git clone https://github.com/makeusabrew/audiotee.git ~/src/audiotee
-git -C ~/src/audiotee checkout 56ac954
-cd ~/src/audiotee && swift build -c release && cd -
-cp ~/src/audiotee/.build/release/audiotee ~/bin/audiotee
-```
-The build takes a minute or two. Expected (`mkdir` and `cp` print nothing):
-```text
-Cloning into '/Users/you/src/audiotee'...
-...
-Note: switching to '56ac954'.
-...
-HEAD is now at 56ac954 ...
-Building for production...
-...
-Build complete! (52.31s)
-/Users/you/meetingrec
-```
-The last line is `cd -` taking you back to the repo folder.
-
-Check that the binary is in place:
-```bash
-ls -l ~/bin/audiotee
-```
-Expected (the `x`s in `-rwxr-xr-x` mean it can run):
-```text
--rwxr-xr-x  1 you  staff  412496 Oct 26 14:02 /Users/you/bin/audiotee
-```
-
-#### 4. Configure the recorder
-
-```bash
-mkdir -p ~/.config/meetingrec
-cp config.example.sh ~/.config/meetingrec/config.sh
-```
-Expected: no output.
-
-The defaults work if you followed steps 2 and 3 exactly. If you put audiotee somewhere
-else, edit `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`.
-
-#### 5. Do a test recording and grant permissions
-
-macOS asks for permission the first time each app records audio. Do a short test run from
-Terminal so you can answer the prompts now, not at the start of a real call:
-
-```bash
-bin/meetingrec start "test"
-```
-Allow the **Microphone** and **System Audio Recording** prompts. Expected:
-```text
-recording: /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test
-  tracks: mic,system
-  mic:    MacBook Pro Microphone
-  output: MacBook Pro Speakers (do not change it mid-call)
-```
-The `mic` and `output` lines show your own devices, e.g. your headphones.
-
-Play a YouTube video and talk for 15 seconds, then run:
-
-```bash
-bin/meetingrec stop
-```
-`stop` reports what it captured. Expected:
-```text
-stopped after 0m18s
-  /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test
-  -rw-r--r--  1 you  staff  576044 Oct 26 14:05 /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test/mic.wav
-  -rw-r--r--  1 you  staff  450604 Oct 26 14:05 /Users/you/meetingrec/scribe/input/2026-10-26T14-05_test/system.wav
-  format-check: audiotee metadata OK (ok|16000|1|16|...)
-  format-check: system OK (32000 B/s)
-  format-check: mic OK (32000 B/s)
-```
-The `B/s` numbers can be a little off 32000. The `format-check` lines can be in a different
-order.
-
-If it prints a line starting with **WARNING** saying a track is silent, a permission is
-missing. Fix it in **System Settings → Privacy & Security**:
-- **Microphone** → turn on Terminal.
-- **Screen & System Audio Recording** → in the *System Audio Recording Only* list, add
-  and turn on Terminal.
-
-Then quit and reopen Terminal and try again.
-
-Delete the test session afterwards:
-```bash
-rm -rf scribe/input/*_test
-```
-Expected: no output.
-
-#### 6. Install Hammerspoon (menu-bar button)
-
-[Hammerspoon](https://www.hammerspoon.org) is a free macOS automation app. Here it adds a
-small **○** button to your menu bar that starts and stops recordings. It's optional, since
-the terminal commands work too, but it's much easier mid-meeting.
-
-1. **Install it:**
-   ```bash
-   brew install --cask hammerspoon
-   ```
-   Expected, at the end:
-   ```text
-   🍺  hammerspoon was successfully installed!
-   ```
-   You can also download it from [hammerspoon.org](https://www.hammerspoon.org) and drag
-   it into Applications.
-2. **Install the config.** Run this **from the repo folder**. It copies the config and
-   fills in where you cloned the repo:
-   ```bash
-   mkdir -p ~/.hammerspoon
-   sed "s|^local REPO = .*|local REPO = \"$PWD\"|" hammerspoon/init.lua > ~/.hammerspoon/init.lua
-   ```
-   Expected: no output. To check the path was filled in:
-   ```bash
-   grep '^local REPO' ~/.hammerspoon/init.lua
-   ```
-   Expected (your repo path from step 2):
-   ```text
-   local REPO = "/Users/you/meetingrec"
-   ```
-   If you already have your own `~/.hammerspoon/init.lua`, don't overwrite it. Write to
-   `~/.hammerspoon/meetingrec.lua` instead (same command, different last path), then add
-   this line to your `init.lua`:
-   ```lua
-   require("meetingrec")
-   ```
-   If you ever move the repo, run the command again.
-3. **Open Hammerspoon** from Applications. It asks for **Accessibility** access. You can
-   **decline**: this config doesn't use it. A **○** appears in the menu bar. The config
-   also turns on *Launch Hammerspoon at login*, so it comes back after a restart.
-   If Hammerspoon was already running, click its menu-bar icon → *Reload Config*.
-4. **Grant Hammerspoon its own permissions.** macOS gives permissions to the app that
-   launches the recording, so Terminal's permissions don't carry over. Start a test
-   recording from the ○ menu, then allow the prompts. Stop it from the menu after 15
-   seconds. If a notification says *check this recording*, a permission is missing: add
-   **Hammerspoon** under **Microphone** and **System Audio Recording Only** in System
-   Settings (see step 5). Delete the test session afterwards, as in step 5.
-
-If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
-
----
-
-### Finish setup (both ways)
-
-#### 7. Set up Obsidian
+### Set up Obsidian
 
 1. **Install Obsidian** from [obsidian.md](https://obsidian.md). It's free. You need
    version 1.9 or later for Bases.
@@ -501,7 +237,7 @@ If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
    folder above, or give your vault's folder. Notes then go into a `meeting-notes/` folder
    inside it (and `share/` for team notes), and Claude offers to copy in the to-do page.
    Personal and team notes need separate vaults. Do steps 3 and 4 in whichever vaults you
-   use.
+   use. See [Make it yours](#make-it-yours) to change it later.
 3. **Enable Bases** (in each vault): *Settings → Core plugins → Bases* → on. This powers
    `index.base`, a sortable table of all your meetings.
 4. **Install the Tasks plugin** (in each vault): *Settings → Community plugins → Turn on
@@ -515,48 +251,20 @@ If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
 `index.base`, the table of meetings, is created in the vault automatically the first time
 you write a note there.
 
-#### 8. Your settings and team profile
+---
 
-Claude sets these up the first time you use each skill.
+## Your first meeting
 
-- **Your name.** The first time you write up a meeting with `scribe`, Claude asks your name
-  and how Whisper tends to mishear it. It uses your name to tell which to-dos are yours.
-- **Where your notes go.** At the same time, it asks whether notes go in `scribe/` or in a
-  vault you already use (see step 7). Team notes ask the same once. The answers are saved
-  as `NOTES_VAULT` and `TEAM_VAULT` in `~/.config/meetingrec/config.sh`.
-- **Your team.** The first time you pick the **team** profile for team notes, Claude asks
-  for the team's name and roster.
-- **Names Whisper gets wrong.** At the end of each write-up, Claude lists any names it had
-  to correct and offers to remember them, so the next transcript gets them right. Accented
-  names and company names that sound like ordinary words are the usual culprits.
-- **How you like your notes written.** Say "from now on…" or "remember that…" while
-  writing up a meeting, e.g. *"from now on, calls with Acme get the context `acme`"* or
-  *"never put `#job` on a meeting to-do"*, and Claude saves it as a rule and follows it
-  every time. At the end of a write-up it may also suggest rules based on corrections you
-  made; you choose which to keep. Rules for one team go in that team's profile.
+1. **Before the call:** put on headphones, click **○** in the menu bar → *Start
+   recording…*, type a title, click *Start*. Tell the others you're recording.
+2. **After the call:** click **● 34m** → *Stop*.
+3. **Write it up:** click **○** → *Write up notes…*. The Claude app opens with `scribe`
+   typed in; press **Enter**. The first time, Claude asks your name and where your notes
+   should go. Then it asks a few questions about the meeting (who was there, what kind of
+   meeting) and transcribes it.
+4. **Read it:** open the note in Obsidian. Your to-dos are on the `Tasks.md` dashboard.
 
-All of this is saved in files that **git ignores**, so your colleagues', customers' and
-partners' names are never committed, and updating meetingrec never overwrites them:
-
-| What | File |
-| --- | --- |
-| Where notes and recordings go | `~/.config/meetingrec/config.sh` |
-| Your name, names and rules for personal notes | `scribe/.claude/skills/meeting-notes/reference/personal.md` |
-| Names and rules for team notes, for every team | `teamnotes/.claude/skills/team-notes/reference/personal.md` |
-| One team's name, roster, sections and rules | `teamnotes/.claude/skills/team-notes/profiles/team.md` (one file per team) |
-
-You can edit any of them directly too: rules are plain English, one bullet each. Your rules
-take priority over the skills' defaults, except for a few protections the skills keep
-regardless (recordings aren't deleted before the note is saved, and notes keep the format
-the dashboards read). Each file sits next to tracked files that must stay as they are,
-because git publishes them with the repo:
-
-- **Templates** (`*.example.md`): the starting point the skills copy your files from.
-- **`shared.md`**: empty in this repo, and it should stay that way. It's only for a team
-  that [forks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
-  meetingrec: the fork's maintainer fills it with the names and rules everyone on the team
-  needs and commits them, so each member gets them on their next update. Never put anything
-  in it in your own copy of this repo.
+Team meeting instead? Use *Write up team notes…* (see [team notes](#write-team-notes-teamnotes)).
 
 ---
 
@@ -586,7 +294,7 @@ when nothing is recording:
 recording 754 /Users/you/meetingrec/scribe/input/2026-10-01T14-00_acme-check-in
 ```
 Expected from `stop`: the length, the folder and the two files, as in
-[setup step 5](#5-do-a-test-recording-and-grant-permissions). If it prints a line starting
+[manual install step 5](docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). If it prints a line starting
 with `WARNING`, read it before the recording is gone: usually a track is silent.
 
 **Wear headphones** if you can. On speakers your mic also picks up the other side, and
@@ -594,7 +302,8 @@ some lines get attributed to you. If you're on speakers, use *Start (mic only �
 speakers)* or `meetingrec start --mic-only`. That records just one track, and the skill
 works out who said what from context.
 
-Each recording is a folder in `scribe/input/`, like
+Each recording is a folder in `scribe/input/` (or wherever `OUTPUT_ROOT` points; see
+[Make it yours](#make-it-yours)), like
 `2026-10-01T14-00_acme-check-in/`, containing `mic.wav`, `system.wav` and
 `session.json`.
 
@@ -605,7 +314,8 @@ Any of these starts it; they all end up in the same place:
 - **Menu bar:** click **○** → *Write up notes…*. The Claude app opens a Claude Code session
   in `scribe/` with `scribe` already typed. Press **Enter**. (Without the Claude app, it
   opens Claude Code in Terminal instead.)
-- **Terminal, from any folder:** type `scribe`.
+- **Terminal, from any folder:** type `scribe`. (Manual install: see
+  [step 7](docs/manual-install.md#7-add-the-commands-optional).)
 - **By hand:**
   ```bash
   cd <repo>/scribe
@@ -625,7 +335,8 @@ The skill:
 6. offers to remember any names Whisper got wrong, and any preferences your corrections
    suggested.
 
-Open the note in Obsidian. To-dos are tagged `#work` and appear in `Tasks.md`.
+Open the note in Obsidian. To-dos are tagged with the meeting's context, `#work` unless your
+rules say otherwise, and appear in `Tasks.md`.
 
 You can also drop an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`) or a transcript (`.txt`,
 `.srt`, `.vtt`) into `scribe/input/`, or paste a transcript straight into the chat.
@@ -651,6 +362,77 @@ For a meeting whose notes go to the whole team:
 
 ---
 
+## Make it yours
+
+Everything personal lives in files that **git ignores**: your colleagues', customers' and
+partners' names are never committed, and updating meetingrec never overwrites them. You
+rarely need to open them. Most changes are a sentence to Claude while you write up a
+meeting.
+
+| I want to… | Say to Claude | Or |
+| --- | --- | --- |
+| Keep my notes in a vault I already use | "keep my notes in ~/Documents/My Vault" | `meetingrec config set NOTES_VAULT ~/Documents/My\ Vault` |
+| Keep team notes somewhere else | "keep team notes in ~/…" | `meetingrec config set TEAM_VAULT ~/…` |
+| Change how my notes are written | "from now on, keep Key Points to five bullets" | edit *Rules* in `personal.md` |
+| Give a company's meetings their own to-do tag | "from now on, Acme calls get the context `acme`" | edit *Rules* in `personal.md` |
+| Fix a name Whisper keeps getting wrong | accept it in the list at the end of a write-up | edit *Names* in `personal.md` |
+| Change my team's roster | "Sam left the team, Pat joined" | edit `profiles/team.md` |
+| Add another team or group | pick **other**, then say yes to "save as a profile" | copy a profile file |
+| Set rules for one team only | "from now on, for this team, record vote counts" | edit *Rules* in that team's profile |
+| Record somewhere else | — | set `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` |
+| Use a more accurate Whisper model | "re-run with medium.en" (download it first, below) | — |
+
+### What Claude asks the first time
+
+- **Your name** (personal notes), and how Whisper tends to mishear it. It's how Claude
+  tells which to-dos are yours.
+- **Where your notes go:** meetingrec's own `scribe/` or `teamnotes/` vault, or one you
+  already use. Personal and team notes need separate vaults. Claude Code asks permission
+  the first time it writes outside the meetingrec folder.
+- **Your team's name and roster**, the first time you pick the **team** profile.
+
+### Where everything is saved
+
+| What | File |
+| --- | --- |
+| Where notes and recordings go | `~/.config/meetingrec/config.sh` |
+| Your name, names and rules for personal notes | `scribe/.claude/skills/meeting-notes/reference/personal.md` |
+| Names and rules for team notes, for every team | `teamnotes/.claude/skills/team-notes/reference/personal.md` |
+| One team's name, roster, sections and rules | `teamnotes/.claude/skills/team-notes/profiles/<team>.md` |
+
+Rules are plain English, one bullet each, and take priority over the skills' defaults. A
+team's rules beat your general ones for that team. A few things can't be changed by a rule,
+because other parts of meetingrec depend on them: recordings aren't deleted before the note
+is saved, notes keep the format the notes table and to-do pages read, and Claude never edits
+the skills' own files. At the end of each write-up Claude offers to remember the names it
+corrected and any preferences your corrections suggested; you choose which to keep.
+
+Next to your files are tracked ones that must stay as they are, because git publishes them
+with the repo:
+
+- **Templates** (`*.example.md`): the starting point the skills copy your files from.
+- **`shared.md`**: empty in this repo, and it should stay that way. It's only for a team
+  that [forks](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo)
+  meetingrec: the fork's maintainer fills it with the names and rules everyone on the team
+  needs and commits them, so each member gets them on their next update. Never put anything
+  in it in your own copy of this repo.
+
+### Other settings
+
+- **A new context on the to-do dashboard:** to-dos are tagged with the note's `context`
+  (`work` unless your rules say otherwise). If you start using another, add a
+  `tags include <context>` block to `Tasks.md` in your notes vault. Claude points this out
+  when it happens.
+- **Whisper model:** `small.en` is the default. For poor audio, download `medium.en`
+  (1.5 GB), then ask the skill to re-run with it:
+  ```bash
+  curl -L -o ~/.whisper-models/ggml-medium.en.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
+  ```
+  Expected: a progress table that ends at `100` with a size of about `1462M`.
+
+---
+
 ## Updating
 
 **From the menu bar:** click **○** → *Check for updates…*. MeetingRec also checks by
@@ -661,8 +443,8 @@ update while you're recording.
 
 **From the terminal:**
 ```bash
-~/meetingrec/bin/meetingrec update --check   # only see what's new
-~/meetingrec/bin/meetingrec update
+meetingrec update --check   # only see what's new
+meetingrec update
 ```
 Expected from `update`: the commits it downloaded, then the install steps, each one
 already done or quickly finished, and:
@@ -685,45 +467,22 @@ git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
 
 ---
 
-## Customising
-
-- **Team roster:** edit `teamnotes/.claude/skills/team-notes/profiles/team.md` when people
-  join or leave. Every note's attendee and absent lists come from it.
-- **Another recurring group** (e.g. a partner working group): pick the **other** profile and
-  say yes when Claude offers to save it as a profile. Next time it appears in the list.
-- **How notes are written:** tell Claude "from now on…" while writing up a meeting, or edit
-  the *Rules* in your `personal.md` (see [step 8](#8-your-settings-and-team-profile)).
-- **Where notes go:** tell Claude "keep my notes in ~/path/to/vault" while running a skill,
-  or run `bin/meetingrec config set NOTES_VAULT ~/path/to/vault` (`TEAM_VAULT` for team
-  notes; `""` goes back to the default). Claude offers to move the notes you already have.
-  Recordings go where `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points.
-- **Whisper model:** `small.en` is the default. For poor audio, ask the skill to re-run
-  with `medium.en`, after downloading it (1.5 GB):
-  ```bash
-  curl -L -o ~/.whisper-models/ggml-medium.en.bin \
-    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
-  ```
-  Expected: a progress table that ends at `100` with a size of about `1462M`.
-- **New dashboard context:** to-dos are tagged with the note's `context` (default
-  `work`). If you start using another context, add a `tags include <context>` block to
-  `scribe/Tasks.md`.
-
----
-
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
 | `NO_ENGINE` | `brew install whisper.cpp`, or run the quick install command again. |
-| `MODEL_NOT_FOUND` | Run the `curl` command it prints (see step 1). |
+| `MODEL_NOT_FOUND` | Run the `curl` command it prints, or run the quick install command again. |
 | `NO_FFMPEG` | `brew install ffmpeg` |
-| `audiotee not found or not executable` | Run the quick install command again, redo manual step 3, or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
-| "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See steps 5 and 6. |
-| Skill says the inbox is empty | Run `ls scribe/input` from the repo folder. It should list one folder per recording, like `2026-10-01T14-00_acme-check-in`; no output means it's empty. If you set `OUTPUT_ROOT` in your config, it must point to `scribe/input`. |
-| `meeting-notes` skill not found | Start `claude` from inside `scribe/` (or `teamnotes/` for team notes). |
+| `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](docs/manual-install.md#3-install-audiotee-system-audio-capture), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
+| "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See [manual steps 5 and 6](docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). |
+| Skill says the inbox is empty | The recording isn't where the skill looks: `scribe/input/`, or wherever `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points. Click **○** → *Open recordings folder* to see what's there. Team notes look in `teamnotes/input/`. |
+| `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
+| "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
+| `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](docs/manual-install.md#7-add-the-commands-optional). |
 | ○ button missing or frozen | Hammerspoon → *Reload Config*. If that fails, quit and reopen Hammerspoon. Check `~/.hammerspoon/meetingrec.log`. |
 | `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Run `claude` in the repo folder and ask it to help keep your edit, then update again. |
-| Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault (setup step 7). |
+| Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault ([Set up Obsidian](#set-up-obsidian)). |
 | `claude: command not found` | Open a new Terminal window. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and add that line to `~/.zprofile`. |
 
 Each recording's measurements (track levels, timing offsets, warnings) are also appended

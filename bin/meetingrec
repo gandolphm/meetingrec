@@ -332,7 +332,7 @@ cmd_start() {
     tracks="mic"
   else
     [ -x "$AUDIOTEE_BIN" ] || die "audiotee not found or not executable: $AUDIOTEE_BIN
-Install it first — see "Install audiotee" in the README (or run install.sh) — then set AUDIOTEE_BIN in $CONFIG"
+Install it first — run install.sh, or see step 3 of docs/manual-install.md — then set AUDIOTEE_BIN in $CONFIG"
 
     # A FIFO rather than a shell pipe, so both halves of the pipeline get
     # individually addressable PIDs to signal at stop.
