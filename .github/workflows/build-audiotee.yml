@@ -1,0 +1,120 @@
+# Builds audiotee at the commit pinned in config.example.sh and publishes it as a
+# release, so install.sh can download it instead of compiling it on every Mac.
+#
+# Run by hand: Actions → Build audiotee → Run workflow. Then copy the SHA-256 from
+# the run summary into AUDIOTEE_SHA256 in config.example.sh and push.
+name: Build audiotee
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write      # create the release
+  id-token: write      # sign the attestation
+  attestations: write  # store the attestation
+
+jobs:
+  build:
+    runs-on: macos-15  # Apple silicon
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned commit
+        id: pin
+        run: |
+          sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' config.example.sh)"
+          [ -n "$sha" ] || { echo "::error::Couldn't read AUDIOTEE_SHA from config.example.sh"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=audiotee-$sha" >> "$GITHUB_OUTPUT"
+
+      # A published release is never replaced: install.sh pins its SHA-256, so a
+      # rebuilt file with a different fingerprint would fail every install.
+      - name: Refuse to overwrite an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.pin.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::Release ${{ steps.pin.outputs.tag }} already exists. Change AUDIOTEE_SHA to build a different commit."
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          git clone --quiet https://github.com/makeusabrew/audiotee.git src
+          git -C src -c advice.detachedHead=false checkout --quiet "${{ steps.pin.outputs.sha }}"
+          (cd src && swift build -c release)
+          mkdir dist
+          cp src/.build/release/audiotee dist/audiotee
+
+      # install.sh supports Apple silicon on macOS 14.2+; check the file matches.
+      - name: Check the binary
+        run: |
+          lipo -archs dist/audiotee | grep -qx arm64 || { echo "::error::not an arm64-only binary"; exit 1; }
+          vtool -show-build dist/audiotee | grep -qE '^ +minos 14\.2$' || { echo "::error::minimum macOS is not 14.2"; vtool -show-build dist/audiotee; exit 1; }
+          dist/audiotee --help >/dev/null
+
+      # audiotee is MIT-licensed; its license must travel with every copy. The
+      # copyright line comes from its README so it stays accurate.
+      - name: Write the license notice
+        run: |
+          copyright="$(grep -m1 '^Copyright' src/README.md)"
+          [ -n "$copyright" ] || { echo "::error::No copyright line in audiotee's README"; exit 1; }
+          cat > dist/LICENSE-audiotee.txt <<NOTICE
+          audiotee — https://github.com/makeusabrew/audiotee
+          Built unmodified from commit ${{ steps.pin.outputs.sha }}.
+
+          The MIT License
+
+          $copyright
+
+          Permission is hereby granted, free of charge, to any person obtaining a copy
+          of this software and associated documentation files (the "Software"), to deal
+          in the Software without restriction, including without limitation the rights
+          to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+          copies of the Software, and to permit persons to whom the Software is
+          furnished to do so, subject to the following conditions:
+
+          The above copyright notice and this permission notice shall be included in
+          all copies or substantial portions of the Software.
+
+          THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+          IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+          FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+          AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+          LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+          OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+          THE SOFTWARE.
+          NOTICE
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/audiotee
+
+      - name: Publish the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sum="$(shasum -a 256 dist/audiotee | cut -d' ' -f1)"
+          echo "sum=$sum" >> "$GITHUB_OUTPUT"
+          gh release create "${{ steps.pin.outputs.tag }}" dist/audiotee dist/LICENSE-audiotee.txt \
+            --target "$GITHUB_SHA" \
+            --title "audiotee ${{ steps.pin.outputs.sha }}" \
+            --notes "audiotee built unmodified from [makeusabrew/audiotee@${{ steps.pin.outputs.sha }}](https://github.com/makeusabrew/audiotee/commit/${{ steps.pin.outputs.sha }}) for Apple silicon, macOS 14.2 or later. MIT license: see LICENSE-audiotee.txt.
+
+          SHA-256 of \`audiotee\`: \`$sum\`
+
+          Check where it came from: \`gh attestation verify audiotee --repo ${{ github.repository }}\`"
+
+      - name: Summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
+          ## audiotee ${{ steps.pin.outputs.sha }} published
+
+          Put this line in \`config.example.sh\`, then commit and push:
+
+          \`\`\`
+          AUDIOTEE_SHA256="${{ steps.release.outputs.sum }}"
+          \`\`\`
+          SUMMARY

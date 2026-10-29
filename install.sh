@@ -14,11 +14,14 @@
 # Environment:
 #   MEETINGREC_DIR    where to clone the repo when piped from curl (default ~/meetingrec)
 #   NO_HAMMERSPOON=1  skip the menu-bar button (use bin/meetingrec from Terminal)
+#   AUDIOTEE_FROM_SOURCE=1  build audiotee yourself instead of downloading it
 #
 set -uo pipefail
 
 REPO_URL="https://github.com/gandolphm/meetingrec.git"
 AUDIOTEE_URL="https://github.com/makeusabrew/audiotee.git"
+# Prebuilt copies, made by .github/workflows/build-audiotee.yml.
+AUDIOTEE_RELEASES="https://github.com/gandolphm/meetingrec/releases/download"
 MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
 MODEL_FILE="$HOME/.whisper-models/ggml-small.en.bin"
 # From Hugging Face's X-Linked-ETag for that file. A truncated or swapped
@@ -165,15 +168,45 @@ install_audiotee() {
   step "audiotee (system-audio capture)"
   # The pinned commit lives in config.example.sh, so the build and the
   # version recorded in session.json can't drift apart.
-  local sha src="$HOME/src/audiotee" bin="$HOME/bin/audiotee"
+  local sha sha256 bin="$HOME/bin/audiotee"
   sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' "$REPO/config.example.sh")"
+  sha256="$(sed -n 's/^AUDIOTEE_SHA256="\(.*\)"/\1/p' "$REPO/config.example.sh")"
   [ -n "$sha" ] || die "Couldn't read AUDIOTEE_SHA from $REPO/config.example.sh."
+  mkdir -p "$HOME/bin"
 
+  if [ -n "$sha256" ] && [ -z "${AUDIOTEE_FROM_SOURCE:-}" ]; then
+    if [ -x "$bin" ] && [ "$(shasum -a 256 "$bin" | cut -d' ' -f1)" = "$sha256" ]; then
+      ok "already installed at commit $sha"
+      return
+    fi
+    if download_audiotee "$sha" "$sha256" "$bin"; then
+      ok "downloaded commit $sha (verified) → $bin"
+      return
+    fi
+    note "couldn't download a verified copy; building it here instead"
+  fi
+  build_audiotee "$sha" "$bin"
+}
+
+# The download is checked against AUDIOTEE_SHA256 before it replaces anything,
+# so a truncated or swapped file never ends up in ~/bin.
+download_audiotee() {
+  local sha="$1" sha256="$2" bin="$3"
+  curl -fsSL -o "$bin.part" "$AUDIOTEE_RELEASES/audiotee-$sha/audiotee" || { rm -f "$bin.part"; return 1; }
+  if [ "$(shasum -a 256 "$bin.part" | cut -d' ' -f1)" != "$sha256" ]; then
+    rm -f "$bin.part"
+    return 1
+  fi
+  chmod +x "$bin.part" && mv "$bin.part" "$bin"
+}
+
+build_audiotee() {
+  local sha="$1" bin="$2" src="$HOME/src/audiotee"
   if [ -x "$bin" ] && [ "$(git -C "$src" rev-parse --short=7 HEAD 2>/dev/null)" = "$sha" ]; then
     ok "already built at commit $sha"
     return
   fi
-  mkdir -p "$HOME/src" "$HOME/bin"
+  mkdir -p "$HOME/src"
   if [ ! -d "$src/.git" ]; then
     git clone --quiet "$AUDIOTEE_URL" "$src" || die "Couldn't download audiotee."
   fi

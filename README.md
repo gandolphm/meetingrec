@@ -79,7 +79,7 @@ The script goes through these steps and skips any that are already done:
 | ffmpeg, whisper.cpp, Hammerspoon | Homebrew |
 | meetingrec, cloned to `~/meetingrec` | this GitHub repo |
 | Whisper `small.en` model (465 MB), checked against its SHA-256 | [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) |
-| audiotee, built from source at the pinned commit | [GitHub](https://github.com/makeusabrew/audiotee) |
+| audiotee at the pinned commit, prebuilt and checked against its SHA-256 | this repo's [releases](https://github.com/gandolphm/meetingrec/releases), built by a [GitHub Action](.github/workflows/build-audiotee.yml) from [audiotee's source](https://github.com/makeusabrew/audiotee) |
 | Claude Code | [claude.ai](https://docs.claude.com/en/docs/claude-code/overview) |
 
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
@@ -134,8 +134,7 @@ You should see something like this (each line starting with ✓ is a finished st
   ✓ downloaded and verified
 
 ==> audiotee (system-audio capture)
-  ! building (a minute or two)…
-  ✓ built commit 56ac954 → /Users/you/bin/audiotee
+  ✓ downloaded commit 56ac954 (verified) → /Users/you/bin/audiotee
 
 ==> Recorder config
   ✓ created /Users/you/.config/meetingrec/config.sh
@@ -189,6 +188,9 @@ Then go to [Finish setup](#finish-setup-both-ways).
   `curl -fsSL …/install.sh | MEETINGREC_DIR=~/Documents/meetingrec bash`
 - Skip the menu-bar button (you'll use `bin/meetingrec` from Terminal):
   `curl -fsSL …/install.sh | NO_HAMMERSPOON=1 bash`
+- Build audiotee on your Mac instead of downloading the prebuilt copy (takes a minute or
+  two longer): `curl -fsSL …/install.sh | AUDIOTEE_FROM_SOURCE=1 bash`. The installer also
+  does this by itself if the download fails or doesn't match its SHA-256.
 - Already cloned the repo? Run `./install.sh` from inside it. That copy is used instead of
   a fresh clone.
 
@@ -315,7 +317,28 @@ Resolving deltas: 100% ..., done.
 
 [audiotee](https://github.com/makeusabrew/audiotee) is a small open-source tool. It
 captures the audio your Mac is playing, which during a call is everyone else's voice.
-Build it from source and pin it to the commit this tool was tested with:
+Use the commit this tool was tested with, `56ac954`. Either download the copy this repo
+publishes (**A**) or build it yourself (**B**). Both give you the same program.
+
+**A. Download it.** It's built from audiotee's source by a
+[GitHub Action](.github/workflows/build-audiotee.yml) in this repo:
+```bash
+mkdir -p ~/bin
+curl -fL --progress-bar -o ~/bin/audiotee https://github.com/gandolphm/meetingrec/releases/download/audiotee-56ac954/audiotee
+chmod +x ~/bin/audiotee
+shasum -a 256 ~/bin/audiotee
+grep AUDIOTEE_SHA256 config.example.sh
+```
+Expected: a download progress bar, then the same 64-character code twice:
+```text
+######################################################################## 100.0%
+<64-character code>  /Users/you/bin/audiotee
+AUDIOTEE_SHA256="<the same 64-character code>"
+```
+If the two codes differ, the download is damaged: delete it with `rm ~/bin/audiotee` and
+use **B** instead.
+
+**B. Build it from source:**
 
 ```bash
 mkdir -p ~/src ~/bin
