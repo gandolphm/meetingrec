@@ -1,16 +1,18 @@
 # meetingrec
 
-Record a meeting on your Mac. Claude Code then turns the recording into
-Obsidian notes, with to-dos, decisions and follow-ups. Transcription runs locally with
-Whisper; no meeting bot joins the call.
+Record a meeting on your Mac. Claude Code then turns the recording into Markdown notes,
+with to-dos, decisions and follow-ups. The notes are designed for
+[Obsidian](https://obsidian.md) (free, recommended), which adds linked people and a to-do
+dashboard, but any Markdown editor can open them. Transcription runs locally with Whisper;
+no meeting bot joins the call.
 
 There are three parts:
 
 | Part | What it does | Where |
 | --- | --- | --- |
 | **Recorder** | Records a virtual meeting as two tracks: your mic (`mic.wav`) and everyone else (`system.wav`). Start and stop it from the menu bar or the terminal. | `bin/meetingrec`, `hammerspoon/init.lua` |
-| **scribe** | Your **personal** notes: TL;DR, your to-dos, decisions and questions to ask. | `scribe/` (an Obsidian vault), or a vault you already use |
-| **teamnotes** | **Team-facing** notes: third person, action items for everyone grouped by owner, and a plain-Markdown copy you can paste into Slack or email. | `teamnotes/` (a second Obsidian vault), or another vault of yours |
+| **scribe** | Your **personal** notes: TL;DR, your to-dos, decisions and questions to ask. | `scribe/` (a folder you can open as an Obsidian vault), or a folder you already use |
+| **teamnotes** | **Team-facing** notes: third person, action items for everyone grouped by owner, and a plain-Markdown copy you can paste into Slack or email. | `teamnotes/` (a second folder and vault), or another folder of yours |
 
 ```
 meetingrec/
@@ -20,14 +22,14 @@ meetingrec/
 ├── hammerspoon/init.lua        # the ○ menu-bar button
 ├── config.example.sh           # template for ~/.config/meetingrec/config.sh
 ├── docs/manual-install.md      # the install, one step at a time
-├── scribe/                     # Obsidian vault #1 — personal notes
+├── scribe/                     # notes folder #1 (an Obsidian vault) — personal notes
 │   ├── input/                  #   recordings land here
 │   ├── meeting-notes/          #   notes are written here
 │   ├── transcripts/            #   only used if you ask to keep a transcript
 │   ├── Tasks.md                #   to-do dashboard
 │   └── .claude/skills/meeting-notes/
 │       └── reference/          #   your personal.md (names, rules) lives here
-└── teamnotes/                  # Obsidian vault #2 — team notes
+└── teamnotes/                  # notes folder #2 (an Obsidian vault) — team notes
     ├── input/  meeting-notes/  share/
     ├── Action Items.md         #   everyone's open items, by owner
     └── .claude/skills/team-notes/
@@ -43,10 +45,10 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 
 ## Contents
 
-- [Requirements](#requirements)
+- [Requirements](#requirements) · [What leaves your Mac](#what-leaves-your-mac)
 - [Install](#install)
   - [Quick install](#quick-install-recommended) · [Manual install](docs/manual-install.md)
-  - [Set up Obsidian](#set-up-obsidian)
+  - [Set up Obsidian](#set-up-obsidian) (recommended)
 - [Your first meeting](#your-first-meeting)
 - [Usage](#usage): [record](#record-a-virtual-meeting) ·
   [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
@@ -72,6 +74,24 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 - *Optional:* the **[Claude app](https://claude.ai/download)** for Mac, so *Write up notes…*
   in the menu bar opens there instead of in Terminal.
 
+### What leaves your Mac
+
+Recording and transcription happen on your Mac. The audio files are never uploaded.
+
+Writing the notes happens in Claude Code, so these go to Anthropic:
+- the transcript;
+- your answers to the skill's questions (title, attendees, meeting type);
+- your names and rules files, and the team profile for team notes;
+- anything else Claude Code reads while it works, such as files in your notes vault.
+
+How Anthropic stores and uses that depends on your Claude plan and settings: see
+[Anthropic's privacy policy](https://www.anthropic.com/legal/privacy). If a meeting
+shouldn't leave your Mac, record it but don't write it up with Claude.
+
+meetingrec also goes online to install and update itself: GitHub for its own files and
+tools, and Hugging Face for the Whisper model. It checks GitHub for updates once a day
+unless you turn that off. These connections only download; nothing you record is sent.
+
 ---
 
 ## Install
@@ -80,7 +100,7 @@ Paste one command and answer a few prompts: the [quick install](#quick-install-r
 below. About 5-10 minutes, mostly waiting with a few prompts. If you'd rather not run a script from the internet,
 or want to see exactly what gets downloaded, follow the
 **[manual install](docs/manual-install.md)** instead. Both end up with the same result.
-Either way, finish with [Set up Obsidian](#set-up-obsidian).
+Either way, finish with [Set up Obsidian](#set-up-obsidian) (recommended).
 
 In the expected outputs below, `you` stands for your Mac username, and dates, times,
 sizes and version numbers will differ.
@@ -204,7 +224,7 @@ claude
 Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
 prompts. When you reach the `>` prompt, type `/exit`.
 
-Then [set up Obsidian](#set-up-obsidian).
+Then [set up Obsidian](#set-up-obsidian) (recommended).
 
 <details>
 <summary>Options</summary>
@@ -229,6 +249,13 @@ Then [set up Obsidian](#set-up-obsidian).
 ---
 
 ### Set up Obsidian
+
+Recommended, but optional. Obsidian is a free notes app that works directly on the Markdown
+files: it turns names into linked pages, shows the TL;DR as a highlighted box, and
+gathers your to-dos on one page. You can open the notes in any Markdown or text
+editor instead. You'll see links as `[[Name]]` and to-dos as plain checkboxes with dates,
+and the to-do dashboard and the table of meetings won't work. To skip Obsidian, go
+straight to [Your first meeting](#your-first-meeting).
 
 1. **Install Obsidian** from [obsidian.md](https://obsidian.md). It's free. You need
    version 1.9 or later for Bases.
@@ -266,7 +293,8 @@ you write a note there.
    typed in; press **Enter**. The first time, Claude asks your name and where your notes
    should go. Then it asks a few questions about the meeting (who was there, what kind of
    meeting) and transcribes it.
-4. **Read it:** open the note in Obsidian. Your to-dos are on the `Tasks.md` dashboard.
+4. **Read it:** Claude tells you where the note is. Open it in Obsidian, where your to-dos
+   also show up on the `Tasks.md` dashboard, or in any Markdown editor.
 
 Team meeting instead? Use *Write up team notes…* (see [team notes](#write-team-notes-teamnotes)).
 
@@ -333,14 +361,15 @@ The skill:
 2. asks a few quick questions (title, attendees, type), using the names to help Whisper.
    The first time, it also asks your name and where your notes should go;
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
-4. writes `meeting-notes/<Title>.md` in your notes vault and tells you the path;
+4. sends the transcript to Claude, which writes `meeting-notes/<Title>.md` in your notes
+   vault and tells you the path (see [What leaves your Mac](#what-leaves-your-mac));
 5. deletes the recording. Say **"keep the transcript"** to move it to `transcripts/`
    instead;
 6. offers to remember any names Whisper got wrong, and any preferences your corrections
    suggested.
 
-Open the note in Obsidian. To-dos are tagged with the meeting's context, `#work` unless your
-rules say otherwise, and appear in `Tasks.md`.
+Open the note in Obsidian or any Markdown editor. To-dos are tagged with the meeting's
+context, `#work` unless your rules say otherwise. In Obsidian they also appear in `Tasks.md`.
 
 You can also drop an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`) or a transcript (`.txt`,
 `.srt`, `.vtt`) into `scribe/input/`, or paste a transcript straight into the chat.
@@ -358,7 +387,7 @@ For a meeting whose notes go to the whole team:
    for your team's name and roster. Mark who was present, and confirm the action-item owners
    before anything is written.
 4. You get two files:
-   - `meeting-notes/<Team> — YYYY-MM-DD.md` for Obsidian.
+   - `meeting-notes/<Team> — YYYY-MM-DD.md`, the full note, with links for Obsidian.
    - `share/<Team> — YYYY-MM-DD.md`, plain Markdown to paste into Slack, email or a
      Google Doc.
 
