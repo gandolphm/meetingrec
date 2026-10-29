@@ -77,7 +77,7 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 ## Install
 
 Paste one command and answer a few prompts: the [quick install](#quick-install-recommended)
-below. About 20 minutes, mostly waiting. If you'd rather not run a script from the internet,
+below. About 5-10 minutes, mostly waiting with a few prompts. If you'd rather not run a script from the internet,
 or want to see exactly what gets downloaded, follow the
 **[manual install](docs/manual-install.md)** instead. Both end up with the same result.
 Either way, finish with [Set up Obsidian](#set-up-obsidian).
