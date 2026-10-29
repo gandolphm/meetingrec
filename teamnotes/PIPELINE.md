@@ -30,7 +30,10 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 
 ## Pipeline (input → output)
 
-1. **Locate the vault** — the directory containing both `input/` and `share/`. Never `scribe/`.
+1. **Set roots** — the inbox is `input/` here, found from the skill's own location. The vault
+   for `meeting-notes/`, `share/`, `Action Items.md` and the Base is `TEAM_VAULT` from
+   `~/.config/meetingrec/config.sh` (default this folder). The first run asks where team notes
+   go; it can never be the scribe vault.
    Then load the name tables: `names.shared.md` and your `names.local.md` (created from its
    template on the first run).
 2. **Pick a profile** — always asked via AskUserQuestion, one option per profile file plus `other`. Read it; it

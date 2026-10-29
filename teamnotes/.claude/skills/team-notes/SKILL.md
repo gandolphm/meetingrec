@@ -9,15 +9,17 @@ description: >-
   "team notes", "team meeting", "team sync", "write up the meeting for
   the team", "notes for everyone", or points to a recording or transcript in the teamnotes
   vault. When no file is given, the skill scans teamnotes/input/ for a phone recording, a
-  transcript, or a meetingrec session directory. NOT for the user's own personal notes on a
-  call or 1:1 — those use the separate meeting-notes skill in ../scribe/.
+  transcript, or a meetingrec session directory. Also use it when the user wants to change
+  where team notes go. NOT for the user's own personal notes on a call or 1:1 — those use
+  the separate meeting-notes skill in ../scribe/.
 allowed-tools: Bash, Read, Write, Edit, Glob, AskUserQuestion
 ---
 
 # Team Notes (Obsidian)
 
-Turns a team meeting recording or transcript into two files: an Obsidian note in the
-`teamnotes` vault, and a plain-Markdown copy of the same note that can be pasted into an
+Turns a team meeting recording or transcript into two files: an Obsidian note in the team
+vault (the `teamnotes` folder by default, or a vault the user chose on the first run), and a
+plain-Markdown copy of the same note that can be pasted into an
 email, Slack, or a Google Doc for the whole team.
 
 Which team is a **profile** — a file under `${CLAUDE_SKILL_DIR}/profiles/` that supplies
@@ -34,7 +36,7 @@ This is **not** the scribe skill. The differences that matter:
 | Action items | the user's only | everyone's, grouped by owner |
 | Coverage | skip minor topics | every agenda item discussed |
 | Output | one vault note | vault note + `share/` copy |
-| Vault | `scribe/` | `teamnotes/` — never touch `../scribe/` |
+| Vault | `scribe/`, or the user's own | `teamnotes/`, or the user's own — never the scribe vault |
 
 "The user" means whoever is running the skill.
 
@@ -42,32 +44,92 @@ This is **not** the scribe skill. The differences that matter:
 a local Whisper binary, so it must run in Claude Code on the user's machine, not the web
 sandbox.
 
-Read the vault's `CLAUDE.md` before writing anything: the voice rules live there. The Whisper
+Read `teamnotes/CLAUDE.md` (`$TEAMNOTES/CLAUDE.md` after Step 0) before writing anything:
+the voice rules live there. The Whisper
 name-correction tables are loaded in Step 0.1.
 
 ---
 
 ## Workflow
 
-### Step 0 — Locate the vault root
+### Step 0 — Set the roots
 
-**First, `cd` to the vault root.** Every path in this skill is relative to it, and the shell
-does *not* necessarily start there — Claude Code's working directory is usually the
-repository root, one level above the vault.
+Set these explicitly before anything else, and do not `cd`: every later command names one
+of them. All three come from `${CLAUDE_SKILL_DIR}` and the user's settings, never from the
+shell's working directory, so the skill can't land in `../scribe/` by mistake.
 
-The vault root is the directory containing both `input/` and `share/`. `share/` is the
-discriminator: `../scribe/` also has an `input/`, so a check on `input/` alone would land in
-the wrong tree and transcribe one of the user's personal recordings.
+- **`$TEAMNOTES`** — the `teamnotes/` folder in the repo. Holds `CLAUDE.md` and the inbox.
+- **`$INBOX`** — `$TEAMNOTES/input/`, where phone recordings and transcripts are dropped.
+- **`$VAULT`** — the Obsidian vault the notes go into: `meeting-notes/`, `share/`,
+  `Action Items.md` and the Base. `$TEAMNOTES` unless the user chose another.
+
+The vault is a setting in `~/.config/meetingrec/config.sh`, read through the `meetingrec`
+command so the default lives in one place:
 
 ```bash
-for d in . teamnotes .. ../teamnotes; do
-  [ -d "$d/input" ] && [ -d "$d/share" ] && cd "$d" && break
-done
-pwd   # must end in /teamnotes — confirm before continuing
+TEAMNOTES="$(cd "${CLAUDE_SKILL_DIR}/../../.." && pwd)"
+MR="$(dirname "$TEAMNOTES")/bin/meetingrec"
+INBOX="$TEAMNOTES/input"
+VAULT="$("$MR" config get TEAM_VAULT)"; VAULT_SAVED=$?
+echo "VAULT=$VAULT (saved: $([ $VAULT_SAVED -eq 0 ] && echo yes || echo no))"
+[ -d "$INBOX" ] || echo "MISSING INBOX: $INBOX"
+[ -d "$VAULT" ] || echo "MISSING VAULT: $VAULT"
 ```
 
-If `pwd` does not end in `teamnotes`, stop and ask the user where the vault is. Never fall
-back to `../scribe/`, never read its `input/`, and never write into it.
+If it prints `saved: no`, the user has never been asked where team notes go: do **Step
+0.05** **now, before looking in the inbox**, even if the inbox turns out to be empty. A new
+user often runs the skill once just to get set up. If `MISSING INBOX` prints, stop and ask the user where it went;
+don't create it. If `MISSING VAULT` prints, the saved folder was moved or deleted: tell the
+user, and do Step 0.05 to pick it again.
+
+Then create the output folders; a fresh clone or a new vault won't have them:
+
+```bash
+mkdir -p "$VAULT/meeting-notes" "$VAULT/share"
+```
+
+### Step 0.05 — Ask where team notes go (first run, or when the user asks)
+
+Do this when Step 0 printed `saved: no` or `MISSING VAULT`, or whenever the user asks to keep
+team notes somewhere else. Ask with `AskUserQuestion`, once:
+
+- Question: "Where should team notes go?"
+- Option 1, **"In meetingrec's teamnotes folder (Recommended)"**: "The teamnotes folder is
+  already an Obsidian vault with a notes table and an Action Items page. Open it in
+  Obsidian once."
+- Option 2, **"In another Obsidian vault"**: "Type its folder path in Other. It must be a
+  different vault from your personal notes. Notes go in meeting-notes and share folders
+  inside it."
+
+On a first run, ask it in the same `AskUserQuestion` call as the profile question in Step
+0.25 so the user isn't stopped twice.
+
+Save the answer, then re-run Step 0 so `$VAULT` holds the new folder:
+
+```bash
+"$MR" config set TEAM_VAULT ""                # option 1: the teamnotes folder
+"$MR" config set TEAM_VAULT "<their folder>"  # option 2
+```
+
+If `config set` says the folder doesn't exist, check the path with the user (a typo is the
+usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says the folder is
+already the personal-notes vault, explain that team and personal notes need separate vaults
+(each has its own to-do page, and they would show each other's items) and ask again.
+
+For a folder of their own:
+
+- If it has no `.obsidian/` folder, tell the user to open it once with Obsidian → *Open
+  folder as vault*.
+- If it has no `Action Items.md` in its root, offer to copy the page in:
+  `cp -n "$TEAMNOTES/Action Items.md" "$VAULT/Action Items.md"`. Only on a yes, and never
+  over an existing file.
+- Claude Code asks permission the first time it writes outside the meetingrec folder. Say
+  so, so the prompt isn't a surprise.
+
+When the folder **changed** from one that already holds notes, the old notes and share
+copies stay where they are. Count them (`find "<old vault>/meeting-notes" "<old vault>/share"
+-name '*.md' | wc -l`) and, if there are any, offer to move both folders' notes into the new
+vault. Move only on a yes, and never over a file with the same name.
 
 ### Step 0.1 — Load the name corrections
 
@@ -109,7 +171,7 @@ user's words point at a profile ("Acme team notes"), put that one first and mark
 wrong sections in the note, and the wrong name on the share copy, and none of that is
 visible until the note is already written.
 
-Ask this **before** scanning `input/` and before any other question, so the roll call in
+Ask this **before** scanning `$INBOX` and before any other question, so the roll call in
 Step 0.75 can be built from the right roster.
 
 Then **read the chosen profile file in full** — it is the source for the roster, the extra
@@ -146,14 +208,14 @@ the next run doesn't have to ask.
 
 ### Step 0.5 — Locate the input
 
-Unless the user already named a file or pasted a transcript in chat, scan `input/`. There
+Unless the user already named a file or pasted a transcript in chat, scan `$INBOX`. There
 are two shapes:
 
 **Flat files** are the usual case for in-person meetings recorded on a phone. Expect a `.m4a`/`.mp3`/`.wav`, or a `.txt`/`.srt`/`.vtt` exported by a phone
 transcription app:
 
 ```bash
-ls -t input/ 2>/dev/null | grep -iE '\.(m4a|mp3|wav|mp4|txt|srt|vtt|md)$'
+ls -t "$INBOX" 2>/dev/null | grep -iE '\.(m4a|mp3|wav|mp4|txt|srt|vtt|md)$'
 ```
 
 **Session directories** appear only when the user has moved one in by hand from a
@@ -161,17 +223,17 @@ meetingrec recording of a virtual meeting — one directory named `<ISO-datetime
 containing `mic.wav`, usually `system.wav`, and `session.json`:
 
 ```bash
-find input -mindepth 1 -maxdepth 1 -type d 2>/dev/null
+find "$INBOX" -mindepth 1 -maxdepth 1 -type d 2>/dev/null
 ```
 
-(`find`, not `ls input/*/` — under zsh a non-matching glob aborts the whole command.)
+(`find`, not `ls "$INBOX"/*/` — under zsh a non-matching glob aborts the whole command.)
 
 Then:
 
 - **Exactly one candidate** (file or directory) → use it and continue.
 - **Several** → list them back to the user and ask which one. A second file may be an
   unrelated recording — possibly for a different profile — waiting for its own run.
-- **None** → say `input/` is empty and ask the user to drop a recording or transcript in, or
+- **None** → say the inbox (`$INBOX`) is empty and ask the user to drop a recording or transcript in, or
   paste one. Don't fabricate a transcript or wait passively.
 
 ### Step 0.75 — Gather context (one round of questions)
@@ -180,8 +242,8 @@ If the input is a session directory, read `session.json` first and use it to **p
 the answers — but still ask. Also run the recording health check:
 
 ```bash
-cat "input/<session-dir>/session.json"
-python3 - "input/<session-dir>/session.json" <<'EOF'
+cat "$INBOX/<session-dir>/session.json"
+python3 - "$INBOX/<session-dir>/session.json" <<'EOF'
 import json, sys
 d = json.load(open(sys.argv[1]))
 for k, v in (d.get("checks") or {}).items():
@@ -203,7 +265,7 @@ profile's roster):
 - **Meeting type** — the profile lists its usual types; also scan existing notes for this
   team and offer a way to type a new one:
   ```bash
-  grep -l '^team: "\[\[<Team>\]\]"' meeting-notes/*.md 2>/dev/null \
+  grep -l '^team: "\[\[<Team>\]\]"' "$VAULT"/meeting-notes/*.md 2>/dev/null \
     | xargs grep -h '^type:' 2>/dev/null | sed 's/^type: *//' | sort -u
   ```
 - **Roll call** — which roster members were present. Everyone not selected goes under
@@ -227,7 +289,7 @@ Step 2.
 
 ```bash
 bash "${CLAUDE_SKILL_DIR}/scripts/transcribe.sh" \
-  "input/<file>" "input" "small.en" "<priming prompt>"
+  "$INBOX/<file>" "$INBOX" "small.en" "<priming prompt>"
 ```
 
 - Default model is `small.en`; noticeably more accurate than `base.en` on meeting audio and
@@ -246,7 +308,7 @@ name, whoever runs the meeting assigning items, someone volunteering). Say so in
 **Session directory** → use `transcribe_session.py`, never `transcribe.sh` on each track:
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/transcribe_session.py" "input/<session-dir>" \
+python3 "${CLAUDE_SKILL_DIR}/scripts/transcribe_session.py" "$INBOX/<session-dir>" \
   --model small.en --prompt "<priming prompt>"
 ```
 
@@ -310,7 +372,7 @@ script will list them again.
 
 ### Step 3 — Write the Obsidian note
 
-Write one file to `meeting-notes/<filename prefix> — YYYY-MM-DD.md`, prefix from the
+Write one file to `$VAULT/meeting-notes/<filename prefix> — YYYY-MM-DD.md`, prefix from the
 profile (e.g. `Acme Team — 2026-09-10.md`). The date **is** in the filename here: every meeting of a team has the same title, so the date
 is what makes filenames unique. `date:` in the frontmatter is still the sort key.
 
@@ -320,10 +382,10 @@ inserting the profile's extra sections where the template marks them.
 ### Step 3.5 — Write the share copy
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/make_share_copy.py" "meeting-notes/<file>.md"
+python3 "${CLAUDE_SKILL_DIR}/scripts/make_share_copy.py" "$VAULT/meeting-notes/<file>.md"
 ```
 
-It writes `share/<same basename>.md` with the frontmatter turned into a header block (team
+It writes `$VAULT/share/<same basename>.md` with the frontmatter turned into a header block (team
 and org from `team:`/`org:`, then Present / Absent / Guests), wikilinks unwrapped, the
 callout flattened, and the Tasks emoji turned into words. Everything else is left
 byte-for-byte alone, so the two files never disagree. Exit code 2 means it wrote the copy
@@ -336,41 +398,41 @@ sent. Read the share copy once to confirm it reads cleanly as plain text.
 whole command, and the failure is indistinguishable from "no Base exists":
 
 ```bash
-find . -name '*.base' -not -path './.claude/*' -not -path './.obsidian/*' -not -path './.trash/*'
+find "$VAULT" -name '*.base' -not -path '*/.claude/*' -not -path '*/.obsidian/*' -not -path '*/.trash/*'
 ```
 
-The `-not -path './.claude/*'` matters: the starter Base ships inside this skill's own
-`assets/`, so an unpruned `find` always reports a hit.
+The `-not -path '*/.claude/*'` matters: in the default vault the starter Base ships inside
+this skill's own `assets/`, so an unpruned `find` always reports a hit.
 
 **If a Base already exists, leave it alone.** If none exists:
 
 ```bash
-cp -n "${CLAUDE_SKILL_DIR}/assets/index.base" ./index.base
-grep -n 'inFolder' ./index.base   # must read file.inFolder("meeting-notes")
+cp -n "${CLAUDE_SKILL_DIR}/assets/index.base" "$VAULT/index.base"
+grep -n 'inFolder' "$VAULT/index.base"   # must read file.inFolder("meeting-notes")
 ```
 
 ### Step 5 — Clean up the used input
 
 **Only after both files are written and read back**, delete just the input you used plus
-its own intermediate artifacts. Leave any *other* entry in `input/` alone.
+its own intermediate artifacts. Leave any *other* entry in `$INBOX` alone.
 
 For a session directory, the whole directory is the artifact:
 
 ```bash
-rm -rf "input/<session-dir>"
+rm -rf "$INBOX/<session-dir>"
 ```
 
 For a flat file, the source plus anything derived from the same basename:
 
 ```bash
-rm -f "input/<used-file>" "input/<used-basename>".srt "input/<used-basename>".16k.wav
+rm -f "$INBOX/<used-file>" "$INBOX/<used-basename>".srt "$INBOX/<used-basename>".16k.wav
 ```
 
 Never run either before the note is on disk, and never wipe the whole folder.
 
 **Verify before deleting.** The note becomes the only record of the meeting — there is no
 second pass. Spot-check every amount, tally, and owner against the transcript first. When
-in doubt, leave the input in place and say so; a stale file in `input/` costs nothing.
+in doubt, leave the input in place and say so; a stale file in `$INBOX` costs nothing.
 
 ### Step 6 — Report back
 

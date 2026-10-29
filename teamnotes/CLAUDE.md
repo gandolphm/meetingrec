@@ -5,8 +5,11 @@ meetings where the note goes to everyone who was (or should have been) in the ro
 to the person who recorded it. Your own team uses the `team` profile; any other group
 meeting fits under the `other` profile.
 
+Team notes go to this folder unless the user chose another vault on the first run
+(`TEAM_VAULT` in `~/.config/meetingrec/config.sh`); the skill's Step 0 says which.
+
 **This vault is independent of the `meeting-notes` skill in `../scribe/`.** Never read from
-or write to `../scribe/` while working here. That skill handles the user's own personal notes —
+or write to `../scribe/`, or to the user's personal-notes vault, while working here. That skill handles the user's own personal notes —
 a different vault, a different voice, and a different template. One-on-ones and personal
 write-ups do not belong here.
 

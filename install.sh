@@ -397,8 +397,9 @@ What's left (see the README for details):
   1. Open a ${B}new${N} Terminal window, run ${B}claude${N} once and sign in.
   2. Set up Obsidian (README step 7).
 
-The first time you write up a meeting, Claude asks your name (and, for team
-notes, your team's roster) and saves it for next time.
+The first time you write up a meeting, Claude asks your name, where your notes
+should go (meetingrec's folder, or an Obsidian vault you already use) and, for
+team notes, your team's roster. It saves the answers for next time.
 
 To write notes after a meeting:  cd "$REPO/scribe" && claude   then type: scribe
 EOF

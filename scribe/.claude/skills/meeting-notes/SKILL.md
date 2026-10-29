@@ -9,11 +9,12 @@ description: >-
   summarize", "pull the action items from this recording", "scribe", "what were the next steps",
   or "turn this meeting into a note". Covers work meetings — 1:1s, standups, customer,
   partner, investor and strategy calls — written up as the user's own notes. When no file is
-  given, the skill auto-scans the recorder inbox (`scribe/input/`) for a recording or
+  given, the skill auto-scans the recorder inbox (`scribe/input/` by default) for a recording or
   transcript. Output is a single .md file with YAML frontmatter, wikilinked people and
-  companies, checkbox action items, and topic timestamps, written into `scribe/meeting-notes/`
-  (the scribe folder is the Obsidian vault). Always use this skill for meeting audio or
-  transcripts rather than improvising a summary.
+  companies, checkbox action items, and topic timestamps, written into `meeting-notes/` in the
+  user's notes vault (the scribe folder by default, or a vault they chose on the first run).
+  Also use it when the user wants to change where their notes go. Always use this skill for
+  meeting audio or transcripts rather than improvising a summary.
   NOT for anything described as "for the team" or meant to be shared with everyone who
   attended — those use the separate team-notes skill in the teamnotes vault.
 allowed-tools: Bash, Read, Write, Edit, Glob
@@ -27,10 +28,12 @@ wikilinks + a native Base), not generic Markdown. When the user invokes the skil
 naming a file (e.g. just "scribe"), it looks in the recorder's inbox for the recording or
 transcript to use.
 
-**The `scribe/` folder is the Obsidian vault.** This skill, its scripts, the recorder inbox
-(`input/`), the transcript archive (`transcripts/`) and the notes (`meeting-notes/`) all live
-under it. Every path is derived from `${CLAUDE_SKILL_DIR}`, so the repo can be cloned
-anywhere — see Step 0.
+**By default the `scribe/` folder is the Obsidian vault**: this skill, its scripts, the
+recorder inbox (`input/`), the transcript archive (`transcripts/`) and the notes
+(`meeting-notes/`) all live under it. The user can instead keep their notes in a vault of
+their own, chosen on the first run and saved as `NOTES_VAULT` in
+`~/.config/meetingrec/config.sh`; the skill and the inbox stay in the repo. Every path comes
+from Step 0, so the repo can be cloned anywhere.
 
 **Key architectural fact:** transcription is an *external dependency*, not something this
 model does natively. The skill shells out to a local Whisper binary. It must run in an
@@ -46,25 +49,83 @@ machine**, not the web sandbox.
 Set these explicitly before anything else, and do not `cd`: every later command names one
 of them.
 
-- **`$VAULT`** — the `scribe/` folder, which is the Obsidian vault. Notes go to
-  `$VAULT/meeting-notes/`.
-- **`$INBOX`** — the recorder's drop folder, `$VAULT/input/`.
-- **`$KEEP`** — the transcript archive, `$VAULT/transcripts/`. Only used when the user asks
+- **`$VAULT`** — the Obsidian vault the notes go into, under `$VAULT/meeting-notes/`. The
+  `scribe/` folder unless the user chose another.
+- **`$INBOX`** — the recorder's drop folder: `scribe/input/`, or wherever `meetingrec`'s
+  `OUTPUT_ROOT` points.
+- **`$KEEP`** — the transcript archive, `scribe/transcripts/`. Only used when the user asks
   for the transcript to be kept (Step 5).
 
+The folders are settings in `~/.config/meetingrec/config.sh`, read through the `meetingrec`
+command so the defaults live in one place:
+
 ```bash
-VAULT="$(cd "${CLAUDE_SKILL_DIR}/../../.." && pwd)"
-INBOX="$VAULT/input"
-KEEP="$VAULT/transcripts"
+SCRIBE="$(cd "${CLAUDE_SKILL_DIR}/../../.." && pwd)"
+MR="$(dirname "$SCRIBE")/bin/meetingrec"
+VAULT="$("$MR" config get NOTES_VAULT)"; VAULT_SAVED=$?
+INBOX="$("$MR" config get OUTPUT_ROOT)"
+KEEP="$SCRIBE/transcripts"
+echo "VAULT=$VAULT (saved: $([ $VAULT_SAVED -eq 0 ] && echo yes || echo no))"
 [ -d "$INBOX" ] || echo "MISSING INBOX: $INBOX"
+[ -d "$VAULT" ] || echo "MISSING VAULT: $VAULT"
+```
+
+If it prints `saved: no`, the user has never been asked where their notes go: do **Step
+0.05** (and the name question from Step 0.1) **now, before looking in the inbox**, even if
+the inbox turns out to be empty. A new user often runs the skill once just to get set up,
+and putting the questions off to a later run leaves them with nothing. If `MISSING INBOX` prints, stop and ask the user where it went —
+don't guess, and don't create it: a missing `$INBOX` looks exactly like "no recordings
+waiting", and usually means `OUTPUT_ROOT` points somewhere else. If `MISSING VAULT` prints,
+the saved folder was moved or deleted: tell the user, and do Step 0.05 to pick it again.
+
+Then create the notes folder; a fresh clone or a new vault won't have it:
+
+```bash
 mkdir -p "$VAULT/meeting-notes"
 ```
 
-All three are derived from `${CLAUDE_SKILL_DIR}` rather than hardcoded, so they survive the
-repo being cloned anywhere or renamed. `meeting-notes/` is created on demand — a fresh clone
-won't have it. If the `$INBOX` check prints, stop and ask the user where it went — don't
-guess, and don't create it: a missing `$INBOX` looks exactly like "no recordings waiting",
-and usually means `meetingrec`'s `OUTPUT_ROOT` points somewhere else.
+### Step 0.05 — Ask where the notes go (first run, or when the user asks)
+
+Do this when Step 0 printed `saved: no` or `MISSING VAULT`, or whenever the user asks to keep
+their notes somewhere else. Ask with `AskUserQuestion`, once:
+
+- Question: "Where should your meeting notes go?"
+- Option 1, **"In meetingrec's scribe folder (Recommended)"**: "The scribe folder is
+  already an Obsidian vault with a notes table and a to-do dashboard. Open it in Obsidian
+  once."
+- Option 2, **"In an Obsidian vault I already use"**: "Type its folder path in Other, e.g.
+  ~/Documents/My Vault. Notes go in a meeting-notes folder inside it."
+
+On a first run the name question from Step 0.1 is usually due as well (`names.local.md`
+doesn't exist yet, or its `Me` row still says `{Your Name}`). Ask both in the same turn so
+the user isn't stopped twice.
+
+Save the answer, then re-run Step 0 so `$VAULT` holds the new folder:
+
+```bash
+"$MR" config set NOTES_VAULT ""                # option 1: the scribe folder
+"$MR" config set NOTES_VAULT "<their folder>"  # option 2
+```
+
+If `config set` says the folder doesn't exist, check the path with the user (a typo is the
+usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says the folder is
+already the team-notes vault, explain that personal and team notes need separate folders and
+ask again. Other errors: relay them and ask again.
+
+For a folder of their own:
+
+- If it has no `.obsidian/` folder, Obsidian hasn't opened it as a vault yet: tell the user
+  to open it once with Obsidian → *Open folder as vault*.
+- If it has no `Tasks.md` in its root, offer to copy the to-do dashboard in:
+  `cp -n "$SCRIBE/Tasks.md" "$VAULT/Tasks.md"`. Only on a yes, and never over an existing
+  file: a `Tasks.md` that exists is theirs.
+- Claude Code asks permission the first time it writes outside the meetingrec folder. Say
+  so, so the prompt isn't a surprise.
+
+When the folder **changed** from one that already holds notes, the old notes stay where they
+are. Count them (`find "<old vault>/meeting-notes" -name '*.md' | wc -l`) and, if there are
+any, offer to move them into `$VAULT/meeting-notes/`. Move only on a yes, and never over a
+file with the same name.
 
 ### Step 0.1 — Load the name corrections
 
@@ -460,7 +521,8 @@ Add a line only when something affects how much to trust the note:
 - **A context with no dashboard block** — if the note's `#{context}` has no matching `tags
   include` query in `$VAULT/Tasks.md`, say so and quote the block they'd need to add. Its
   to-dos are written correctly but will not surface anywhere until they do. Don't edit
-  `Tasks.md`.
+  `Tasks.md`. If `$VAULT` has no `Tasks.md` at all (a vault of the user's own where they
+  declined the dashboard), skip this.
 
 **Then offer to remember new names.** Through the run, keep track of every proper noun that
 came through wrong and isn't in either table: ones the user corrected, and ones you fixed

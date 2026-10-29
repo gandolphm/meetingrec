@@ -9,8 +9,8 @@ There are three parts:
 | Part | What it does | Where |
 | --- | --- | --- |
 | **Recorder** | Records a virtual meeting as two tracks: your mic (`mic.wav`) and everyone else (`system.wav`). Start and stop it from the menu bar or the terminal. | `bin/meetingrec`, `hammerspoon/init.lua` |
-| **scribe** | Your **personal** notes: TL;DR, your to-dos (at most five), decisions and questions to ask. | `scribe/` (an Obsidian vault) |
-| **teamnotes** | **Team-facing** notes: third person, action items for everyone grouped by owner, and a plain-Markdown copy you can paste into Slack or email. | `teamnotes/` (a second Obsidian vault) |
+| **scribe** | Your **personal** notes: TL;DR, your to-dos (at most five), decisions and questions to ask. | `scribe/` (an Obsidian vault), or a vault you already use |
+| **teamnotes** | **Team-facing** notes: third person, action items for everyone grouped by owner, and a plain-Markdown copy you can paste into Slack or email. | `teamnotes/` (a second Obsidian vault), or another vault of yours |
 
 ```
 meetingrec/
@@ -491,6 +491,13 @@ If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
 2. **Open the vaults.** Obsidian → *Open folder as vault* → choose `<repo>/scribe`. Do the
    same for `<repo>/teamnotes` if you'll write team notes. Each is a separate vault.
    (In the file picker, Cmd+Shift+G lets you paste the path.)
+
+   **Already use Obsidian?** You can keep your notes in your own vault instead. The first
+   time you run each skill, Claude asks where its notes should go: press Enter for the
+   folder above, or give your vault's folder. Notes then go into a `meeting-notes/` folder
+   inside it (and `share/` for team notes), and Claude offers to copy in the to-do page.
+   Personal and team notes need separate vaults. Do steps 3 and 4 in whichever vaults you
+   use.
 3. **Enable Bases** (in each vault): *Settings → Core plugins → Bases* → on. This powers
    `index.base`, a sortable table of all your meetings.
 4. **Install the Tasks plugin** (in each vault): *Settings → Community plugins → Turn on
@@ -501,7 +508,8 @@ If the button misbehaves, check `~/.hammerspoon/meetingrec.log`.
    skill adds `⏳` scheduled dates when a meeting says when you'll do something, and Day
    Planner picks those up.
 
-`index.base` in `scribe/` is created automatically the first time you write a note.
+`index.base`, the table of meetings, is created in the vault automatically the first time
+you write a note there.
 
 #### 8. Your name tables and team profile
 
@@ -509,6 +517,9 @@ Claude sets these up the first time you use each skill.
 
 - **Your name.** The first time you write up a meeting with `scribe`, Claude asks your name
   and how Whisper tends to mishear it. It uses your name to tell which to-dos are yours.
+- **Where your notes go.** At the same time, it asks whether notes go in `scribe/` or in a
+  vault you already use (see step 7). Team notes ask the same once. The answers are saved
+  as `NOTES_VAULT` and `TEAM_VAULT` in `~/.config/meetingrec/config.sh`.
 - **Your team.** The first time you pick the **team** profile for team notes, Claude asks
   for the team's name and roster.
 - **Names Whisper gets wrong.** At the end of each write-up, Claude lists any names it had
@@ -585,9 +596,9 @@ Expected: Claude Code opens with a `>` prompt. Then type **`scribe`**, or "write
 The skill:
 1. finds the newest recording in `input/`;
 2. asks a few quick questions (title, attendees, type), using the names to help Whisper.
-   The first time, it also asks your name;
+   The first time, it also asks your name and where your notes should go;
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
-4. writes `meeting-notes/<Title>.md` and tells you the path;
+4. writes `meeting-notes/<Title>.md` in your notes vault and tells you the path;
 5. deletes the recording. Say **"keep the transcript"** to move it to `transcripts/`
    instead;
 6. offers to remember any names Whisper got wrong.
@@ -662,6 +673,10 @@ git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
   join or leave. Every note's attendee and absent lists come from it.
 - **Another recurring group** (e.g. a partner working group): pick the **other** profile and
   say yes when Claude offers to save it as a profile. Next time it appears in the list.
+- **Where notes go:** tell Claude "keep my notes in ~/path/to/vault" while running a skill,
+  or run `bin/meetingrec config set NOTES_VAULT ~/path/to/vault` (`TEAM_VAULT` for team
+  notes; `""` goes back to the default). Claude offers to move the notes you already have.
+  Recordings go where `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points.
 - **Whisper model:** `small.en` is the default. For poor audio, ask the skill to re-run
   with `medium.en`, after downloading it (1.5 GB):
   ```bash

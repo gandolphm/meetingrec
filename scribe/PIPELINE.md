@@ -25,8 +25,10 @@ scribe/                         (Obsidian vault root — open this folder as a v
 
 ## Pipeline (input → output)
 
-1. **Set roots** — vault, inbox and archive are all derived from the skill's own location,
-   so the repo can live anywhere.
+1. **Set roots** — the skill and the archive are found from the skill's own location, so the
+   repo can live anywhere. The vault (`NOTES_VAULT`, default this folder) and the inbox
+   (`OUTPUT_ROOT`, default `input/`) come from `~/.config/meetingrec/config.sh` via
+   `bin/meetingrec config get`. The first run asks where notes go and saves the answer.
 2. **Load names** — `reference/names.shared.md` and your `names.local.md` (created from its template on
    the first run, when it also asks your name for the `Me` row that says whose notes these are).
 3. **Locate input** — newest meetingrec session directory in `input/`, else a single flat

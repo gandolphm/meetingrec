@@ -302,8 +302,13 @@ menu:setMenu(guard("menu", function()
     { title = "Start recording…", fn = function() doStart(false) end },
     { title = "Start (mic only — on speakers)", fn = function() doStart(true) end },
     { title = "-" },
+    -- Asked rather than assumed: OUTPUT_ROOT in config.sh can move it.
     { title = "Open recordings folder", fn = function()
-        hs.execute('open "' .. REPO .. '/scribe/input"')
+        run({ "config", "get", "OUTPUT_ROOT" }, function(exitCode, stdOut)
+          local dir = stdOut:match("^([^\n]+)")
+          if exitCode ~= 0 or not dir then dir = REPO .. "/scribe/input" end
+          hs.execute('open "' .. dir .. '"')
+        end)
       end },
     { title = "Re-check status", fn = resync },
     { title = updatesAvailable > 0 and "Update available…" or "Check for updates…",

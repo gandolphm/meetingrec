@@ -6,6 +6,7 @@
 #   meetingrec stop
 #   meetingrec status
 #   meetingrec update [--check]
+#   meetingrec config get|set <NAME> [value]
 #
 # Captures only. Transcription is a separate, later process (the `meeting-notes`
 # skill) so a bad transcription run can never cost a recording.
@@ -735,6 +736,79 @@ cmd_update() {
 }
 
 # --------------------------------------------------------------------------
+# config
+# --------------------------------------------------------------------------
+# The skills read and save their folders through this rather than editing
+# config.sh themselves, so the file stays valid shell and the checks live in one
+# place. `get` prints the folder in effect, default included. For the vaults it
+# exits 2 when the setting was never saved: that is how a skill knows it hasn't
+# asked yet. An empty value means "the default", which follows the repo if it moves.
+cmd_config() {
+  local action="${1:-}" name="${2:-}"
+  local default
+  case "$name" in
+    NOTES_VAULT) default="$REPO_ROOT/scribe" ;;
+    TEAM_VAULT)  default="$REPO_ROOT/teamnotes" ;;
+    OUTPUT_ROOT) default="$REPO_ROOT/scribe/input" ;;
+    *) die "config: NAME must be NOTES_VAULT, TEAM_VAULT or OUTPUT_ROOT" ;;
+  esac
+  local saved
+  saved="$(grep -E "^$name=" "$CONFIG" 2>/dev/null | tail -n 1)"
+
+  case "$action" in
+    get)
+      # OUTPUT_ROOT was already loaded from the config at the top of this script.
+      local value
+      if [ "$name" = OUTPUT_ROOT ]; then
+        value="$OUTPUT_ROOT"
+      else
+        value="$( . "$CONFIG" 2>/dev/null; eval "printf '%s' \"\${$name:-}\"" )"
+      fi
+      printf '%s\n' "${value:-$default}"
+      [ -n "$saved" ] || [ "$name" = OUTPUT_ROOT ] || return 2
+      ;;
+    set)
+      [ $# -eq 3 ] || die "usage: meetingrec config set $name <folder>   (\"\" for the default)"
+      local value="$3"
+      case "$value" in "~") value="$HOME" ;; "~/"*) value="$HOME/${value#\~/}" ;; esac
+      case "$value" in
+        *'"'*|*'$'*|*'`'*|*'\'*) die "config: the folder name can't contain \", \$, \` or \\" ;;
+      esac
+      if [ -n "$value" ]; then
+        [ -d "$value" ] || die "config: $value doesn't exist. Create it first, or pick another folder."
+        value="$(cd "$value" && pwd)"
+        if [ "$name" != OUTPUT_ROOT ]; then
+          # One folder for both would mix personal to-dos into the team's Action
+          # Items page and the other way round: both dashboards match meeting-notes/.
+          local other
+          [ "$name" = NOTES_VAULT ] && other=TEAM_VAULT || other=NOTES_VAULT
+          [ "$value" = "$(cmd_config get "$other")" ] \
+            && die "config: that's already the $other folder. Personal and team notes need separate folders."
+        fi
+      fi
+      mkdir -p "$(dirname "$CONFIG")"
+      local line
+      # Saved as $HOME/... so the file still works if the home folder is renamed.
+      case "$value" in
+        "$HOME") line="$name=\"\$HOME\"" ;;
+        "$HOME"/*) line="$name=\"\$HOME/${value#"$HOME"/}\"" ;;
+        *) line="$name=\"$value\"" ;;
+      esac
+      if [ -n "$saved" ]; then
+        local tmp="$CONFIG.tmp.$$"
+        awk -v name="$name" -v line="$line" \
+          'index($0, name "=") == 1 { if (!done) print line; done = 1; next } { print }' \
+          "$CONFIG" > "$tmp" && mv "$tmp" "$CONFIG"
+      else
+        printf '%s\n' "$line" >> "$CONFIG"
+      fi
+      printf '%s → %s\n' "$name" "${value:-$default (default)}"
+      ;;
+    *) die "usage: meetingrec config get|set NOTES_VAULT|TEAM_VAULT|OUTPUT_ROOT [folder]" ;;
+  esac
+}
+
+# --------------------------------------------------------------------------
 # status
 # --------------------------------------------------------------------------
 cmd_status() {
@@ -758,11 +832,13 @@ case "${1:-}" in
   stop)   cmd_stop ;;
   status) cmd_status ;;
   update) shift; cmd_update "$@" ;;
+  config) shift; cmd_config "$@" ;;
   *) cat >&2 <<EOF
 usage: meetingrec start [title] [--mic-only]
        meetingrec stop
        meetingrec status
        meetingrec update [--check]
+       meetingrec config get|set NOTES_VAULT|TEAM_VAULT|OUTPUT_ROOT [folder]
 
   --mic-only   Record the microphone only, no system tap. Use when you are on
                speakers rather than headphones: the mic hears both sides, so one
