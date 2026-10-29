@@ -16,18 +16,26 @@
 #   MEETINGREC_DIR    where to clone the repo when piped from curl (default ~/meetingrec)
 #   NO_HAMMERSPOON=1  skip the menu-bar button (use bin/meetingrec from Terminal)
 #   AUDIOTEE_FROM_SOURCE=1  build audiotee yourself instead of downloading it
+#   USE_HOMEBREW=1    use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of
+#                     meetingrec's pinned downloads. Remembered in config.sh, so
+#                     updates keep doing it; USE_HOMEBREW=0 switches back.
 #
 set -uo pipefail
 
 REPO_URL="https://github.com/gandolphm/meetingrec.git"
 AUDIOTEE_URL="https://github.com/makeusabrew/audiotee.git"
-# Prebuilt copies, made by .github/workflows/build-audiotee.yml.
-AUDIOTEE_RELEASES="https://github.com/gandolphm/meetingrec/releases/download"
+# Prebuilt audiotee, ffmpeg and whisper-cli, made by .github/workflows/build-*.yml.
+RELEASES="https://github.com/gandolphm/meetingrec/releases/download"
+# ffmpeg and whisper-cli go here, off the PATH, so someone who uses a fuller
+# ffmpeg from Homebrew for other work keeps getting that one. meetingrec's own
+# scripts look here first.
+TOOLS_DIR="$HOME/.local/share/meetingrec/bin"
 MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
 MODEL_FILE="$HOME/.whisper-models/ggml-small.en.bin"
 # From Hugging Face's X-Linked-ETag for that file. A truncated or swapped
 # download fails here instead of later, mid-transcription.
 MODEL_SHA256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"
+# Used when USE_HOMEBREW is on, and as a fallback on a Mac that already has it.
 BREW="/opt/homebrew/bin/brew"
 
 # Captured at top level: inside main, BASH_SOURCE no longer says whether we
@@ -46,7 +54,8 @@ for arg in "$@"; do
   esac
 done
 # NO_HAMMERSPOON isn't saved anywhere, so an update infers it: no app, no menu bar.
-[ -n "$UPDATE" ] && [ ! -d /Applications/Hammerspoon.app ] && NO_HAMMERSPOON=1
+[ -n "$UPDATE" ] && [ ! -d /Applications/Hammerspoon.app ] && [ ! -d "$HOME/Applications/Hammerspoon.app" ] \
+  && NO_HAMMERSPOON=1
 
 if [ -t 1 ]; then
   B=$'\033[1m' G=$'\033[32m' Y=$'\033[33m' R=$'\033[31m' N=$'\033[0m'
@@ -98,7 +107,7 @@ check_mac() {
 }
 
 install_clt() {
-  step "Xcode Command Line Tools (git, Swift, python3)"
+  step "Xcode Command Line Tools (git, python3)"
   if xcode-select -p >/dev/null 2>&1; then
     ok "already installed"
     return
@@ -110,16 +119,73 @@ install_clt() {
   ok "installed"
 }
 
-install_brew() {
-  step "Homebrew (package manager)"
+# A pinned value from the repo's config.example.sh.
+pin() {
+  sed -n "s/^$1=\"\(.*\)\"/\1/p" "$REPO/config.example.sh"
+}
+
+# Download URL to DEST only if its SHA-256 matches, so a truncated or swapped
+# file never replaces anything.
+download_verified() {
+  local url="$1" sha256="$2" dest="$3"
+  curl -fsSL -o "$dest.part" "$url" || { rm -f "$dest.part"; return 1; }
+  if [ "$(shasum -a 256 "$dest.part" | cut -d' ' -f1)" != "$sha256" ]; then
+    rm -f "$dest.part"
+    return 1
+  fi
+  mv "$dest.part" "$dest"
+}
+
+# install_tool NAME RELEASE-PATH SHA256 HOMEBREW-FORMULA
+install_tool() {
+  local name="$1" asset="$2" sha256="$3" formula="$4" dest="$TOOLS_DIR/$1"
+  if [ -n "$sha256" ]; then
+    if [ -x "$dest" ] && [ "$(shasum -a 256 "$dest" | cut -d' ' -f1)" = "$sha256" ]; then
+      ok "$name already installed"
+      return
+    fi
+    if download_verified "$RELEASES/$asset" "$sha256" "$dest" && chmod +x "$dest"; then
+      ok "$name downloaded (verified)"
+      return
+    fi
+    note "couldn't download a verified $name"
+  fi
+  # No prebuilt copy yet, or the download failed: Homebrew, if this Mac has it.
+  if [ -x "$BREW" ]; then
+    brew_formula "$formula"
+    return
+  fi
+  die "Couldn't download $name. Check your internet connection, then run this again."
+}
+
+# Whether to use Homebrew instead of the pinned downloads. USE_HOMEBREW given
+# to this run is saved first, so later runs and updates keep the choice.
+choose_tool_source() {
+  local want=""
+  case "${USE_HOMEBREW:-}" in
+    1|on|yes|true)  want=on ;;
+    0|off|no|false) want=off ;;
+    "") ;;
+    *) die "USE_HOMEBREW must be 1 (use Homebrew) or 0 (use meetingrec's downloads)." ;;
+  esac
+  # env -u: this script's own USE_HOMEBREW=1 would otherwise read as the saved value.
+  if [ -n "$want" ]; then
+    env -u USE_HOMEBREW "$REPO/bin/meetingrec" config set USE_HOMEBREW "$want" >/dev/null \
+      || die "Couldn't save USE_HOMEBREW to your config."
+  fi
+  HOMEBREW_TOOLS="$(env -u USE_HOMEBREW "$REPO/bin/meetingrec" config get USE_HOMEBREW)"
+}
+
+# Homebrew itself, for USE_HOMEBREW. Its installer asks for a password, which a
+# menu-bar update has no way to show.
+need_brew() {
   if [ ! -x "$BREW" ]; then
+    [ -t 0 ] || die "USE_HOMEBREW is on but Homebrew isn't installed. Run the install command in Terminal."
     note "Installing Homebrew. It will ask for your Mac password (typing shows nothing; that's normal)."
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
       || die "Homebrew didn't install."
     [ -x "$BREW" ] || die "Homebrew finished but $BREW isn't there."
-    ok "installed"
-  else
-    ok "already installed"
+    ok "Homebrew installed"
   fi
   eval "$("$BREW" shellenv)"
   # What the Homebrew installer's "Next steps" ask you to do by hand, unless
@@ -127,29 +193,63 @@ install_brew() {
   in_shell_startup "brew shellenv" || add_line "$HOME/.zprofile" "eval \"\$($BREW shellenv)\""
 }
 
-install_formulae() {
+brew_formula() {
+  if "$BREW" list --formula "$1" >/dev/null 2>&1; then
+    ok "using Homebrew's $1"
+  else
+    note "installing $1 with Homebrew (a few minutes)…"
+    "$BREW" install --quiet "$1" || die "brew install $1 failed."
+    ok "$1 installed with Homebrew"
+  fi
+}
+
+install_tools() {
   step "ffmpeg and whisper.cpp"
-  local f
-  for f in ffmpeg whisper-cpp; do
-    if brew list --formula "$f" >/dev/null 2>&1; then
-      ok "$f already installed"
-    else
-      note "installing $f (a few minutes)…"
-      brew install --quiet "$f" || die "brew install $f failed."
-      ok "$f installed"
-    fi
-  done
+  if [ "$HOMEBREW_TOOLS" = on ]; then
+    note "USE_HOMEBREW is on: using Homebrew's versions"
+    need_brew
+    brew_formula ffmpeg
+    brew_formula whisper-cpp
+    # The scripts look in meetingrec's folder first, so its own copies would
+    # still win. Remove just those two; nothing else of the user's.
+    rm -f "$TOOLS_DIR/ffmpeg" "$TOOLS_DIR/whisper-cli"
+    return
+  fi
+  mkdir -p "$TOOLS_DIR"
+  install_tool ffmpeg "ffmpeg-$(pin FFMPEG_VERSION)/ffmpeg" "$(pin FFMPEG_SHA256)" ffmpeg
+  install_tool whisper-cli "whisper-cli-$(pin WHISPER_CPP_VERSION)/whisper-cli" \
+    "$(pin WHISPER_CLI_SHA256)" whisper-cpp
 }
 
 install_hammerspoon_app() {
   [ -n "${NO_HAMMERSPOON:-}" ] && return
   step "Hammerspoon (menu-bar button)"
-  if [ -d /Applications/Hammerspoon.app ]; then
-    ok "already installed"
-  else
-    brew install --quiet --cask hammerspoon || die "brew install --cask hammerspoon failed."
-    ok "installed"
+  local dir
+  for dir in /Applications "$HOME/Applications"; do
+    if [ -d "$dir/Hammerspoon.app" ]; then
+      ok "already installed"
+      return
+    fi
+  done
+  if [ "$HOMEBREW_TOOLS" = on ]; then
+    need_brew
+    "$BREW" install --quiet --cask hammerspoon || die "brew install --cask hammerspoon failed."
+    ok "installed with Homebrew"
+    return
   fi
+  # The zip Hammerspoon's developers publish: signed and notarised by Apple, and
+  # it updates itself. Applications needs an administrator; anyone else gets
+  # ~/Applications, which works the same.
+  local version sha256 tmp dest=/Applications
+  version="$(pin HAMMERSPOON_VERSION)"; sha256="$(pin HAMMERSPOON_SHA256)"
+  [ -w "$dest" ] || { dest="$HOME/Applications"; mkdir -p "$dest"; }
+  tmp="$(mktemp -d)"
+  download_verified "https://github.com/Hammerspoon/hammerspoon/releases/download/$version/Hammerspoon-$version.zip" \
+    "$sha256" "$tmp/Hammerspoon.zip" \
+    || { rm -rf "$tmp"; die "Couldn't download Hammerspoon. Check your internet connection, then run this again."; }
+  ditto -x -k "$tmp/Hammerspoon.zip" "$dest" || { rm -rf "$tmp"; die "Couldn't unpack Hammerspoon into $dest."; }
+  rm -rf "$tmp"
+  ok "installed in $dest"
 }
 
 get_repo() {
@@ -203,7 +303,7 @@ install_audiotee() {
   if [ -n "$sha256" ] && [ -z "${AUDIOTEE_FROM_SOURCE:-}" ]; then
     if [ -x "$bin" ] && [ "$(shasum -a 256 "$bin" | cut -d' ' -f1)" = "$sha256" ]; then
       ok "already installed at commit $sha"
-    elif download_audiotee "$sha" "$sha256" "$bin"; then
+    elif download_verified "$RELEASES/audiotee-$sha/audiotee" "$sha256" "$bin" && chmod +x "$bin"; then
       ok "downloaded commit $sha (verified) → $bin"
     else
       note "couldn't download a verified copy; building it here instead"
@@ -215,18 +315,6 @@ install_audiotee() {
   # bin/meetingrec reads this into session.json. Unlike the copy in config.sh,
   # it's rewritten whenever an update installs a different commit.
   printf '%s\n' "$sha" > "$bin.commit"
-}
-
-# The download is checked against AUDIOTEE_SHA256 before it replaces anything,
-# so a truncated or swapped file never ends up in ~/bin.
-download_audiotee() {
-  local sha="$1" sha256="$2" bin="$3"
-  curl -fsSL -o "$bin.part" "$AUDIOTEE_RELEASES/audiotee-$sha/audiotee" || { rm -f "$bin.part"; return 1; }
-  if [ "$(shasum -a 256 "$bin.part" | cut -d' ' -f1)" != "$sha256" ]; then
-    rm -f "$bin.part"
-    return 1
-  fi
-  chmod +x "$bin.part" && mv "$bin.part" "$bin"
 }
 
 build_audiotee() {
@@ -454,13 +542,13 @@ finish_update() {
 main() {
   check_mac
   install_clt
-  install_brew
-  install_formulae
-  install_hammerspoon_app
   get_repo
-  install_model
-  install_audiotee
   install_config
+  choose_tool_source
+  install_model
+  install_tools
+  install_audiotee
+  install_hammerspoon_app
   install_personal_files
   install_claude
   install_commands

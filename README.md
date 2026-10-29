@@ -61,11 +61,14 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 - A Mac with **Apple silicon**, running **macOS 14.2 or later**. System-audio capture uses
   Core Audio taps, which first shipped in 14.2.
 - A **Claude Code** subscription or API access.
-- **Disk space:** about **0.7 GB** for the Whisper model (465 MB), ffmpeg and whisper.cpp,
-  and Hammerspoon. If your Mac doesn't have them yet, add about 1.3 GB for Apple's Command
-  Line Tools, a few hundred MB for Homebrew, and about 0.3 GB for Claude Code, which grows
-  toward 0.8 GB as it keeps previous versions: about **2.5–3 GB** in all. Recordings take
-  about 230 MB per hour of meeting until their notes are written.
+- **Disk space:** about **0.55 GB** for the Whisper model (465 MB), ffmpeg, whisper.cpp and
+  Hammerspoon. If your Mac doesn't have them yet, add about 1.3 GB for Apple's Command Line
+  Tools and about 0.3 GB for Claude Code, which grows toward 0.8 GB as it keeps previous
+  versions: about **2–2.5 GB** in all. Recordings take about 230 MB per hour of meeting
+  until their notes are written.
+- **No Homebrew, and no administrator password** for meetingrec itself (unless you
+  [choose Homebrew](#quick-install-recommended)). If your Mac doesn't have Apple's Command
+  Line Tools yet, macOS may ask an administrator to approve them.
 - *Optional:* the **[Claude app](https://claude.ai/download)** for Mac, so *Write up notes…*
   in the menu bar opens there instead of in Terminal.
 
@@ -96,17 +99,21 @@ The script goes through these steps and skips any that are already done:
 | Step | Downloaded from |
 | --- | --- |
 | Xcode Command Line Tools (git and python3) | Apple, via `xcode-select --install` |
-| Homebrew, if you don't have it | [brew.sh](https://brew.sh) |
-| ffmpeg, whisper.cpp, Hammerspoon | Homebrew |
 | meetingrec, cloned to `~/meetingrec` | this GitHub repo |
-| Whisper `small.en` model (465 MB), checked against its SHA-256 | [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) |
-| audiotee at the pinned commit, prebuilt and checked against its SHA-256 | this repo's [releases](https://github.com/gandolphm/meetingrec/releases), built by a [GitHub Action](.github/workflows/build-audiotee.yml) from [audiotee's source](https://github.com/makeusabrew/audiotee) |
+| Whisper `small.en` model (465 MB) | [Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) |
+| ffmpeg and whisper.cpp's `whisper-cli`, at pinned versions | this repo's [releases](https://github.com/gandolphm/meetingrec/releases), built by GitHub Actions ([ffmpeg](.github/workflows/build-ffmpeg.yml), [whisper-cli](.github/workflows/build-whisper.yml)) from [FFmpeg's](https://github.com/FFmpeg/FFmpeg) and [whisper.cpp's](https://github.com/ggml-org/whisper.cpp) source |
+| audiotee, at the pinned commit | this repo's releases, built by a [GitHub Action](.github/workflows/build-audiotee.yml) from [audiotee's source](https://github.com/makeusabrew/audiotee) |
+| Hammerspoon | [its own releases](https://github.com/Hammerspoon/hammerspoon/releases), signed by its developers |
 | Claude Code | [claude.ai](https://docs.claude.com/en/docs/claude-code/overview) |
+
+Every download is checked against the SHA-256 fingerprint pinned in
+[config.example.sh](config.example.sh), and refused if it doesn't match. ffmpeg and
+`whisper-cli` go in `~/.local/share/meetingrec/bin`, where only meetingrec uses them, so
+they never replace other copies you might have.
 
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
 Hammerspoon, links the `meetingrec`, `scribe` and `teamnotes` commands into `~/.local/bin`,
-and adds Homebrew and `~/.local/bin` to your PATH in `~/.zprofile` if they aren't there
-already. It doesn't change anything else. You can [read the script](install.sh) first, or
+and adds `~/.local/bin` to your PATH in `~/.zprofile` if it isn't there already. It doesn't change anything else. You can [read the script](install.sh) first, or
 download it, look at it, then run it:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh -o install.sh
@@ -118,8 +125,6 @@ bash install.sh
 
 - **Install the command line developer tools.** If a window asks, click *Install* and
   agree. The script waits until it finishes.
-- **Your Mac password.** Homebrew asks for it. Nothing appears while you type. That's
-  normal; press Enter when you've finished typing it.
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
   it.
 - **A test recording.** The script tells you to click the **○** in the menu bar, start a
@@ -136,18 +141,6 @@ You should see something like this (each line starting with ✓ is a finished st
 ==> Xcode Command Line Tools (git, python3)
   ✓ already installed
 
-==> Homebrew (package manager)
-  ✓ already installed
-
-==> ffmpeg and whisper.cpp
-  ! installing ffmpeg (a few minutes)…
-  ✓ ffmpeg installed
-  ! installing whisper-cpp (a few minutes)…
-  ✓ whisper-cpp installed
-
-==> Hammerspoon (menu-bar button)
-  ✓ installed
-
 ==> meetingrec
   ✓ downloaded to /Users/you/meetingrec
 
@@ -155,8 +148,15 @@ You should see something like this (each line starting with ✓ is a finished st
 ######################################################################## 100.0%
   ✓ downloaded and verified
 
+==> ffmpeg and whisper.cpp
+  ✓ ffmpeg downloaded (verified)
+  ✓ whisper-cli downloaded (verified)
+
 ==> audiotee (system-audio capture)
   ✓ downloaded commit 56ac954 (verified) → /Users/you/bin/audiotee
+
+==> Hammerspoon (menu-bar button)
+  ✓ installed in /Applications
 
 ==> Recorder config
   ✓ created /Users/you/.config/meetingrec/config.sh
@@ -217,6 +217,10 @@ Then [set up Obsidian](#set-up-obsidian).
   two longer, and uses Swift from the Command Line Tools):
   `curl -fsSL …/install.sh | AUDIOTEE_FROM_SOURCE=1 bash`. The installer also does this by
   itself if the download fails or doesn't match its SHA-256.
+- Use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of meetingrec's pinned
+  downloads: `curl -fsSL …/install.sh | USE_HOMEBREW=1 bash`. It installs Homebrew if
+  needed, which asks for your Mac password, and you get whatever versions Homebrew
+  currently has. The choice is remembered for updates; `USE_HOMEBREW=0` switches back.
 - Already cloned the repo? Run `./install.sh` from inside it. That copy is used instead of
   a fresh clone.
 
@@ -392,11 +396,12 @@ meeting, or a click in **○ → Settings**.
 | Set rules for one team only | "from now on, for this team, record vote counts" | *Rules* in that team's profile |
 | Record somewhere else | — | ○ → Settings → *Recordings* |
 | Stop the daily update check | — | ○ → Settings → untick *Check for updates daily* |
+| Use Homebrew's ffmpeg and whisper.cpp instead | — | `meetingrec config set USE_HOMEBREW on`, then `meetingrec update` |
 | Use a more accurate Whisper model | "re-run with medium.en" (download it first, below) | — |
 
 Settings saves to `~/.config/meetingrec/config.sh`. From Terminal, `meetingrec config list`
 shows every setting and `meetingrec config set NOTES_VAULT ~/path` changes one (also
-`TEAM_VAULT`, `OUTPUT_ROOT`, and `AUTO_UPDATE_CHECK` with `on` or `off`). Changing a notes
+`TEAM_VAULT`, `OUTPUT_ROOT`, and `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`). Changing a notes
 folder doesn't move the notes already in the old one; ask Claude to move them.
 
 ### What Claude asks the first time
@@ -489,10 +494,10 @@ git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
 
 | Symptom | Fix |
 | --- | --- |
-| `NO_ENGINE` | `brew install whisper.cpp`, or run the quick install command again. |
+| `NO_ENGINE` | whisper-cli is missing. Run `meetingrec update`, or the quick install command again. |
 | `MODEL_NOT_FOUND` | Run the `curl` command it prints, or run the quick install command again. |
-| `NO_FFMPEG` | `brew install ffmpeg` |
-| `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](docs/manual-install.md#3-install-audiotee-system-audio-capture), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
+| `NO_FFMPEG` | ffmpeg is missing. Run `meetingrec update`, or the quick install command again. |
+| `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](docs/manual-install.md#3-install-ffmpeg-whisper-cli-and-audiotee), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
 | "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See [manual steps 5 and 6](docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). |
 | Skill says the inbox is empty | The recording isn't where the skill looks: `scribe/input/`, or wherever `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points. Click **○** → *Open recordings folder* to see what's there. Team notes look in `teamnotes/input/`. |
 | `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |

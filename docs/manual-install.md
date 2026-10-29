@@ -23,50 +23,6 @@ xcode-select: note: install requested for command line developer tools
 A window then opens. Click *Install*, agree, and wait for it to finish (5–15 minutes).
 If instead you get a message saying the command line tools are already installed, move on.
 
-**Homebrew**, if you don't have it ([brew.sh](https://brew.sh)):
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-It asks for your Mac password, then shows what it will install and asks you to press
-Enter. It ends with:
-```text
-==> Installation successful!
-...
-==> Next steps:
-- Run these commands in your terminal to add Homebrew to your PATH:
-    echo >> /Users/you/.zprofile
-    echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> /Users/you/.zprofile
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-```
-Run the lines it prints under *Next steps*. They print nothing. Then close Terminal and
-open it again. To check:
-```bash
-brew --version
-```
-Expected:
-```text
-Homebrew 4.6.0
-```
-
-**ffmpeg and Whisper:**
-```bash
-brew install ffmpeg whisper.cpp
-```
-This prints a lot and takes a few minutes. It ends with lines like:
-```text
-==> Summary
-🍺  /opt/homebrew/Cellar/whisper-cpp/1.8.0: 45 files, 12MB
-```
-To check:
-```bash
-which ffmpeg whisper-cli
-```
-Expected:
-```text
-/opt/homebrew/bin/ffmpeg
-/opt/homebrew/bin/whisper-cli
-```
-
 **The Whisper model** (`small.en`, 465 MB):
 ```bash
 mkdir -p ~/.whisper-models
@@ -121,7 +77,41 @@ Resolving deltas: 100% ..., done.
 /Users/you/meetingrec
 ```
 
-## 3. Install audiotee (system-audio capture)
+## 3. Install ffmpeg, whisper-cli and audiotee
+
+Three small programs, all at the versions pinned in `config.example.sh`:
+
+- **ffmpeg** records your microphone and converts audio.
+- **whisper-cli**, from whisper.cpp, does the transcription.
+- **audiotee** captures the audio your Mac is playing (below).
+
+### ffmpeg and whisper-cli
+
+Download the copies this repo builds with GitHub Actions
+([ffmpeg](../.github/workflows/build-ffmpeg.yml), [whisper-cli](../.github/workflows/build-whisper.yml)).
+They go in a folder only meetingrec uses, so they never replace another ffmpeg you have.
+Run this **from the repo folder**:
+```bash
+pin() { sed -n "s/^$1=\"\(.*\)\"/\1/p" config.example.sh; }
+T=~/.local/share/meetingrec/bin; R=https://github.com/gandolphm/meetingrec/releases/download
+mkdir -p $T
+curl -fL --progress-bar -o $T/ffmpeg "$R/ffmpeg-$(pin FFMPEG_VERSION)/ffmpeg"
+curl -fL --progress-bar -o $T/whisper-cli "$R/whisper-cli-$(pin WHISPER_CPP_VERSION)/whisper-cli"
+chmod +x $T/ffmpeg $T/whisper-cli
+echo "$(pin FFMPEG_SHA256)  $T/ffmpeg" | shasum -a 256 -c
+echo "$(pin WHISPER_CLI_SHA256)  $T/whisper-cli" | shasum -a 256 -c
+```
+Expected: two progress bars, then:
+```text
+/Users/you/.local/share/meetingrec/bin/ffmpeg: OK
+/Users/you/.local/share/meetingrec/bin/whisper-cli: OK
+```
+If either says `FAILED`, the download is damaged: delete it and download it again.
+
+*Prefer Homebrew?* `brew install ffmpeg whisper.cpp` works too. meetingrec uses Homebrew's
+copies when its own aren't there.
+
+### audiotee (system-audio capture)
 
 [audiotee](https://github.com/makeusabrew/audiotee) is a small open-source tool. It
 captures the audio your Mac is playing, which during a call is everyone else's voice.
@@ -244,16 +234,10 @@ Expected: no output.
 small **○** button to your menu bar that starts and stops recordings. It's optional, since
 the terminal commands work too, but it's much easier mid-meeting.
 
-1. **Install it:**
-   ```bash
-   brew install --cask hammerspoon
-   ```
-   Expected, at the end:
-   ```text
-   🍺  hammerspoon was successfully installed!
-   ```
-   You can also download it from [hammerspoon.org](https://www.hammerspoon.org) and drag
-   it into Applications.
+1. **Install it:** download the `.zip` from
+   [Hammerspoon's releases](https://github.com/Hammerspoon/hammerspoon/releases), open it,
+   and drag **Hammerspoon** into Applications. (Or with Homebrew:
+   `brew install --cask hammerspoon`.)
 2. **Install the config.** Run this **from the repo folder**. It copies the config and
    fills in where you cloned the repo:
    ```bash

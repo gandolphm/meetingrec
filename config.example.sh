@@ -24,6 +24,19 @@ AUDIOTEE_SHA="56ac954"
 # Change it together with AUDIOTEE_SHA, after running the Action for the new commit.
 AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f9"
 
+# The other tools install.sh downloads, so no Mac needs Homebrew. ffmpeg and
+# whisper-cli are built by this repo's "Build ffmpeg" and "Build whisper-cli"
+# GitHub Actions (tools/build-*.sh); Hammerspoon is the zip its developers
+# publish. install.sh refuses any download whose SHA-256 doesn't match. An empty
+# SHA-256 means no prebuilt copy yet: install.sh uses Homebrew for that tool.
+# Change a version together with its SHA-256, after running the Action for it.
+FFMPEG_VERSION="9.0.2"
+FFMPEG_SHA256=""
+WHISPER_CPP_VERSION="v1.9.5"
+WHISPER_CLI_SHA256=""
+HAMMERSPOON_VERSION="1.1.1"
+HAMMERSPOON_SHA256="11bb1c90faf5427f37c7bd4fe7eab9774ae43e1d5cb020c5b3088dac32849efa"
+
 # Where recordings go. Leave this commented out to use the default, scribe/input/
 # inside this repo. The meeting-notes skill looks wherever this points.
 # OUTPUT_ROOT="$HOME/somewhere/else"
@@ -41,3 +54,10 @@ AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f
 # there is one, relabels its menu item "Update available…". It never updates by
 # itself. "off" leaves only ○ → Check for updates…. Also in ○ → Settings.
 # AUTO_UPDATE_CHECK="on"
+
+# Use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of the pinned copies
+# install.sh downloads. "on" gets whatever versions Homebrew currently has, and
+# Homebrew asks for your Mac password when it installs itself. To switch, run
+#   meetingrec config set USE_HOMEBREW on    (or off)
+# then: meetingrec update. Installing with USE_HOMEBREW=1 sets it too.
+# USE_HOMEBREW="off"

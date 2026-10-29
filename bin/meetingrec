@@ -18,9 +18,9 @@
 set -uo pipefail
 
 # Hammerspoon's hs.task starts with a minimal environment, so PATH is set
-# explicitly rather than inherited. ffmpeg lives in Homebrew, python3 in
-# /usr/local.
-PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# explicitly rather than inherited. ffmpeg is the copy install.sh downloads,
+# or Homebrew's on a Mac that installed it that way.
+PATH="$HOME/.local/share/meetingrec/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH
 
 CONFIG="${MEETINGREC_CONFIG:-$HOME/.config/meetingrec/config.sh}"
@@ -748,7 +748,7 @@ cmd_update() {
 #   set NAME VALUE   for a folder, "" means "the default", which follows the
 #                    repo if it moves.
 #   list             every setting, one per line: NAME<tab>value<tab>default|custom
-CONFIG_NAMES="NOTES_VAULT TEAM_VAULT OUTPUT_ROOT AUTO_UPDATE_CHECK"
+CONFIG_NAMES="NOTES_VAULT TEAM_VAULT OUTPUT_ROOT AUTO_UPDATE_CHECK USE_HOMEBREW"
 
 config_default() {
   case "$1" in
@@ -756,6 +756,7 @@ config_default() {
     TEAM_VAULT)  echo "$REPO_ROOT/teamnotes" ;;
     OUTPUT_ROOT) echo "$REPO_ROOT/scribe/input" ;;
     AUTO_UPDATE_CHECK) echo "on" ;;
+    USE_HOMEBREW) echo "off" ;;
     *) die "config: NAME must be one of: $CONFIG_NAMES" ;;
   esac
 }
@@ -805,11 +806,11 @@ cmd_config() {
     set)
       [ $# -eq 3 ] || die "usage: meetingrec config set $name <value>"
       local value="$3"
-      if [ "$name" = AUTO_UPDATE_CHECK ]; then
+      if [ "$name" = AUTO_UPDATE_CHECK ] || [ "$name" = USE_HOMEBREW ]; then
         case "$value" in
           on|off) ;;
-          "") value="on" ;;
-          *) die "config: AUTO_UPDATE_CHECK must be on or off" ;;
+          "") value="$default" ;;
+          *) die "config: $name must be on or off" ;;
         esac
         config_write "$name" "$name=\"$value\""
         printf '%s → %s\n' "$name" "$value"

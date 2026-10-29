@@ -9,12 +9,16 @@
 #   model      : whisper model name (default: small.en)
 #   prompt     : optional priming text (names/jargon) to improve recognition
 #
-# Picks whisper.cpp (fast, Metal-accelerated) if `whisper-cli` is on PATH,
-# else falls back to openai-whisper (`whisper`). Exits non-zero with a clear
+# Picks whisper.cpp (fast, Metal-accelerated) if `whisper-cli` is found, else
+# falls back to openai-whisper (`whisper`). Exits non-zero with a clear
 # reason if neither engine or the model file is available.
 #
 # Exit codes: 0 ok · 1 transcribe failed · 2 no engine · 3 model not found
 set -euo pipefail
+
+# ffmpeg and whisper-cli are the copies install.sh downloads, kept off the user's
+# PATH; Homebrew's are the fallback on a Mac that installed them that way.
+PATH="$HOME/.local/share/meetingrec/bin:$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 AUDIO="${1:?audio path required}"
 OUTDIR="${2:?output dir required}"
@@ -28,7 +32,7 @@ SRT="$OUTDIR/$BASE.srt"
 if command -v whisper-cli >/dev/null 2>&1; then
   # --- whisper.cpp path: needs 16kHz mono WAV ---
   if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "NO_FFMPEG  (brew install ffmpeg)" >&2; exit 2
+    echo "NO_FFMPEG  (run meetingrec's install.sh again, or: meetingrec update)" >&2; exit 2
   fi
   WAV="$OUTDIR/$BASE.16k.wav"
   ffmpeg -nostdin -y -v error -i "$AUDIO" -ar 16000 -ac 1 "$WAV"
@@ -60,9 +64,7 @@ elif command -v whisper >/dev/null 2>&1; then
 
 else
   echo "NO_ENGINE" >&2
-  echo "Install one of:" >&2
-  echo "  brew install whisper.cpp    # fast, Metal-accelerated (recommended on Apple Silicon)" >&2
-  echo "  pip install openai-whisper  # simple, pure Python" >&2
+  echo "Run meetingrec's install.sh again (or: meetingrec update) to get whisper-cli." >&2
   exit 2
 fi
 

@@ -35,6 +35,12 @@ import wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# ffmpeg is the copy install.sh downloads, kept off the user's PATH; Homebrew's
+# is the fallback on a Mac that installed it that way.
+os.environ["PATH"] = os.pathsep.join([os.path.expanduser("~/.local/share/meetingrec/bin"),
+                                      os.environ.get("PATH", ""),
+                                      "/opt/homebrew/bin", "/usr/local/bin"])
+
 # silencedetect tuning. -35 dB is well below speech but above a mic's room tone;
 # 0.8s avoids chopping at every natural pause between sentences.
 NOISE_DB = "-35dB"

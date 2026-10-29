@@ -1,0 +1,87 @@
+# Builds ffmpeg at the version pinned in config.example.sh and publishes it as a
+# release, so install.sh can download it instead of every Mac needing Homebrew.
+# The build itself is tools/build-ffmpeg.sh, which can also be run by hand.
+#
+# Run by hand: Actions → Build ffmpeg → Run workflow. Then copy the SHA-256 from
+# the run summary into FFMPEG_SHA256 in config.example.sh and push.
+name: Build ffmpeg
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write      # create the release
+  id-token: write      # sign the attestation
+  attestations: write  # store the attestation
+
+jobs:
+  build:
+    runs-on: macos-15  # Apple silicon
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read the pinned version
+        id: pin
+        run: |
+          version="$(sed -n 's/^FFMPEG_VERSION="\(.*\)"/\1/p' config.example.sh)"
+          [ -n "$version" ] || { echo "::error::Couldn't read FFMPEG_VERSION from config.example.sh"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=ffmpeg-$version" >> "$GITHUB_OUTPUT"
+
+      # A published release is never replaced: install.sh pins its SHA-256, so a
+      # rebuilt file with a different fingerprint would fail every install.
+      - name: Refuse to overwrite an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.pin.outputs.tag }}" >/dev/null 2>&1; then
+            echo "::error::Release ${{ steps.pin.outputs.tag }} already exists. Change FFMPEG_VERSION to build a different version."
+            exit 1
+          fi
+
+      - name: Build
+        run: tools/build-ffmpeg.sh "${{ steps.pin.outputs.version }}" dist
+
+      # install.sh supports Apple silicon on macOS 14.2+; check the file matches
+      # and does the jobs meetingrec gives it.
+      - name: Check the binary
+        run: |
+          tools/check-binary.sh dist/ffmpeg
+          dist/ffmpeg -hide_banner -devices 2>&1 | grep -q avfoundation || { echo "::error::no microphone capture (avfoundation)"; exit 1; }
+          dist/ffmpeg -hide_banner -filters 2>/dev/null | grep -q " silencedetect " || { echo "::error::no silencedetect filter"; exit 1; }
+          for c in aac mp3 opus pcm_s16le; do
+            dist/ffmpeg -hide_banner -decoders 2>/dev/null | grep -q " $c " || { echo "::error::can't decode $c"; exit 1; }
+          done
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/ffmpeg
+
+      - name: Publish the release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sum="$(shasum -a 256 dist/ffmpeg | cut -d' ' -f1)"
+          echo "sum=$sum" >> "$GITHUB_OUTPUT"
+          gh release create "${{ steps.pin.outputs.tag }}" dist/ffmpeg dist/LICENSE-ffmpeg.txt \
+            --target "$GITHUB_SHA" \
+            --title "ffmpeg ${{ steps.pin.outputs.version }}" \
+            --notes "A small ffmpeg built unmodified from [FFmpeg n${{ steps.pin.outputs.version }}](https://github.com/FFmpeg/FFmpeg/tree/n${{ steps.pin.outputs.version }}) for Apple silicon, macOS 14.2 or later, with only what meetingrec uses and no outside libraries. LGPL 2.1 or later: see LICENSE-ffmpeg.txt for the licence, the source and the exact build settings.
+
+          SHA-256 of \`ffmpeg\`: \`$sum\`
+
+          Check where it came from: \`gh attestation verify ffmpeg --repo ${{ github.repository }}\`"
+
+      - name: Summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
+          ## ffmpeg ${{ steps.pin.outputs.version }} published
+
+          Put this line in \`config.example.sh\`, then commit and push:
+
+          \`\`\`
+          FFMPEG_SHA256="${{ steps.release.outputs.sum }}"
+          \`\`\`
+          SUMMARY
