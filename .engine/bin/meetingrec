@@ -1166,6 +1166,8 @@ cmd_uninstall() {
     fi
     # Its permissions, so System Settings doesn't list an app that's gone.
     tccutil reset All org.hammerspoon.Hammerspoon >/dev/null 2>&1
+    # Hammerspoon makes an empty Spoons folder on its own; nothing else is left.
+    rmdir "$hs/Spoons" "$hs" 2>/dev/null
     echo "Removed Hammerspoon."
   elif pgrep -x Hammerspoon >/dev/null; then
     killall Hammerspoon 2>/dev/null && sleep 1
