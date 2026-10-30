@@ -1,9 +1,9 @@
-# Builds whisper-cli at the version pinned in config.example.sh and publishes it as a
+# Builds whisper-cli at the version pinned in .engine/config.example.sh and publishes it as a
 # release, so install.sh can download it instead of every Mac needing Homebrew.
-# The build itself is tools/build-whisper.sh, which can also be run by hand.
+# The build itself is .engine/tools/build-whisper.sh, which can also be run by hand.
 #
 # Run by hand: Actions → Build whisper-cli → Run workflow. Then copy the SHA-256 from
-# the run summary into WHISPER_CLI_SHA256 in config.example.sh and push.
+# the run summary into WHISPER_CLI_SHA256 in .engine/config.example.sh and push.
 name: Build whisper-cli
 
 on:
@@ -23,8 +23,8 @@ jobs:
       - name: Read the pinned version
         id: pin
         run: |
-          version="$(sed -n 's/^WHISPER_CPP_VERSION="\(.*\)"/\1/p' config.example.sh)"
-          [ -n "$version" ] || { echo "::error::Couldn't read WHISPER_CPP_VERSION from config.example.sh"; exit 1; }
+          version="$(sed -n 's/^WHISPER_CPP_VERSION="\(.*\)"/\1/p' .engine/config.example.sh)"
+          [ -n "$version" ] || { echo "::error::Couldn't read WHISPER_CPP_VERSION from .engine/config.example.sh"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=whisper-cli-$version" >> "$GITHUB_OUTPUT"
 
@@ -40,13 +40,13 @@ jobs:
           fi
 
       - name: Build
-        run: tools/build-whisper.sh "${{ steps.pin.outputs.version }}" dist
+        run: .engine/tools/build-whisper.sh "${{ steps.pin.outputs.version }}" dist
 
       # install.sh supports Apple silicon on macOS 14.2+; check the file matches
       # and does the jobs meetingrec gives it.
       - name: Check the binary
         run: |
-          tools/check-binary.sh dist/whisper-cli
+          .engine/tools/check-binary.sh dist/whisper-cli
           dist/whisper-cli --help 2>&1 | grep -q -- "--output-srt" || { echo "::error::whisper-cli doesn't run"; exit 1; }
 
       - name: Attest
@@ -75,7 +75,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
           ## whisper-cli ${{ steps.pin.outputs.version }} published
 
-          Put this line in \`config.example.sh\`, then commit and push:
+          Put this line in \`.engine/config.example.sh\`, then commit and push:
 
           \`\`\`
           WHISPER_CLI_SHA256="${{ steps.release.outputs.sum }}"

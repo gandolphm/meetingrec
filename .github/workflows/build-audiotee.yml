@@ -1,8 +1,8 @@
-# Builds audiotee at the commit pinned in config.example.sh and publishes it as a
+# Builds audiotee at the commit pinned in .engine/config.example.sh and publishes it as a
 # release, so install.sh can download it instead of compiling it on every Mac.
 #
 # Run by hand: Actions → Build audiotee → Run workflow. Then copy the SHA-256 from
-# the run summary into AUDIOTEE_SHA256 in config.example.sh and push.
+# the run summary into AUDIOTEE_SHA256 in .engine/config.example.sh and push.
 name: Build audiotee
 
 on:
@@ -22,8 +22,8 @@ jobs:
       - name: Read the pinned commit
         id: pin
         run: |
-          sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' config.example.sh)"
-          [ -n "$sha" ] || { echo "::error::Couldn't read AUDIOTEE_SHA from config.example.sh"; exit 1; }
+          sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' .engine/config.example.sh)"
+          [ -n "$sha" ] || { echo "::error::Couldn't read AUDIOTEE_SHA from .engine/config.example.sh"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "tag=audiotee-$sha" >> "$GITHUB_OUTPUT"
 
@@ -112,7 +112,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
           ## audiotee ${{ steps.pin.outputs.sha }} published
 
-          Put this line in \`config.example.sh\`, then commit and push:
+          Put this line in \`.engine/config.example.sh\`, then commit and push:
 
           \`\`\`
           AUDIOTEE_SHA256="${{ steps.release.outputs.sum }}"

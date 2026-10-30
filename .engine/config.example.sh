@@ -1,8 +1,8 @@
-# meetingrec configuration — sourced by bin/meetingrec.
+# meetingrec configuration — sourced by .engine/bin/meetingrec.
 # Copy to ~/.config/meetingrec/config.sh and edit:
-#   mkdir -p ~/.config/meetingrec && cp config.example.sh ~/.config/meetingrec/config.sh
+#   mkdir -p ~/.config/meetingrec && cp .engine/config.example.sh ~/.config/meetingrec/config.sh
 
-# Path to the audiotee binary (install.sh puts it here; see docs/manual-install.md step 3).
+# Path to the audiotee binary (install.sh puts it here; see .engine/docs/manual-install.md step 3).
 AUDIOTEE_BIN="$HOME/bin/audiotee"
 
 # The audiotee commit in use. If you built it yourself: git -C ~/src/audiotee rev-parse --short HEAD
@@ -26,7 +26,7 @@ AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f
 
 # The other tools install.sh downloads, so no Mac needs Homebrew. ffmpeg and
 # whisper-cli are built by this repo's "Build ffmpeg" and "Build whisper-cli"
-# GitHub Actions (tools/build-*.sh); Hammerspoon is the zip its developers
+# GitHub Actions (.engine/tools/build-*.sh); Hammerspoon is the zip its developers
 # publish. install.sh refuses any download whose SHA-256 doesn't match. An empty
 # SHA-256 means no prebuilt copy yet: install.sh uses Homebrew for that tool.
 # Change a version together with its SHA-256, after running the Action for it.

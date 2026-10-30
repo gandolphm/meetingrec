@@ -15,7 +15,7 @@
 -- automatically; edit it by hand only if you move the repo.
 local REPO = os.getenv("HOME") .. "/meetingrec"
 
-local MEETINGREC = REPO .. "/bin/meetingrec"
+local MEETINGREC = REPO .. "/.engine/bin/meetingrec"
 local LOGFILE = os.getenv("HOME") .. "/.hammerspoon/meetingrec.log"
 
 -- ---------------------------------------------------------------------------

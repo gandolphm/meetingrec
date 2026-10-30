@@ -1,13 +1,13 @@
 # Manual install
 
-The same result as the [quick install](../README.md#quick-install-recommended), one step at
+The same result as the [quick install](../../README.md#quick-install-recommended), one step at
 a time. Use this if you'd rather not run a script from the internet, or you want to see
 exactly what gets downloaded.
 
 Do the steps in order. Every command runs in **Terminal**. In the expected outputs, `you`
 stands for your Mac username, and dates, times, sizes and version numbers will differ.
 
-When you've finished, go back to the README and [set up Obsidian](../README.md#set-up-obsidian) (recommended).
+When you've finished, go back to the README and [set up Obsidian](../../README.md#set-up-obsidian) (recommended).
 
 ## 1. Install the command-line tools
 
@@ -59,13 +59,13 @@ install it.
 ## 2. Clone this repo
 
 Clone it wherever you like. Nothing in the tool depends on where it lives. Commands in
-this guide that start with `bin/`, `scribe/` or `teamnotes/` are run **from the repo
+this guide that start with `.engine/`, `scribe/` or `teamnotes/` are run **from the repo
 folder** (the one containing the README). `<repo>` means that folder's full path.
 
 ```bash
 git clone https://github.com/gandolphm/meetingrec.git   # creates a folder called meetingrec
 cd meetingrec
-chmod +x bin/*
+chmod +x .engine/bin/*
 pwd                            # this is your <repo> path; note it down
 ```
 Expected (`cd` and `chmod` print nothing):
@@ -79,7 +79,7 @@ Resolving deltas: 100% ..., done.
 
 ## 3. Install ffmpeg, whisper-cli and audiotee
 
-Three small programs, all at the versions pinned in `config.example.sh`:
+Three small programs, all at the versions pinned in `.engine/config.example.sh`:
 
 - **ffmpeg** records your microphone and converts audio.
 - **whisper-cli**, from whisper.cpp, does the transcription.
@@ -88,11 +88,11 @@ Three small programs, all at the versions pinned in `config.example.sh`:
 ### ffmpeg and whisper-cli
 
 Download the copies this repo builds with GitHub Actions
-([ffmpeg](../.github/workflows/build-ffmpeg.yml), [whisper-cli](../.github/workflows/build-whisper.yml)).
+([ffmpeg](../../.github/workflows/build-ffmpeg.yml), [whisper-cli](../../.github/workflows/build-whisper.yml)).
 They go in a folder only meetingrec uses, so they never replace another ffmpeg you have.
 Run this **from the repo folder**:
 ```bash
-pin() { sed -n "s/^$1=\"\(.*\)\"/\1/p" config.example.sh; }
+pin() { sed -n "s/^$1=\"\(.*\)\"/\1/p" .engine/config.example.sh; }
 T=~/.local/share/meetingrec/bin; R=https://github.com/gandolphm/meetingrec/releases/download
 mkdir -p $T
 curl -fL --progress-bar -o $T/ffmpeg "$R/ffmpeg-$(pin FFMPEG_VERSION)/ffmpeg"
@@ -119,13 +119,13 @@ Use the commit this tool was tested with, `56ac954`. Either download the copy th
 publishes (**A**) or build it yourself (**B**). Both give you the same program.
 
 **A. Download it.** It's built from audiotee's source by a
-[GitHub Action](../.github/workflows/build-audiotee.yml) in this repo:
+[GitHub Action](../../.github/workflows/build-audiotee.yml) in this repo:
 ```bash
 mkdir -p ~/bin
 curl -fL --progress-bar -o ~/bin/audiotee https://github.com/gandolphm/meetingrec/releases/download/audiotee-56ac954/audiotee
 chmod +x ~/bin/audiotee
 shasum -a 256 ~/bin/audiotee
-grep AUDIOTEE_SHA256 config.example.sh
+grep AUDIOTEE_SHA256 .engine/config.example.sh
 ```
 Expected: a download progress bar, then the same 64-character code twice:
 ```text
@@ -172,7 +172,7 @@ Expected (the `x`s in `-rwxr-xr-x` mean it can run):
 
 ```bash
 mkdir -p ~/.config/meetingrec
-cp config.example.sh ~/.config/meetingrec/config.sh
+cp .engine/config.example.sh ~/.config/meetingrec/config.sh
 ```
 Expected: no output.
 
@@ -185,7 +185,7 @@ macOS asks for permission the first time each app records audio. Do a short test
 Terminal so you can answer the prompts now, not at the start of a real call:
 
 ```bash
-bin/meetingrec start "test"
+.engine/bin/meetingrec start "test"
 ```
 Allow the **Microphone** and **System Audio Recording** prompts. Expected:
 ```text
@@ -199,7 +199,7 @@ The `mic` and `output` lines show your own devices, e.g. your headphones.
 Play a YouTube video and talk for 15 seconds, then run:
 
 ```bash
-bin/meetingrec stop
+.engine/bin/meetingrec stop
 ```
 `stop` reports what it captured. Expected:
 ```text
@@ -242,7 +242,7 @@ the terminal commands work too, but it's much easier mid-meeting.
    fills in where you cloned the repo:
    ```bash
    mkdir -p ~/.hammerspoon
-   sed "s|^local REPO = .*|local REPO = \"$PWD\"|" hammerspoon/init.lua > ~/.hammerspoon/init.lua
+   sed "s|^local REPO = .*|local REPO = \"$PWD\"|" .engine/hammerspoon/init.lua > ~/.hammerspoon/init.lua
    ```
    Expected: no output. To check the path was filled in:
    ```bash
@@ -282,7 +282,7 @@ The quick install links `meetingrec`, `scribe` and `teamnotes` into `~/.local/bi
 work from any folder. To do the same, run this **from the repo folder**:
 ```bash
 mkdir -p ~/.local/bin
-ln -s "$PWD/bin/meetingrec" "$PWD/bin/scribe" "$PWD/bin/teamnotes" ~/.local/bin/
+ln -s "$PWD/.engine/bin/meetingrec" "$PWD/.engine/bin/scribe" "$PWD/.engine/bin/teamnotes" ~/.local/bin/
 ```
 Expected: no output. Open a new Terminal window, then check:
 ```bash
@@ -294,7 +294,7 @@ Expected:
 ```
 If it prints nothing, `~/.local/bin` isn't on your PATH: run
 `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile` and open a new window. Without
-these commands, use `<repo>/bin/meetingrec`, and start note-writing from the ○ menu or with
+these commands, use `<repo>/.engine/bin/meetingrec`, and start note-writing from the ○ menu or with
 `cd <repo>/scribe && claude`.
 
-Now go back to the README and [set up Obsidian](../README.md#set-up-obsidian) (recommended).
+Now go back to the README and [set up Obsidian](../../README.md#set-up-obsidian) (recommended).

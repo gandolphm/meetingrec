@@ -1,9 +1,9 @@
-# Builds ffmpeg at the version pinned in config.example.sh and publishes it as a
+# Builds ffmpeg at the version pinned in .engine/config.example.sh and publishes it as a
 # release, so install.sh can download it instead of every Mac needing Homebrew.
-# The build itself is tools/build-ffmpeg.sh, which can also be run by hand.
+# The build itself is .engine/tools/build-ffmpeg.sh, which can also be run by hand.
 #
 # Run by hand: Actions → Build ffmpeg → Run workflow. Then copy the SHA-256 from
-# the run summary into FFMPEG_SHA256 in config.example.sh and push.
+# the run summary into FFMPEG_SHA256 in .engine/config.example.sh and push.
 name: Build ffmpeg
 
 on:
@@ -23,8 +23,8 @@ jobs:
       - name: Read the pinned version
         id: pin
         run: |
-          version="$(sed -n 's/^FFMPEG_VERSION="\(.*\)"/\1/p' config.example.sh)"
-          [ -n "$version" ] || { echo "::error::Couldn't read FFMPEG_VERSION from config.example.sh"; exit 1; }
+          version="$(sed -n 's/^FFMPEG_VERSION="\(.*\)"/\1/p' .engine/config.example.sh)"
+          [ -n "$version" ] || { echo "::error::Couldn't read FFMPEG_VERSION from .engine/config.example.sh"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=ffmpeg-$version" >> "$GITHUB_OUTPUT"
 
@@ -40,13 +40,13 @@ jobs:
           fi
 
       - name: Build
-        run: tools/build-ffmpeg.sh "${{ steps.pin.outputs.version }}" dist
+        run: .engine/tools/build-ffmpeg.sh "${{ steps.pin.outputs.version }}" dist
 
       # install.sh supports Apple silicon on macOS 14.2+; check the file matches
       # and does the jobs meetingrec gives it.
       - name: Check the binary
         run: |
-          tools/check-binary.sh dist/ffmpeg
+          .engine/tools/check-binary.sh dist/ffmpeg
           dist/ffmpeg -hide_banner -devices 2>&1 | grep -q avfoundation || { echo "::error::no microphone capture (avfoundation)"; exit 1; }
           dist/ffmpeg -hide_banner -filters 2>/dev/null | grep -q " silencedetect " || { echo "::error::no silencedetect filter"; exit 1; }
           for c in aac mp3 opus pcm_s16le; do
@@ -79,7 +79,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
           ## ffmpeg ${{ steps.pin.outputs.version }} published
 
-          Put this line in \`config.example.sh\`, then commit and push:
+          Put this line in \`.engine/config.example.sh\`, then commit and push:
 
           \`\`\`
           FFMPEG_SHA256="${{ steps.release.outputs.sum }}"

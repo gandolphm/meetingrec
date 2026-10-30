@@ -41,7 +41,7 @@ cp ffmpeg "$out/ffmpeg"
 {
   echo "ffmpeg $version, built unmodified from https://github.com/FFmpeg/FFmpeg/tree/n$version"
   echo "Configured with: ./configure ${flags[*]}"
-  echo "Build script: tools/build-ffmpeg.sh in https://github.com/gandolphm/meetingrec"
+  echo "Build script: .engine/tools/build-ffmpeg.sh in https://github.com/gandolphm/meetingrec"
   echo
   echo "FFmpeg is licensed under the GNU Lesser General Public License, version 2.1 or later."
   echo "Its full text follows."

@@ -61,7 +61,7 @@ command so the defaults live in one place:
 
 ```bash
 SCRIBE="$(cd "${CLAUDE_SKILL_DIR}/../../.." && pwd)"
-MR="$(dirname "$SCRIBE")/bin/meetingrec"
+MR="$(dirname "$SCRIBE")/.engine/bin/meetingrec"
 VAULT="$("$MR" config get NOTES_VAULT)"; VAULT_SAVED=$?
 INBOX="$("$MR" config get OUTPUT_ROOT)"
 KEEP="$SCRIBE/transcripts"

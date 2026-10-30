@@ -2,11 +2,11 @@
 #
 # install.sh — set up meetingrec on a Mac in one go.
 #
-#   curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh | bash
-#   ./install.sh                      # or run it from a clone
-#   ./install.sh --update             # what `meetingrec update` runs after pulling
+#   curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/.engine/install.sh | bash
+#   .engine/install.sh                # or run it from a clone
+#   .engine/install.sh --update             # what `meetingrec update` runs after pulling
 #
-# Does the steps in docs/manual-install.md, then walks you through a
+# Does the steps in .engine/docs/manual-install.md, then walks you through a
 # test recording from the menu-bar button and checks it.
 #
 # Safe to re-run: every step checks whether it's already done and skips it, so
@@ -15,7 +15,7 @@
 # Environment:
 #   MEETINGREC_DIR    where to clone the repo when piped from curl, instead of asking
 #                     (default ~/meetingrec)
-#   NO_HAMMERSPOON=1  skip the menu-bar button (use bin/meetingrec from Terminal)
+#   NO_HAMMERSPOON=1  skip the menu-bar button (use the meetingrec command from Terminal)
 #   AUDIOTEE_FROM_SOURCE=1  build audiotee yourself instead of downloading it
 #   USE_HOMEBREW=1    use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of
 #                     meetingrec's pinned downloads. Remembered in config.sh, so
@@ -122,7 +122,7 @@ install_clt() {
 
 # A pinned value from the repo's config.example.sh.
 pin() {
-  sed -n "s/^$1=\"\(.*\)\"/\1/p" "$REPO/config.example.sh"
+  sed -n "s/^$1=\"\(.*\)\"/\1/p" "$REPO/.engine/config.example.sh"
 }
 
 # Download URL to DEST only if its SHA-256 matches, so a truncated or swapped
@@ -171,10 +171,10 @@ choose_tool_source() {
   esac
   # env -u: this script's own USE_HOMEBREW=1 would otherwise read as the saved value.
   if [ -n "$want" ]; then
-    env -u USE_HOMEBREW "$REPO/bin/meetingrec" config set USE_HOMEBREW "$want" >/dev/null \
+    env -u USE_HOMEBREW "$REPO/.engine/bin/meetingrec" config set USE_HOMEBREW "$want" >/dev/null \
       || die "Couldn't save USE_HOMEBREW to your config."
   fi
-  HOMEBREW_TOOLS="$(env -u USE_HOMEBREW "$REPO/bin/meetingrec" config get USE_HOMEBREW)"
+  HOMEBREW_TOOLS="$(env -u USE_HOMEBREW "$REPO/.engine/bin/meetingrec" config get USE_HOMEBREW)"
 }
 
 # Homebrew itself, for USE_HOMEBREW. Its installer asks for a password, which a
@@ -272,7 +272,8 @@ choose_repo_dir() {
   local default="$HOME/meetingrec" link reply
   # Re-running after a finished install: offer the folder it's already in.
   link="$(readlink "$HOME/.local/bin/meetingrec" 2>/dev/null)"
-  [ -n "$link" ] && [ -f "$link" ] && default="$(dirname "$(dirname "$link")")"
+  # The link is <folder>/.engine/bin/meetingrec.
+  [ -n "$link" ] && [ -f "$link" ] && default="$(dirname "$(dirname "$(dirname "$link")")")"
   REPO="${MEETINGREC_DIR:-$default}"
   [ -n "${MEETINGREC_DIR:-}" ] && return
   [ -t 0 ] || return
@@ -284,7 +285,7 @@ choose_repo_dir() {
     *[\"\|\\\$\`]*) die "Pick a folder whose path has none of these characters: \" | \\ \$ \`" ;;
   esac
   # A folder that already holds other things, like ~/Projects: go inside it.
-  if [ -d "$reply" ] && [ ! -f "$reply/bin/meetingrec" ] && [ -n "$(ls -A "$reply")" ]; then
+  if [ -d "$reply" ] && [ ! -f "$reply/.engine/bin/meetingrec" ] && [ -n "$(ls -A "$reply")" ]; then
     reply="$reply/meetingrec"
   fi
   REPO="$reply"
@@ -294,12 +295,13 @@ get_repo() {
   step "meetingrec"
   local here=""
   [ -n "$SCRIPT_PATH" ] && [ -f "$SCRIPT_PATH" ] && here="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+  # This script lives in <folder>/.engine/.
   if [ -n "$here" ] && [ -f "$here/bin/meetingrec" ]; then
-    REPO="$here"
+    REPO="$(dirname "$here")"
     ok "using this copy: $REPO"
   else
     choose_repo_dir
-    if [ -f "$REPO/bin/meetingrec" ]; then
+    if [ -f "$REPO/.engine/bin/meetingrec" ]; then
       # Not pulled: re-running the installer never changes the code under you.
       ok "already downloaded: $REPO"
     elif [ -e "$REPO" ] && [ -n "$(ls -A "$REPO" 2>/dev/null)" ]; then
@@ -309,7 +311,7 @@ get_repo() {
       ok "downloaded to $REPO"
     fi
   fi
-  chmod +x "$REPO"/bin/*
+  chmod +x "$REPO"/.engine/bin/*
 }
 
 install_model() {
@@ -333,9 +335,9 @@ install_audiotee() {
   # The pinned commit lives in config.example.sh, so the build and the
   # version recorded in session.json can't drift apart.
   local sha sha256 bin="$HOME/bin/audiotee"
-  sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' "$REPO/config.example.sh")"
-  sha256="$(sed -n 's/^AUDIOTEE_SHA256="\(.*\)"/\1/p' "$REPO/config.example.sh")"
-  [ -n "$sha" ] || die "Couldn't read AUDIOTEE_SHA from $REPO/config.example.sh."
+  sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' "$REPO/.engine/config.example.sh")"
+  sha256="$(sed -n 's/^AUDIOTEE_SHA256="\(.*\)"/\1/p' "$REPO/.engine/config.example.sh")"
+  [ -n "$sha" ] || die "Couldn't read AUDIOTEE_SHA from $REPO/.engine/config.example.sh."
   mkdir -p "$HOME/bin"
 
   if [ -n "$sha256" ] && [ -z "${AUDIOTEE_FROM_SOURCE:-}" ]; then
@@ -381,7 +383,7 @@ install_config() {
     ok "keeping your existing $cfg"
   else
     mkdir -p "$(dirname "$cfg")"
-    cp "$REPO/config.example.sh" "$cfg"
+    cp "$REPO/.engine/config.example.sh" "$cfg"
     ok "created $cfg"
   fi
 }
@@ -391,7 +393,7 @@ install_config() {
 # are left to the team-notes skill, since many people never use them.
 choose_notes_dir() {
   [ -n "$UPDATE" ] && return
-  local mr="$REPO/bin/meetingrec" current reply out yn
+  local mr="$REPO/.engine/bin/meetingrec" current reply out yn
   if current="$("$mr" config get NOTES_VAULT)"; then
     step "Your notes"
     ok "notes go in ${current/#$HOME/~}/meeting-notes"
@@ -484,7 +486,7 @@ install_commands() {
   mkdir -p "$dir"
   for name in meetingrec scribe teamnotes; do
     target="$dir/$name"
-    if [ -L "$target" ] && [ "$(readlink "$target")" = "$REPO/bin/$name" ]; then
+    if [ -L "$target" ] && [ "$(readlink "$target")" = "$REPO/.engine/bin/$name" ]; then
       already+=("$name"); continue
     elif [ -L "$target" ]; then
       old="$(readlink "$target")"
@@ -497,7 +499,7 @@ install_commands() {
     elif [ -e "$target" ]; then
       kept+=("$name"); continue
     fi
-    ln -sfn "$REPO/bin/$name" "$target" || die "Couldn't link $target."
+    ln -sfn "$REPO/.engine/bin/$name" "$target" || die "Couldn't link $target."
     made+=("$name")
   done
   if ! in_shell_startup ".local/bin"; then
@@ -524,7 +526,7 @@ install_hammerspoon_config() {
     note "you already had a Hammerspoon config; added require(\"meetingrec\") to it"
   fi
   local new
-  new="$(sed "s|^local REPO = .*|local REPO = \"$REPO\"|" "$REPO/hammerspoon/init.lua")"
+  new="$(sed "s|^local REPO = .*|local REPO = \"$REPO\"|" "$REPO/.engine/hammerspoon/init.lua")"
   if [ -n "$UPDATE" ] && [ "$(cat "$target" 2>/dev/null)" = "$new" ]; then
     ok "already up to date: $target"
     return
@@ -607,7 +609,7 @@ EOF
       return
     fi
     # Checking (and deleting) a session that's still recording would lose it.
-    case "$("$REPO/bin/meetingrec" status 2>/dev/null)" in
+    case "$("$REPO/.engine/bin/meetingrec" status 2>/dev/null)" in
       recording*) note "It's still recording. Click the ● in the menu bar → Stop first." ;;
       *) break ;;
     esac

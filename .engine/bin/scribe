@@ -10,7 +10,7 @@
 set -euo pipefail
 
 # Follow the ~/.local/bin link back to the repo, wherever it was cloned.
-REPO_ROOT="$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")"
+REPO_ROOT="$(dirname "$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")")"
 CLAUDE="$(command -v claude || echo "$HOME/.local/bin/claude")"
 [ -x "$CLAUDE" ] || { echo "scribe: Claude Code isn't installed. Install it: curl -fsSL https://claude.ai/install.sh | bash" >&2; exit 1; }
 

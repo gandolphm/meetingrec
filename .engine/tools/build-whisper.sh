@@ -35,7 +35,7 @@ cp "$work/build/bin/whisper-cli" "$out/whisper-cli"
 {
   echo "whisper-cli from whisper.cpp $version, built unmodified from"
   echo "https://github.com/ggml-org/whisper.cpp/tree/$version"
-  echo "Build script: tools/build-whisper.sh in https://github.com/gandolphm/meetingrec"
+  echo "Build script: .engine/tools/build-whisper.sh in https://github.com/gandolphm/meetingrec"
   echo
   cat "$work/src/LICENSE"
 } > "$out/LICENSE-whisper.cpp.txt"

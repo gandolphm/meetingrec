@@ -10,18 +10,21 @@ There are three parts:
 
 | Part | What it does | Where |
 | --- | --- | --- |
-| **Recorder** | Records a virtual meeting as two tracks: your mic (`mic.wav`) and everyone else (`system.wav`). Start and stop it from the menu bar or the terminal. | `bin/meetingrec`, `hammerspoon/init.lua` |
+| **Recorder** | Records a virtual meeting as two tracks: your mic (`mic.wav`) and everyone else (`system.wav`). Start and stop it from the menu bar or the terminal. | `.engine/bin/meetingrec`, `.engine/hammerspoon/init.lua` |
 | **scribe** | Your **personal** notes: TL;DR, your to-dos, decisions and questions to ask. | `scribe/` (a folder you can open as an Obsidian vault), or a folder you already use |
 | **teamnotes** | **Team-facing** notes: third person, action items for everyone grouped by owner, and a plain-Markdown copy you can paste into Slack or email. | `teamnotes/` (a second folder and vault), or another folder of yours |
 
 ```
 meetingrec/
-├── bin/meetingrec              # the recorder
-├── bin/scribe, teamnotes       # start writing notes from any Terminal window
-├── bin/clock-check, drift-check  # diagnostics for track timing (rarely needed)
-├── hammerspoon/init.lua        # the ○ menu-bar button
-├── config.example.sh           # template for ~/.config/meetingrec/config.sh
-├── docs/manual-install.md      # the install, one step at a time
+├── .engine/                    # the machinery, hidden in Finder; you never need to open it
+│   ├── bin/meetingrec          #   the recorder
+│   ├── bin/scribe, teamnotes   #   start writing notes from any Terminal window
+│   ├── bin/clock-check, drift-check  # diagnostics for track timing (rarely needed)
+│   ├── hammerspoon/init.lua    #   the ○ menu-bar button
+│   ├── install.sh              #   the installer, also run by updates
+│   ├── config.example.sh       #   template for ~/.config/meetingrec/config.sh
+│   ├── docs/manual-install.md  #   the install, one step at a time
+│   └── tools/                  #   build scripts for the prebuilt downloads
 ├── scribe/                     # notes folder #1 (an Obsidian vault) — personal notes
 │   ├── input/                  #   recordings land here
 │   ├── meeting-notes/          #   notes are written here, unless you pick your own vault (made on first write-up)
@@ -47,7 +50,7 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 
 - [Requirements](#requirements) · [What leaves your Mac](#what-leaves-your-mac)
 - [Install](#install)
-  - [Quick install](#quick-install-recommended) · [Manual install](docs/manual-install.md)
+  - [Quick install](#quick-install-recommended) · [Manual install](.engine/docs/manual-install.md)
   - [Set up Obsidian](#set-up-obsidian) (recommended)
 - [Your first meeting](#your-first-meeting)
 - [Usage](#usage): [record](#record-a-virtual-meeting) ·
@@ -99,7 +102,7 @@ unless you turn that off. These connections only download; nothing you record is
 Paste one command and answer a few prompts: the [quick install](#quick-install-recommended)
 below. Less than 5 minutes, mostly waiting with a few prompts. If you'd rather not run a script from the internet,
 or want to see exactly what gets downloaded, follow the
-**[manual install](docs/manual-install.md)** instead. Both end up with the same result.
+**[manual install](.engine/docs/manual-install.md)** instead. Both end up with the same result.
 Either way, finish with [Set up Obsidian](#set-up-obsidian) (recommended).
 
 In the expected outputs below, `you` stands for your Mac username, and dates, times,
@@ -111,7 +114,7 @@ Open **Terminal** (press Cmd+Space, type *Terminal*, press Enter), paste this li
 press Enter:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/.engine/install.sh | bash
 ```
 
 The script goes through these steps and skips any that are already done:
@@ -127,7 +130,7 @@ The script goes through these steps and skips any that are already done:
 | Claude Code | [claude.ai](https://docs.claude.com/en/docs/claude-code/overview) |
 
 Every download is checked against the SHA-256 fingerprint pinned in
-[config.example.sh](config.example.sh), and refused if it doesn't match. ffmpeg and
+[config.example.sh](.engine/config.example.sh), and refused if it doesn't match. ffmpeg and
 `whisper-cli` go in `~/.local/share/meetingrec/bin`, where only meetingrec uses them, so
 they never replace other copies you might have.
 
@@ -136,7 +139,7 @@ Hammerspoon, links the `meetingrec`, `scribe` and `teamnotes` commands into `~/.
 and adds `~/.local/bin` to your PATH in `~/.zprofile` if it isn't there already. It doesn't change anything else. You can [read the script](install.sh) first, or
 download it, look at it, then run it:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/.engine/install.sh -o install.sh
 less install.sh      # press q to quit
 bash install.sh
 ```
@@ -270,7 +273,7 @@ Then [set up Obsidian](#set-up-obsidian) (recommended).
   downloads: `curl -fsSL …/install.sh | USE_HOMEBREW=1 bash`. It installs Homebrew if
   needed, which asks for your Mac password, and you get whatever versions Homebrew
   currently has. The choice is remembered for updates; `USE_HOMEBREW=0` switches back.
-- Already cloned the repo? Run `./install.sh` from inside it. That copy is used instead of
+- Already cloned the repo? Run `.engine/install.sh` from inside it. That copy is used instead of
   a fresh clone.
 
 </details>
@@ -337,7 +340,7 @@ Team meeting instead? Use *Write up team notes…* (see [team notes](#write-team
 **From the menu bar:** click **○** → *Start recording…*, and type a title if you like. The
 button shows **● 12m** while recording. Click it → *Stop* when the call ends.
 
-**From the terminal**, in any folder (if you did the manual install, use `<repo>/bin/meetingrec`):
+**From the terminal**, in any folder (if you did the manual install, use `<repo>/.engine/bin/meetingrec`):
 ```bash
 meetingrec start "Acme check-in"   # title is optional
 meetingrec status
@@ -356,7 +359,7 @@ when nothing is recording:
 recording 754 /Users/you/meetingrec/scribe/input/2026-10-01T14-00_acme-check-in
 ```
 Expected from `stop`: the length, the folder and the two files, as in
-[manual install step 5](docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). If it prints a line starting
+[manual install step 5](.engine/docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). If it prints a line starting
 with `WARNING`, read it before the recording is gone: usually a track is silent.
 
 **Wear headphones** if you can. On speakers your mic also picks up the other side, and
@@ -377,7 +380,7 @@ Any of these starts it; they all end up in the same place:
   in `scribe/` with `scribe` already typed. Press **Enter**. (Without the Claude app, it
   opens Claude Code in Terminal instead.)
 - **Terminal, from any folder:** type `scribe`. (Manual install: see
-  [step 7](docs/manual-install.md#7-add-the-commands-optional).)
+  [step 7](.engine/docs/manual-install.md#7-add-the-commands-optional).)
 - **By hand:**
   ```bash
   cd <repo>/scribe
@@ -538,7 +541,7 @@ Recordings and notes inside meetingrec move with it. Two things it can't do for 
   and earlier sessions are listed under the old folder.
 
 Already moved it in Finder? Move it back and use `meetingrec move`. Or run
-`bash <new folder>/install.sh`, which points the menu bar and commands at the new place but
+`bash <new folder>/.engine/install.sh`, which points the menu bar and commands at the new place but
 not the rest: check `meetingrec config list` for folders that still name the old one.
 
 ### Other settings
@@ -587,7 +590,7 @@ touched.
 If you installed before updates existed (no *Check for updates…* in the menu), update
 once by hand:
 ```bash
-git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
+git -C ~/meetingrec pull && ~/meetingrec/.engine/bin/meetingrec update
 ```
 
 ---
@@ -599,12 +602,12 @@ git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
 | `NO_ENGINE` | whisper-cli is missing. Run `meetingrec update`, or the quick install command again. |
 | `MODEL_NOT_FOUND` | Run the `curl` command it prints, or run the quick install command again. |
 | `NO_FFMPEG` | ffmpeg is missing. Run `meetingrec update`, or the quick install command again. |
-| `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](docs/manual-install.md#3-install-ffmpeg-whisper-cli-and-audiotee), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
-| "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See [manual steps 5 and 6](docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). |
+| `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](.engine/docs/manual-install.md#3-install-ffmpeg-whisper-cli-and-audiotee), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
+| "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See [manual steps 5 and 6](.engine/docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). |
 | Skill says the inbox is empty | The recording isn't where the skill looks: `scribe/input/`, or wherever `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points. Click **○** → *Open recordings folder* to see what's there. Team notes look in `teamnotes/input/`. |
 | `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
-| `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](docs/manual-install.md#7-add-the-commands-optional). |
+| `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |
 | ○ button missing or frozen | ○ → *Reload config*, or the Hammerspoon icon → *Reload Config*. If that fails, run `killall Hammerspoon` and open Hammerspoon from Applications again. Check `~/.hammerspoon/meetingrec.log`. |
 | `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Run `claude` in the repo folder and ask it to help keep your edit, then update again. |
 | Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault ([Set up Obsidian](#set-up-obsidian)). |

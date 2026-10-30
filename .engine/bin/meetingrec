@@ -37,8 +37,8 @@ if [ -f "$AUDIOTEE_BIN.commit" ]; then
 fi
 AUDIOTEE_SHA="${AUDIOTEE_SHA:-unknown}"
 # Default inbox is scribe/input/ in this repo, wherever it was cloned. realpath
-# follows a symlink (e.g. ~/bin/meetingrec -> repo/bin/meetingrec) back to the repo.
-REPO_ROOT="$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")"
+# follows a symlink (e.g. ~/.local/bin/meetingrec -> repo/.engine/bin/meetingrec) back to the repo.
+REPO_ROOT="$(dirname "$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")")"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$REPO_ROOT/scribe/input}"
 SAMPLE_RATE=16000
 
@@ -333,7 +333,7 @@ cmd_start() {
     tracks="mic"
   else
     [ -x "$AUDIOTEE_BIN" ] || die "audiotee not found or not executable: $AUDIOTEE_BIN
-Install it first — run install.sh, or see step 3 of docs/manual-install.md — then set AUDIOTEE_BIN in $CONFIG"
+Install it first — run .engine/install.sh, or see step 3 of .engine/docs/manual-install.md — then set AUDIOTEE_BIN in $CONFIG"
 
     # A FIFO rather than a shell pipe, so both halves of the pipeline get
     # individually addressable PIDs to signal at stop.
@@ -678,7 +678,7 @@ PY
 # update
 # --------------------------------------------------------------------------
 # --check only asks GitHub what's new and changes nothing; the menu bar runs it
-# once a day. The first line is machine-read by hammerspoon/init.lua:
+# once a day. The first line is machine-read by .engine/hammerspoon/init.lua:
 #   up-to-date <sha>    or    available <count>
 # followed by one "  • <subject>" line per new commit.
 cmd_update() {
@@ -733,7 +733,7 @@ cmd_update() {
   # this version needs (a new audiotee, a new Homebrew tool, a new menu bar).
   local opts=(--update)
   [ "$from_menu" -eq 1 ] && opts+=(--from-menu)
-  bash "$REPO_ROOT/install.sh" "${opts[@]}" || die "the update was downloaded, but finishing it failed (see above). Run: $REPO_ROOT/bin/meetingrec update"
+  bash "$REPO_ROOT/.engine/install.sh" "${opts[@]}" || die "the update was downloaded, but finishing it failed (see above). Run: meetingrec update"
 }
 
 # --------------------------------------------------------------------------
@@ -902,13 +902,13 @@ cmd_move() {
   local name link
   for name in meetingrec scribe teamnotes; do
     link="$HOME/.local/bin/$name"
-    [ -L "$link" ] && [ "$(readlink "$link")" = "$old/bin/$name" ] \
-      && ln -sfn "$new/bin/$name" "$link"
+    [ -L "$link" ] && [ "$(readlink "$link")" = "$old/.engine/bin/$name" ] \
+      && ln -sfn "$new/.engine/bin/$name" "$link"
   done
 
   local s
   for s in ${moved_settings[@]+"${moved_settings[@]}"}; do
-    "$new/bin/meetingrec" config set "${s%%=*}" "${s#*=}" | sed 's/^/  /'
+    "$new/.engine/bin/meetingrec" config set "${s%%=*}" "${s#*=}" | sed 's/^/  /'
   done
 
   # Claude Code's "allow" rules for this folder hold absolute paths. Only whole
@@ -926,14 +926,14 @@ for f in sys.argv[3:]:
 ' "$old" "$new" 2>/dev/null
 
   # The menu bar, and a check that everything else still lines up.
-  bash "$new/install.sh" --update \
-    || die "moved, but finishing failed (see above). Run: bash \"$new/install.sh\" --update"
+  bash "$new/.engine/install.sh" --update \
+    || die "moved, but finishing failed (see above). Run: bash \"$new/.engine/install.sh\" --update"
 
   echo
   echo "meetingrec is now in $new"
   local vault vaults=()
   for n in NOTES_VAULT TEAM_VAULT; do
-    vault="$("$new/bin/meetingrec" config get "$n")"
+    vault="$("$new/.engine/bin/meetingrec" config get "$n")"
     case "$vault/" in "$new/"*) [ -d "$vault/.obsidian" ] && vaults+=("$vault") ;; esac
   done
   if [ ${#vaults[@]} -gt 0 ]; then

@@ -68,7 +68,7 @@ command so the default lives in one place:
 
 ```bash
 TEAMNOTES="$(cd "${CLAUDE_SKILL_DIR}/../../.." && pwd)"
-MR="$(dirname "$TEAMNOTES")/bin/meetingrec"
+MR="$(dirname "$TEAMNOTES")/.engine/bin/meetingrec"
 INBOX="$TEAMNOTES/input"
 VAULT="$("$MR" config get TEAM_VAULT)"; VAULT_SAVED=$?
 echo "VAULT=$VAULT (saved: $([ $VAULT_SAVED -eq 0 ] && echo yes || echo no))"
