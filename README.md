@@ -235,8 +235,15 @@ Privacy & Security** and:
 - **Screen & System Audio Recording** → in the *System Audio Recording Only* list, add and
   turn on Hammerspoon.
 
-Quit Hammerspoon (click its icon in the menu bar → *Quit Hammerspoon*), then run the
-install command again to repeat the test.
+Quit Hammerspoon (click its icon in the menu bar → *Quit Hammerspoon*, or run
+`killall Hammerspoon` in Terminal if you've hidden its icon), then run the install command
+again to repeat the test.
+
+*Optional:* **hide Hammerspoon's own icon.** Hammerspoon puts a hammer icon in the menu
+bar next to meetingrec's **○**, and meetingrec doesn't need it. Click the hammer →
+*Preferences…* → untick **Show menu icon**. The **○** stays, and ○ → *Reload config* still
+works. To get the hammer back, open Hammerspoon from Applications: its window opens, and
+*Hammerspoon → Preferences…* is in the menu bar at the top of the screen.
 
 **Then sign in to Claude Code.** Open a **new** Terminal window, so it picks up the new
 PATH, and run:
@@ -598,7 +605,7 @@ git -C ~/meetingrec pull && ~/meetingrec/bin/meetingrec update
 | `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](docs/manual-install.md#7-add-the-commands-optional). |
-| ○ button missing or frozen | Hammerspoon → *Reload Config*. If that fails, quit and reopen Hammerspoon. Check `~/.hammerspoon/meetingrec.log`. |
+| ○ button missing or frozen | ○ → *Reload config*, or the Hammerspoon icon → *Reload Config*. If that fails, run `killall Hammerspoon` and open Hammerspoon from Applications again. Check `~/.hammerspoon/meetingrec.log`. |
 | `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Run `claude` in the repo folder and ask it to help keep your edit, then update again. |
 | Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault ([Set up Obsidian](#set-up-obsidian)). |
 | `claude: command not found` | Open a new Terminal window. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and add that line to `~/.zprofile`. |

@@ -647,7 +647,8 @@ finish() {
 ${G}${B}Done.${N} meetingrec is installed in ${B}$REPO${N}
 
 What's left (see the README for details):
-  1. Open a ${B}new${N} Terminal window, run ${B}claude${N} once and sign in.
+  1. Open a ${B}new${N} Terminal window, run ${B}claude${N} once, sign in, then type ${B}/exit${N}.
+     The menu bar's "Write up notes…" works only after that first session ends.
   2. Set up Obsidian ("Set up Obsidian" in the README).
 
 The first time you write up a meeting, Claude asks your name, where your notes
