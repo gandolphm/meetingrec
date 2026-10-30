@@ -469,11 +469,22 @@ local function uninstall()
     local count, hsAction, claudeOffer = stdOut:match("^plan (%d+) (%a+) (%a+)")
     count = tonumber(count) or 0
     local stays = stdOut:match("\nstays ([^\n]+)") or "Apple's command line tools"
+    -- Notes folders picked outside meetingrec's own are never deleted; say so,
+    -- or "delete your notes" reads as covering them too.
+    local outside = {}
+    for dir in stdOut:gmatch("\noutside ([^\n]+)") do outside[#outside + 1] = tilde(dir) end
+    local outsideText = ""
+    if #outside == 1 then
+      outsideText = "\n\nYour notes in " .. outside[1] .. " aren't touched. Delete them yourself if you don't want them."
+    elseif #outside > 1 then
+      outsideText = "\n\nYour notes and recordings in these folders aren't touched. Delete them yourself if you don't want them:\n" ..
+        table.concat(outside, "\n")
+    end
     local button = hs.dialog.blockAlert("Uninstall meetingrec?",
       "This removes meetingrec's programs, settings and commands, and this menu-bar button" ..
         (hsAction == "remove" and ", and Hammerspoon, which the installer added for it" or "") .. ".\n\n" ..
         "These stay on your Mac: " .. stays .. "." ..
-        (claudeOffer == "offer" and " You'll be asked about Claude Code." or ""),
+        (claudeOffer == "offer" and " You'll be asked about Claude Code." or "") .. outsideText,
       "Cancel", "Uninstall", "warning")
     if button ~= "Uninstall" then return end
     local notes = "--keep-notes"

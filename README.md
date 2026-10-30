@@ -475,6 +475,13 @@ meeting, or a click in **○ → Settings**.
 | Use Homebrew's ffmpeg and whisper.cpp instead | — | `meetingrec config set USE_HOMEBREW on`, then `meetingrec update` |
 | Use a more accurate Whisper model | "re-run with medium.en" (download it first, below) | — |
 
+You don't need a meeting to change these. Open Claude in the notes folder
+(`cd ~/meetingrec/scribe`, or `teamnotes` for team notes, then `claude`) and ask it to
+show, change or remove your names, rules or team profiles: "what rules do I have?", "delete the rule about Key
+Points", "Pat is now the team lead". The files it edits are listed under
+[Where everything is saved](#where-everything-is-saved). Don't use the `scribe` command for
+this: it starts a write-up.
+
 Settings saves to `~/.config/meetingrec/config.sh`. From Terminal, `meetingrec config list`
 shows every setting and `meetingrec config set NOTES_VAULT ~/path` changes one (also
 `TEAM_VAULT`, `OUTPUT_ROOT`, and `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`). Changing a notes

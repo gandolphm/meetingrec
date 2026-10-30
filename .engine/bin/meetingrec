@@ -961,9 +961,10 @@ for f in sys.argv[3:]:
 #   meetingrec uninstall [--keep-notes | --delete-notes]
 #                        [--keep-claude | --remove-claude] [--yes] [--dry-run]
 #
-# --dry-run changes nothing. Its first two lines are machine-read by the menu bar:
+# --dry-run changes nothing. Its first lines are machine-read by the menu bar:
 #   plan <files of yours> <remove|keep Hammerspoon> <offer|none for Claude Code>
 #   stays <the other programs on this Mac that stay, as a phrase>
+#   outside <folder>    one per notes or recordings folder outside meetingrec's
 # followed by the same list a real run shows.
 
 # Files of yours in scribe/ and teamnotes/: anything git didn't ship, or that
@@ -1073,10 +1074,23 @@ cmd_uninstall() {
     p="$HOME/.local/bin/$name"
     [ -L "$p" ] && [ "$(readlink "$p")" = "$repo/.engine/bin/$name" ] && gone+=("$p")
   done
-  # Notes folders you picked elsewhere, named so nobody wonders.
+  # Notes and recordings in folders you picked elsewhere: never touched, since
+  # a vault of yours holds more than meetingrec's files, but named, so nobody
+  # thinks they went too.
+  local cand c
   for n in NOTES_VAULT TEAM_VAULT OUTPUT_ROOT; do
     v="$(cmd_config get "$n" 2>/dev/null)"
-    case "$v/" in /|"$repo/"*) ;; *) [ -d "$v" ] && outside+=("$v") ;; esac
+    case "$v/" in /|"$repo/"*) continue ;; esac
+    case "$n" in
+      NOTES_VAULT) cand=("$v/meeting-notes") ;;
+      TEAM_VAULT)  cand=("$v/meeting-notes" "$v/share") ;;
+      OUTPUT_ROOT) cand=("$v") ;;
+    esac
+    for c in "${cand[@]}"; do
+      [ -d "$c" ] || continue
+      case " ${outside[*]+${outside[*]}} " in *" $c "*) continue ;; esac
+      outside+=("$c")
+    done
   done
 
   # Other programs that stay, named only if they're on this Mac.
@@ -1092,6 +1106,7 @@ cmd_uninstall() {
     printf 'plan %s %s %s\n' "$count" "$([ -n "$hs_app" ] && echo remove || echo keep)" \
       "$([ ${#claude_parts[@]} -gt 0 ] && echo offer || echo none)"
     printf 'stays %s\n' "$(and_list "${stays[@]}")"
+    for v in ${outside[@]+"${outside[@]}"}; do printf 'outside %s\n' "$v"; done
   fi
   echo "This removes:"
   for p in "${gone[@]}"; do printf '  %s\n' "${p/#$HOME/~}"; done
@@ -1102,7 +1117,7 @@ cmd_uninstall() {
   echo "It keeps:"
   [ "$count" -gt 0 ] && [ "$notes" = keep ] && printf '  %s\n' "$yours"
   [ "$count" -gt 0 ] && [ -z "$notes" ] && printf '  %s, unless you choose to delete them\n' "$yours"
-  for v in ${outside[@]+"${outside[@]}"}; do printf '  %s\n' "${v/#$HOME/~}"; done
+  for v in ${outside[@]+"${outside[@]}"}; do printf '  %s (yours to delete if you want)\n' "${v/#$HOME/~}"; done
   if [ ${#claude_parts[@]} -gt 0 ]; then
     case "$claude" in
       "")   printf '  Claude Code, unless you choose to remove it (the installer added it)\n' ;;
