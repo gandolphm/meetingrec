@@ -7,6 +7,7 @@
 #   meetingrec status
 #   meetingrec update [--check]
 #   meetingrec config get|set <NAME> [value] | list
+#   meetingrec move <folder>
 #
 # Captures only. Transcription is a separate, later process (the `meeting-notes`
 # skill) so a bad transcription run can never cost a recording.
@@ -848,6 +849,101 @@ cmd_config() {
 }
 
 # --------------------------------------------------------------------------
+# move
+# --------------------------------------------------------------------------
+# Moves this copy of meetingrec to another folder and fixes everything that
+# names its old path: the commands in ~/.local/bin, saved folders that pointed
+# inside it, Claude Code's per-folder permissions and, through the installer,
+# the menu bar. Folders left at their default follow the repo by themselves.
+#
+#   meetingrec move <folder>    like mv: an existing folder means "put it inside"
+cmd_move() {
+  [ $# -eq 1 ] || die "usage: meetingrec move <folder>"
+  local old="$REPO_ROOT" dest="${1%/}" new
+  case "$(cmd_status)" in
+    recording*) die "a recording is running. Stop it first, then move." ;;
+  esac
+  case "$dest" in "~") dest="$HOME" ;; "~/"*) dest="$HOME/${dest#\~/}" ;; esac
+  case "$dest" in /*) ;; *) dest="$PWD/$dest" ;; esac
+  # Resolved the way REPO_ROOT is, so the two compare; nothing is created yet.
+  dest="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$dest")"
+  [ "$dest" = "$old" ] && die "meetingrec is already in $old."
+  if [ -d "$dest" ]; then new="$dest/$(basename "$old")"; else new="$dest"; fi
+  # The menu-bar config and config.sh have the path written into them.
+  case "$new" in
+    *'"'*|*'$'*|*'`'*|*'\'*|*'|'*) die "the folder name can't contain \", \$, \`, \\ or |" ;;
+  esac
+  [ "$new" = "$old" ] && die "meetingrec is already in $old."
+  case "$new/" in "$old/"*) die "can't move meetingrec into its own folder." ;; esac
+  [ -e "$new" ] && die "$new already exists. Pick another folder."
+
+  # Saved folders inside the repo. A default one is saved as "" and follows the
+  # move by itself; only an explicit path needs rewriting.
+  local n v moved_settings=()
+  for n in NOTES_VAULT TEAM_VAULT OUTPUT_ROOT; do
+    grep -qE "^$n=\"..*\"" "$CONFIG" 2>/dev/null || continue
+    v="$(cmd_config get "$n")"
+    case "$v/" in "$old/"*) moved_settings+=("$n=$new${v#"$old"}") ;; esac
+  done
+
+  echo "Move meetingrec:"
+  echo "  from $old"
+  echo "  to   $new"
+  if [ -t 0 ]; then
+    local yn
+    read -r -p "Go ahead? [y/N] " yn
+    case "$yn" in [yY]*) ;; *) echo "Nothing was moved."; return 0 ;; esac
+  fi
+
+  mkdir -p "$(dirname "$new")" || die "couldn't create $(dirname "$new"). Nothing was moved."
+  mv "$old" "$new" || die "couldn't move it. If $old is still there, nothing was changed."
+  echo "moved."
+
+  local name link
+  for name in meetingrec scribe teamnotes; do
+    link="$HOME/.local/bin/$name"
+    [ -L "$link" ] && [ "$(readlink "$link")" = "$old/bin/$name" ] \
+      && ln -sfn "$new/bin/$name" "$link"
+  done
+
+  local s
+  for s in ${moved_settings[@]+"${moved_settings[@]}"}; do
+    "$new/bin/meetingrec" config set "${s%%=*}" "${s#*=}" | sed 's/^/  /'
+  done
+
+  # Claude Code's "allow" rules for this folder hold absolute paths. Only whole
+  # path components are replaced, so ~/meetingrec-old isn't caught by ~/meetingrec.
+  find "$new" -path '*/.claude/settings.local.json' -not -path '*/.git/*' -print0 \
+    | xargs -0 python3 -I -c '
+import re, sys
+old, new = sys.argv[1], sys.argv[2]
+pat = re.compile(re.escape(old) + r"(?![A-Za-z0-9_.-])")
+for f in sys.argv[3:]:
+    s = open(f).read()
+    t = pat.sub(lambda m: new, s)
+    if t != s:
+        open(f, "w").write(t)
+' "$old" "$new" 2>/dev/null
+
+  # The menu bar, and a check that everything else still lines up.
+  bash "$new/install.sh" --update \
+    || die "moved, but finishing failed (see above). Run: bash \"$new/install.sh\" --update"
+
+  echo
+  echo "meetingrec is now in $new"
+  local vault vaults=()
+  for n in NOTES_VAULT TEAM_VAULT; do
+    vault="$("$new/bin/meetingrec" config get "$n")"
+    case "$vault/" in "$new/"*) [ -d "$vault/.obsidian" ] && vaults+=("$vault") ;; esac
+  done
+  if [ ${#vaults[@]} -gt 0 ]; then
+    echo "Obsidian still looks in the old place. In Obsidian, choose Open folder as vault and pick:"
+    printf '  %s\n' "${vaults[@]}"
+  fi
+  echo "If your Terminal window was inside the old folder, run: cd \"$new\""
+}
+
+# --------------------------------------------------------------------------
 # status
 # --------------------------------------------------------------------------
 cmd_status() {
@@ -872,17 +968,21 @@ case "${1:-}" in
   status) cmd_status ;;
   update) shift; cmd_update "$@" ;;
   config) shift; cmd_config "$@" ;;
+  move)   shift; cmd_move "$@" ;;
   *) cat >&2 <<EOF
 usage: meetingrec start [title] [--mic-only]
        meetingrec stop
        meetingrec status
        meetingrec update [--check]
        meetingrec config get|set <NAME> [value] | list
+       meetingrec move <folder>
 
   --mic-only   Record the microphone only, no system tap. Use when you are on
                speakers rather than headphones: the mic hears both sides, so one
                track stays complete. Costs speaker attribution downstream.
   --check      Only say whether an update is available; change nothing.
+  move         Move meetingrec to another folder and fix everything that
+               points at the old one, including the menu bar.
 EOF
      exit 64 ;;
 esac

@@ -52,7 +52,7 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 - [Your first meeting](#your-first-meeting)
 - [Usage](#usage): [record](#record-a-virtual-meeting) ·
   [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
-- [Make it yours](#make-it-yours): where notes go, names, rules, teams
+- [Make it yours](#make-it-yours): where notes go, names, rules, teams, moving things
 - [Updating](#updating)
 - [Troubleshooting](#troubleshooting)
 
@@ -146,6 +146,10 @@ bash install.sh
 - **Where to put meetingrec.** Press Enter for `~/meetingrec`, or type another folder, such
   as `~/Projects/meetingrec`. If you type a folder that already holds other things, like
   `~/Projects`, meetingrec goes in a `meetingrec` folder inside it.
+- **Where your notes go.** Press Enter for meetingrec's own `scribe` folder, which is
+  already set up as an Obsidian vault, or type the folder of an Obsidian vault you already
+  use. Notes go in a `meeting-notes` folder inside it. You can change this later (see
+  [Moving things](#moving-things)).
 - **Install the command line developer tools.** If a window asks, click *Install* and
   agree. The script waits until it finishes.
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
@@ -188,6 +192,11 @@ You should see something like this (each line starting with ✓ is a finished st
 
 ==> Recorder config
   ✓ created /Users/you/.config/meetingrec/config.sh
+
+==> Your notes
+  ...
+  > 
+  ✓ notes go in ~/meetingrec/scribe/meeting-notes
 
 ==> Your settings and team profile
   ✓ created. Claude fills them in the first time you write up a meeting
@@ -276,9 +285,10 @@ straight to [Your first meeting](#your-first-meeting).
    same for `<repo>/teamnotes` if you'll write team notes. Each is a separate vault.
    (In the file picker, Cmd+Shift+G lets you paste the path.)
 
-   **Already use Obsidian?** You can keep your notes in your own vault instead. The first
-   time you run each skill, Claude asks where its notes should go: press Enter for the
-   folder above, or give your vault's folder. Notes then go into a `meeting-notes/` folder
+   **Already use Obsidian?** You can keep your notes in your own vault instead. The
+   installer asks where your personal notes go, and the first time you write team notes,
+   Claude asks the same for those: press Enter for the folder above, or give your vault's
+   folder. Notes then go into a `meeting-notes/` folder
    inside it (and `share/` for team notes), and Claude offers to copy in the to-do page.
    Personal and team notes need separate vaults. Do steps 3 and 4 in whichever vaults you
    use. See [Make it yours](#make-it-yours) to change it later.
@@ -303,8 +313,8 @@ you write a note there.
    recording…*, type a title, click *Start*. Tell the others you're recording.
 2. **After the call:** click **● 34m** → *Stop*.
 3. **Write it up:** click **○** → *Write up notes…*. The Claude app opens with `scribe`
-   typed in; press **Enter**. The first time, Claude asks your name and where your notes
-   should go. Then it asks a few questions about the meeting (who was there, what kind of
+   typed in; press **Enter**. The first time, Claude asks your name (and where your notes
+   should go, if the installer didn't ask). Then it asks a few questions about the meeting (who was there, what kind of
    meeting) and transcribes it.
 4. **Read it:** Claude tells you where the note is. Open it in Obsidian, where your to-dos
    also show up on the `Tasks.md` dashboard, or in any Markdown editor.
@@ -372,7 +382,8 @@ Any of these starts it; they all end up in the same place:
 The skill:
 1. finds the newest recording in `input/`;
 2. asks a few quick questions (title, attendees, type), using the names to help Whisper.
-   The first time, it also asks your name and where your notes should go;
+   The first time, it also asks your name, and where your notes should go if the installer
+   didn't ask;
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
 4. sends the transcript to Claude, which writes `meeting-notes/<Title>.md` in your notes
    vault and tells you the path (see [What leaves your Mac](#what-leaves-your-mac));
@@ -437,6 +448,7 @@ meeting, or a click in **○ → Settings**.
 | Add another team or group | pick **other**, then say yes to "save as a profile" | copy a profile file in *Team profiles…* |
 | Set rules for one team only | "from now on, for this team, record vote counts" | *Rules* in that team's profile |
 | Record somewhere else | — | ○ → Settings → *Recordings* |
+| Move the meetingrec folder itself | — | `meetingrec move ~/Projects` (see [Moving things](#moving-things)) |
 | Stop the daily update check | — | ○ → Settings → untick *Check for updates daily* |
 | Use Homebrew's ffmpeg and whisper.cpp instead | — | `meetingrec config set USE_HOMEBREW on`, then `meetingrec update` |
 | Use a more accurate Whisper model | "re-run with medium.en" (download it first, below) | — |
@@ -451,7 +463,9 @@ folder doesn't move the notes already in the old one; ask Claude to move them.
 - **Your name** (personal notes), and how Whisper tends to mishear it. It's how Claude
   tells which to-dos are yours.
 - **Where your notes go:** meetingrec's own `scribe/` or `teamnotes/` vault, or one you
-  already use. Personal and team notes need separate vaults. Claude Code asks permission
+  already use. The installer asks this for personal notes, so Claude only asks if you
+  skipped it; team notes are asked the first time you write them. Personal and team notes
+  need separate vaults. Claude Code asks permission
   the first time it writes outside the meetingrec folder.
 - **Your team's name and roster**, the first time you pick the **team** profile.
 
@@ -480,6 +494,45 @@ with the repo:
   meetingrec: the fork's maintainer fills it with the names and rules everyone on the team
   needs and commits them, so each member gets them on their next update. Never put anything
   in it in your own copy of this repo.
+
+### Moving things
+
+**Your notes folder:** click **○ → Settings → *Personal notes* → *Choose folder…***, or tell
+Claude "keep my notes in ~/Documents/My Vault". Team notes and recordings work the same way.
+Notes already written stay in the old folder: to bring them along, ask Claude to move them.
+Then open the new folder in Obsidian (*Open folder as vault*).
+
+**The meetingrec folder itself:** use `meetingrec move`, not Finder, so everything that
+points at the folder is updated with it:
+```bash
+meetingrec move ~/Projects             # ends up in ~/Projects/meetingrec
+meetingrec move ~/Projects/recorder    # or pick the new name yourself
+```
+Like `mv`, an existing folder means "put it inside". It asks before moving, and refuses while
+a recording is running. Expected:
+```text
+Move meetingrec:
+  from /Users/you/meetingrec
+  to   /Users/you/Projects/meetingrec
+Go ahead? [y/N] y
+moved.
+...
+Update finished. Your recordings, notes, names and settings were not changed.
+
+meetingrec is now in /Users/you/Projects/meetingrec
+```
+It updates the `meetingrec`, `scribe` and `teamnotes` commands, the menu bar, any folder
+setting that pointed inside meetingrec, and Claude Code's permissions for the folder.
+Recordings and notes inside meetingrec move with it. Two things it can't do for you:
+
+- **Obsidian** still looks for a vault in the old place. If it lists one, choose *Open folder
+  as vault* and pick the new folder.
+- **Claude Code** treats the new folder as a new project: it asks once whether to trust it,
+  and earlier sessions are listed under the old folder.
+
+Already moved it in Finder? Move it back and use `meetingrec move`. Or run
+`bash <new folder>/install.sh`, which points the menu bar and commands at the new place but
+not the rest: check `meetingrec config list` for folders that still name the old one.
 
 ### Other settings
 

@@ -253,6 +253,19 @@ install_hammerspoon_app() {
   ok "installed in $dest"
 }
 
+# A folder as typed at a prompt, as an absolute path: ~ expanded, a relative
+# path taken from the home folder, no trailing slash.
+expand_folder() {
+  local f="${1%/}"
+  case "$f" in
+    "~")    f="$HOME" ;;
+    "~/"*)  f="$HOME/${f#"~/"}" ;;
+    /*)     ;;
+    *)      f="$HOME/$f" ;;
+  esac
+  printf '%s\n' "$f"
+}
+
 # Where to clone meetingrec when piped from curl. MEETINGREC_DIR answers ahead
 # of time; with no keyboard to answer with, the default is used.
 choose_repo_dir() {
@@ -264,14 +277,8 @@ choose_repo_dir() {
   [ -n "${MEETINGREC_DIR:-}" ] && return
   [ -t 0 ] || return
   read -r -p "  Where should meetingrec go? Press Enter for ${default/#$HOME/~}, or type a folder: " reply
-  reply="${reply%/}"
   [ -n "$reply" ] || return
-  case "$reply" in
-    "~")    reply="$HOME" ;;
-    "~/"*)  reply="$HOME/${reply#"~/"}" ;;
-    /*)     ;;
-    *)      reply="$HOME/$reply" ;;
-  esac
+  reply="$(expand_folder "$reply")"
   # These would break the menu-bar config, which has the path written into it.
   case "$reply" in
     *[\"\|\\\$\`]*) die "Pick a folder whose path has none of these characters: \" | \\ \$ \`" ;;
@@ -379,6 +386,56 @@ install_config() {
   fi
 }
 
+# Where personal notes go, saved as NOTES_VAULT: the same question the
+# meeting-notes skill asks on its first run, which it then skips. Team notes
+# are left to the team-notes skill, since many people never use them.
+choose_notes_dir() {
+  [ -n "$UPDATE" ] && return
+  local mr="$REPO/bin/meetingrec" current reply out yn
+  if current="$("$mr" config get NOTES_VAULT)"; then
+    step "Your notes"
+    ok "notes go in ${current/#$HOME/~}/meeting-notes"
+    return
+  fi
+  # No keyboard: the skill asks on the first write-up instead.
+  [ -t 0 ] || return
+  step "Your notes"
+  cat <<EOF
+  Where should your meeting notes go?
+    Press Enter for meetingrec's scribe folder (${current/#$HOME/~}).
+    It's already an Obsidian vault with a notes table and a to-do dashboard.
+    Or type the folder of an Obsidian vault you already use. Notes go in a
+    meeting-notes folder inside it.
+
+EOF
+  while :; do
+    read -r -p "  > " reply
+    if [ -z "$reply" ]; then
+      "$mr" config set NOTES_VAULT "" >/dev/null || die "Couldn't save NOTES_VAULT to your config."
+      ok "notes go in ${current/#$HOME/~}/meeting-notes"
+      return
+    fi
+    reply="$(expand_folder "$reply")"
+    case "$reply" in
+      *[\"\$\`\\]*) note "the folder name can't contain \", \$, \` or \\. Try another."; continue ;;
+    esac
+    if [ ! -d "$reply" ]; then
+      read -r -p "  ${reply/#$HOME/~} doesn't exist. Create it? [Y/n] " yn
+      case "$yn" in [nN]*) continue ;; esac
+      mkdir -p "$reply" || { note "couldn't create ${reply/#$HOME/~}. Try another folder."; continue; }
+    fi
+    # config set checks the rest (characters, the team-notes folder) and says why.
+    if out="$("$mr" config set NOTES_VAULT "$reply" 2>&1)"; then
+      reply="$("$mr" config get NOTES_VAULT)"
+      ok "notes go in ${reply/#$HOME/~}/meeting-notes"
+      [ -d "$reply/.obsidian" ] || note "Open ${reply/#$HOME/~} in Obsidian once (Open folder as vault)."
+      return
+    fi
+    out="${out#meetingrec: config: }"
+    note "${out//TEAM_VAULT folder/team-notes folder}"
+  done
+}
+
 install_personal_files() {
   step "Your settings and team profile"
   # Git ignores these, so they can't come down with the clone: each is copied
@@ -431,9 +488,10 @@ install_commands() {
       already+=("$name"); continue
     elif [ -L "$target" ]; then
       old="$(readlink "$target")"
-      # Re-point a link to another meetingrec copy (e.g. after moving the repo);
-      # leave anything else alone.
-      if [ ! -f "$(dirname "$old")/meetingrec" ]; then
+      # Re-point a link to another meetingrec copy, or to one that's gone (moved
+      # in Finder); leave anything else alone.
+      if [ ! -f "$(dirname "$old")/meetingrec" ] \
+          && { [ -e "$old" ] || [ "${old%/bin/$name}" = "$old" ]; }; then
         kept+=("$name"); continue
       fi
     elif [ -e "$target" ]; then
@@ -610,6 +668,7 @@ main() {
   install_clt
   get_repo
   install_config
+  choose_notes_dir
   choose_tool_source
   install_model
   install_tools
