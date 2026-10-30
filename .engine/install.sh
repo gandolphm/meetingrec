@@ -672,9 +672,18 @@ EOF
     return
   fi
 
-  local warnings
+  # Tracks starting seconds apart is about timing, not permissions: both tracks
+  # still recorded, and transcription lines them up. Shown, but not a failure.
+  local warnings skew
   warnings="$(python3 -c 'import json,sys; [print(w) for w in json.load(open(sys.argv[1])).get("warnings", [])]' \
     "$session/session.json" 2>/dev/null)"
+  skew="$(printf '%s\n' "$warnings" | grep -E '^tracks started .* apart' | sed 's/^t/T/')"
+  warnings="$(printf '%s\n' "$warnings" | grep -vE '^tracks started .* apart')"
+  if [ -n "$skew" ]; then
+    note "${skew%% —*}. That's timing, not a permission problem: the second track"
+    note "took a while to start, and transcription lines the two up. If it keeps"
+    note "happening on real calls, connect headphones before you start recording."
+  fi
   if [ -n "$warnings" ]; then
     printf '%s\n' "$warnings" | sed "s/^/  ${R}✗${N} /"
     cat <<EOF
