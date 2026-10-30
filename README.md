@@ -331,7 +331,9 @@ you write a note there.
 4. **Read it:** Claude tells you where the note is. Open it in Obsidian, where your to-dos
    also show up on the `Tasks.md` dashboard, or in any Markdown editor.
 
-Team meeting instead? Use *Write up team notes…* (see [team notes](#write-team-notes-teamnotes)).
+Team meeting instead? Recordings land in `scribe/input/`, so first move the
+recording's folder into `teamnotes/input/`, then use *Write up team notes…* (see
+[team notes](#write-team-notes-teamnotes)).
 
 ---
 
@@ -415,9 +417,13 @@ You can also drop an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`) or a transcript
 
 For a meeting whose notes go to the whole team:
 
-1. Put the recording in `teamnotes/input/`. That can be a phone recording of an
-   in-person meeting, a transcript, or a `meetingrec` session folder moved over from
-   `scribe/input/`.
+1. Put the recording in `teamnotes/input/`. **meetingrec saves recordings to
+   `scribe/input/` (unless you changed where recordings go), so a recorded call has to be
+   moved over first:** in Finder, open
+   `scribe/input/` in your meetingrec folder (`~/meetingrec` unless you moved it) and drag
+   the recording's whole folder, like `2026-10-01T14-00_standup/`, into `teamnotes/input/`.
+   Move the folder, not just the `.wav` files inside it. Phone recordings of in-person
+   meetings and transcripts can go straight into `teamnotes/input/`.
 2. Click **○** → *Write up team notes…* and press **Enter**, or type `teamnotes` in
    Terminal. By hand: `cd <repo>/teamnotes`, run `claude`, then type **"team notes"**.
 3. Pick the **team** profile (or **other**). The first time you pick **team**, Claude asks
