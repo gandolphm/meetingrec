@@ -72,8 +72,8 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
   versions: about **2–2.5 GB** in all. Recordings take about 230 MB per hour of meeting
   until their notes are written.
 - **No Homebrew, and no administrator password** for meetingrec itself (unless you
-  [choose Homebrew](#quick-install-recommended)). If your Mac doesn't have Apple's Command
-  Line Tools yet, macOS may ask an administrator to approve them.
+  choose Homebrew in the [install options](#install-options)). If your Mac doesn't have
+  Apple's Command Line Tools yet, macOS may ask an administrator to approve them.
 - *Optional:* the **[Claude app](https://claude.ai/download)** for Mac, so *Write up notes…*
   in the menu bar opens there instead of in Terminal.
 
@@ -262,8 +262,9 @@ prompts. When you reach the `>` prompt, type `/exit`.
 
 Then [set up Obsidian](#set-up-obsidian) (recommended).
 
+<a name="install-options"></a>
 <details>
-<summary>Options</summary>
+<summary>Install options: choose the folder, skip the menu bar, use Homebrew</summary>
 
 - Choose the folder without being asked (for example in a script):
   `curl -fsSL …/install.sh | MEETINGREC_DIR=~/Documents/meetingrec bash`
