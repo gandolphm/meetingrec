@@ -1,7 +1,7 @@
 -- MeetingRec menu bar.
 --
 -- Deliberately uses only hs.menubar, hs.task, hs.timer, hs.dialog, hs.notify,
--- hs.focus and hs.autoLaunch. None of those need the Accessibility permission —
+-- hs.settings, hs.focus and hs.autoLaunch. None of those need the Accessibility permission —
 -- that one covers hs.window, hs.eventtap and hs.uielement (window management,
 -- input synthesis, reading other apps' UI), which this build never touches. Accessibility is the
 -- broadest grant macOS offers, so it stays declined. If you ever add an API
@@ -123,6 +123,9 @@ local function notify(title, text)
   hs.notify.new({ title = title, informativeText = text }):send()
 end
 
+-- A message for after hs.reload, which clears notifications sent just before it.
+local AFTER_RELOAD = "meetingrec.afterReload"
+
 -- ---------------------------------------------------------------------------
 -- Shelling out
 -- ---------------------------------------------------------------------------
@@ -236,7 +239,9 @@ local function doUpdate()
     end
     updatesAvailable = 0
     local now = stdOut:match("updated %S+ → (%x+)") or stdOut:match("already up to date %((%x+)%)")
-    notify("MeetingRec", now and ("Updated to " .. now) or "Updated")
+    -- A notification sent now would vanish with the reload, so the reloaded
+    -- config shows it (see the end of this file).
+    hs.settings.set(AFTER_RELOAD, now and ("Updated to " .. now) or "Updated")
     -- install.sh may have rewritten this file. Deferred for the same reason
     -- as "Reload config" in the menu below.
     hs.timer.doAfter(0.1, hs.reload)
@@ -568,3 +573,9 @@ end)
 refreshTitle()
 resync()
 log("init.lua loaded; menu bar item created")
+
+local pending = hs.settings.get(AFTER_RELOAD)
+if pending then
+  hs.settings.clear(AFTER_RELOAD)
+  notify("MeetingRec", pending)
+end
