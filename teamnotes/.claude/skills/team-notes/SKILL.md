@@ -60,6 +60,9 @@ shell's working directory, so the skill can't land in `../scribe/` by mistake.
 
 - **`$TEAMNOTES`** — the `teamnotes/` folder in the repo. Holds `CLAUDE.md` and the inbox.
 - **`$INBOX`** — `$TEAMNOTES/input/`, where phone recordings and transcripts are dropped.
+- **`$KEEP`** — `scribe/transcripts/`, where a transcript goes when the user chooses to keep
+  it (Step 5). All kept transcripts live there, team or personal; it's the only place in
+  `../scribe/` this skill touches.
 - **`$VAULT`** — the Obsidian vault the notes go into: `meeting-notes/`, `share/`,
   `Action Items.md` and the Base. `$TEAMNOTES` unless the user chose another.
 
@@ -70,6 +73,7 @@ command so the default lives in one place:
 TEAMNOTES="$(cd "${CLAUDE_SKILL_DIR}/../../.." && pwd)"
 MR="$(dirname "$TEAMNOTES")/.engine/bin/meetingrec"
 INBOX="$TEAMNOTES/input"
+KEEP="$(dirname "$TEAMNOTES")/scribe/transcripts"
 VAULT="$("$MR" config get TEAM_VAULT)"; VAULT_SAVED=$?
 echo "VAULT=$VAULT (saved: $([ $VAULT_SAVED -eq 0 ] && echo yes || echo no))"
 [ -d "$INBOX" ] || echo "MISSING INBOX: $INBOX"
@@ -483,10 +487,47 @@ grep -n 'inFolder' "$VAULT/index.base"   # must read file.inFolder("meeting-note
 
 ### Step 5 — Clean up the used input
 
-**Only after both files are written and read back**, delete just the input you used plus
+**Only after both files are written and read back**, deal with just the input you used plus
 its own intermediate artifacts. Leave any *other* entry in `$INBOX` alone.
 
-For a session directory, the whole directory is the artifact:
+**Verify first.** The note may become the only record of the meeting — there is no second
+pass. Spot-check every amount, tally, and owner against the transcript before this step.
+When in doubt, leave the input in place and say so; a stale file in `$INBOX` costs nothing.
+
+**Ask what happens to the transcript**, every run, with `AskUserQuestion`:
+
+- Question: "The notes are saved. What should happen to the transcript?"
+- Option 1, **"Delete it"**: "The recording and its transcript are removed. The note is the
+  only record of the meeting."
+- Option 2, **"Move it to transcripts/"**: "The transcript text is kept in
+  scribe/transcripts/ to look back at later. The audio is deleted."
+
+Don't ask when the answer is already known: the user's request said it in any phrasing, or a
+rule in `personal.md` or the profile settles it ("always keep transcripts for this team"). If
+they answer with a lasting preference, save it as a rule the way Step 0.1 describes, so later
+runs don't ask. If they asked to keep the recording itself, move the whole session directory
+or audio file into `$KEEP` instead of the steps below.
+
+**Move it to transcripts/.** `$KEEP` must exist; if it doesn't, stop and ask rather than
+creating it or falling back to deleting. For a session directory, keep the text and the
+session metadata, in a folder of the same name:
+
+```bash
+[ -d "$KEEP" ] || echo "MISSING KEEP: $KEEP"
+mkdir "$KEEP/<session-dir>"
+for f in merged.txt mic.srt system.srt session.json; do
+  [ -f "$INBOX/<session-dir>/$f" ] && mv "$INBOX/<session-dir>/$f" "$KEEP/<session-dir>/"
+done
+ls "$KEEP/<session-dir>"
+```
+
+Check that `merged.txt` (or `mic.srt` for a mic-only session) is listed, then delete what's
+left: `rm -rf "$INBOX/<session-dir>"`. For a flat file, keep the transcript: the `.srt` made
+from a phone recording, or the dropped `.txt`/`.srt` itself. Move it with `mv -n` (never over
+a file of the same name; add the date to the name if one exists), then delete the source
+audio and its `.16k.wav`.
+
+**Delete it.** For a session directory, the whole directory is the artifact:
 
 ```bash
 rm -rf "$INBOX/<session-dir>"
@@ -498,11 +539,9 @@ For a flat file, the source plus anything derived from the same basename:
 rm -f "$INBOX/<used-file>" "$INBOX/<used-basename>".srt "$INBOX/<used-basename>".16k.wav
 ```
 
-Never run either before the note is on disk, and never wipe the whole folder.
-
-**Verify before deleting.** The note becomes the only record of the meeting — there is no
-second pass. Spot-check every amount, tally, and owner against the transcript first. When
-in doubt, leave the input in place and say so; a stale file in `$INBOX` costs nothing.
+Never delete before the note is on disk, and never wipe the whole folder. `$INBOX` must end
+the run without this input either way, or the next run would write the note a second time.
+Say in the Step 6 report where a kept transcript landed.
 
 ### Step 6 — Report back
 

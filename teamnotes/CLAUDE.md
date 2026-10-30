@@ -11,7 +11,8 @@ Team notes go to this folder unless the user chose another vault on the first ru
 **This vault is independent of the `meeting-notes` skill in `../scribe/`.** Never read from
 or write to `../scribe/`, or to the user's personal-notes vault, while working here. That skill handles the user's own personal notes —
 a different vault, a different voice, and a different template. One-on-ones and personal
-write-ups do not belong here.
+write-ups do not belong here. The one exception to keeping apart: a transcript the user
+chooses to keep goes in `../scribe/transcripts/`, where all kept transcripts live.
 
 "The user" below means whoever is running the skill.
 

@@ -53,8 +53,8 @@ of them.
   `scribe/` folder unless the user chose another.
 - **`$INBOX`** — the recorder's drop folder: `scribe/input/`, or wherever `meetingrec`'s
   `OUTPUT_ROOT` points.
-- **`$KEEP`** — the transcript archive, `scribe/transcripts/`. Only used when the user asks
-  for the transcript to be kept (Step 5).
+- **`$KEEP`** — the transcript archive, `scribe/transcripts/`. Used when the user chooses
+  to keep the transcript (Step 5).
 
 The folders are settings in `~/.config/meetingrec/config.sh`, read through the `meetingrec`
 command so the defaults live in one place:
@@ -520,37 +520,55 @@ Bases' file format shifts between Obsidian versions.
 ### Step 5 — Clean up the used input
 
 **Only after the note file has been successfully written**, deal with just the input you used
-plus its own intermediate artifacts. By default the user doesn't want a recording or transcript
-retained once its note exists, but leave any *other* entry in `$INBOX` alone — it may be an
+plus its own intermediate artifacts. Leave any *other* entry in `$INBOX` alone — it may be an
 unprocessed recording waiting for its own run.
 
-**If the user asked for the transcript to be kept** — in any phrasing ("keep the transcript",
-"don't delete it", "save the recording", "hang onto that one") — archive instead of deleting.
-Move the whole session directory into `$KEEP` under its own name, so the transcript travels
-with the session metadata that explains it:
+**Verify first.** The note may become the only record — there is no second pass. If anything
+in it is worth acting on, confirm it reads correctly against the transcript *before* this
+step. When in doubt, leave the input in place and tell the user; a stale directory in
+`$INBOX` costs nothing, and a deleted recording cannot be recovered.
+
+**Ask what happens to the transcript**, every run, with `AskUserQuestion`:
+
+- Question: "The note is saved. What should happen to the transcript?"
+- Option 1, **"Delete it"**: "The recording and its transcript are removed. The note is the
+  only record of the meeting."
+- Option 2, **"Move it to transcripts/"**: "The transcript text is kept in
+  scribe/transcripts/ to look back at later. The audio is deleted."
+
+Don't ask when the answer is already known: the user's request said it in any phrasing
+("keep the transcript", "don't keep anything"), or a rule in `personal.md` settles it
+("always keep transcripts"). If they answer with a lasting preference ("always keep them"),
+save it as a rule the way Step 0.1 describes, so later runs don't ask.
+
+**If they asked to keep the recording itself** ("save the recording", "keep the audio"),
+move the whole session directory, audio included, instead of the steps below:
+`mv "$INBOX/<session-dir>" "$KEEP/<session-dir>"`.
+
+**Move it to transcripts/.** `$KEEP` must exist; if it doesn't, stop and ask rather than
+creating it or falling back to deleting. For a session directory, keep the text and the
+session metadata that explains it, in a folder of the same name:
 
 ```bash
 [ -d "$KEEP" ] || echo "MISSING KEEP: $KEEP"
-mv "$INBOX/<session-dir>" "$KEEP/<session-dir>"
+mkdir "$KEEP/<session-dir>"
+for f in merged.txt mic.srt system.srt session.json; do
+  [ -f "$INBOX/<session-dir>/$f" ] && mv "$INBOX/<session-dir>/$f" "$KEEP/<session-dir>/"
+done
+ls "$KEEP/<session-dir>"
 ```
 
-For a flat file, move the source and everything derived from its basename the same way. `mv`,
-not `cp` — `$INBOX` must end the run empty of the input either way, or the next run will treat
-it as an unprocessed recording and write the note a second time. If `$KEEP` is missing, stop
-and ask rather than creating it or falling back to `rm`; a keep request is the one case where
-the input is unrecoverable if this goes wrong. Say in the Step 6 report where it landed.
+Check that `merged.txt` (or, for a `--mic-only` session, `mic.srt`) is listed, then delete
+what's left: `rm -rf "$INBOX/<session-dir>"`. For a flat file, keep the transcript: the
+`.srt` made from dropped audio, or the dropped `.txt`/`.srt` itself. Move it with
+`mv -n` (never over a file of the same name; add the date to the name if one exists), then
+delete the source audio and its `.wav`.
 
-**Otherwise — the default — delete it.** For a session directory, the whole directory is the
-artifact:
+**Delete it.** For a session directory, the whole directory is the artifact:
 
 ```bash
 rm -rf "$INBOX/<session-dir>"
 ```
-
-This takes `session.json` and the ffmpeg logs with it, which is fine: `meetingrec stop` already
-appended the measurements it took — clock error, track offsets, peak levels, any warnings — to
-`~/.local/state/meetingrec/metrics.jsonl`. Nothing diagnostic is lost by
-cleaning up, and there is no need to copy anything out first.
 
 For a flat file, remove the source plus anything derived from the same basename:
 
@@ -558,14 +576,14 @@ For a flat file, remove the source plus anything derived from the same basename:
 rm -f "$INBOX/<used-file>" "$INBOX/<used-basename>".srt "$INBOX/<used-basename>".wav
 ```
 
-Never run either before the note is on disk, and never wipe the whole folder. **Delete only
-when the user hasn't asked to keep the transcript** — a keep request always wins over the
-default, and if it's ambiguous whether they asked, archive to `$KEEP` and say so.
+Either way this takes the session's ffmpeg logs (and, when deleting, `session.json`), which
+is fine: `meetingrec stop` already appended the measurements it took — clock error, track
+offsets, peak levels, any warnings — to `~/.local/state/meetingrec/metrics.jsonl`.
 
-**Verify before deleting.** The note becomes the only artifact — there is no second pass. If
-anything in it is worth acting on, confirm it reads correctly against the transcript *first*.
-When in doubt, leave the input in place and tell the user; a stale directory in `$INBOX` costs
-nothing, and a deleted recording cannot be recovered.
+Never delete before the note is on disk, and never wipe the whole folder. `$INBOX` must end
+the run without this input either way, or the next run will treat it as an unprocessed
+recording and write the note a second time. Say in the Step 6 report where a kept
+transcript landed.
 
 ### Step 6 — Report back
 

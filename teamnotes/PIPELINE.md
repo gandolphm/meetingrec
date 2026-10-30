@@ -1,7 +1,8 @@
 # Team Notes Pipeline (this vault)
 
 Independent of `../scribe/`. Same transcription engine, different skill, voice, template,
-and audience. Nothing here reads from or writes to the scribe vault.
+and audience. Nothing here reads from or writes to the scribe vault; the only thing it puts
+in `../scribe/` is a transcript you chose to keep, in `../scribe/transcripts/`.
 
 ## Vault structure
 
@@ -53,8 +54,8 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 8. **Write note** — `meeting-notes/<prefix> — YYYY-MM-DD.md` per the SKILL.md template.
 9. **Write share copy** — `make_share_copy.py` → `share/<same basename>.md`.
 10. **Ensure Base exists** — copy `assets/index.base` to the vault root if no `*.base` is present.
-11. **Clean up input** — delete only the consumed file/dir and its derived artifacts, after
-    both outputs are verified.
+11. **Clean up input** — after both outputs are verified, ask whether to delete the transcript
+    or move it to `../scribe/transcripts/`; either way the consumed file/dir leaves `input/`.
 12. **Report** — both paths, counts per person, unresolved flags, trust caveats.
 
 ## Recording

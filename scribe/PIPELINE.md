@@ -11,7 +11,7 @@ scribe/                         (Obsidian vault root — open this folder as a v
 ├── Tasks.md                    # Tasks-plugin dashboard over every note's to-dos (yours to edit)
 ├── index.base                  # Obsidian Base over meeting-notes/ — created on the first run
 ├── input/                      # recorder inbox: meetingrec session dirs, or a dropped audio/transcript file
-├── transcripts/                # archive — only used when you ask to keep a transcript
+├── transcripts/                # transcripts you chose to keep at the end of a run
 ├── meeting-notes/              # output — one .md file per meeting (created on the first run)
 └── .claude/
     └── skills/meeting-notes/
@@ -55,8 +55,8 @@ scribe/                         (Obsidian vault root — open this folder as a v
    Body: TL;DR callout → To-Do (checkboxes with `#work`, priority, ⏳/📅) → Action Items →
    Decisions → Questions to Ask → Key Points. Empty sections are omitted.
 8. **Ensure Base exists** — copy `assets/index.base` to the vault root if no Base exists yet.
-9. **Clean up input** — delete only the consumed session dir or file (or move it to
-   `transcripts/` if you asked to keep it). Only after the note is written.
+9. **Clean up input** — only after the note is written, ask whether to delete the transcript
+   or move it to `transcripts/`; either way the consumed session dir or file leaves `input/`.
 10. **Report** — note path + one-line summary (e.g. "3 to-dos, 1 decision").
 
 ## Key architectural notes

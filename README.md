@@ -28,7 +28,7 @@ meetingrec/
 ├── scribe/                     # notes folder #1 (an Obsidian vault) — personal notes
 │   ├── input/                  #   recordings land here
 │   ├── meeting-notes/          #   notes are written here, unless you pick your own vault (made on first write-up)
-│   ├── transcripts/            #   only used if you ask to keep a transcript
+│   ├── transcripts/            #   transcripts you chose to keep, personal and team
 │   ├── Tasks.md                #   to-do dashboard
 │   └── .claude/skills/meeting-notes/
 │       └── reference/          #   your personal.md (names, rules) lives here
@@ -399,8 +399,9 @@ The skill:
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
 4. sends the transcript to Claude, which writes `meeting-notes/<Title>.md` in your notes
    vault and tells you the path (see [What leaves your Mac](#what-leaves-your-mac));
-5. deletes the recording. Say **"keep the transcript"** to move it to `transcripts/`
-   instead;
+5. asks whether to delete the transcript or move it to `transcripts/`, then clears the
+   recording out of `input/`. Say "always keep transcripts" (or "always delete them") and
+   it stops asking;
 6. offers to remember any names Whisper got wrong, and any preferences your corrections
    suggested.
 
@@ -426,6 +427,8 @@ For a meeting whose notes go to the whole team:
    - `meeting-notes/<Team> — YYYY-MM-DD.md`, the full note, with links for Obsidian.
    - `share/<Team> — YYYY-MM-DD.md`, plain Markdown to paste into Slack, email or a
      Google Doc.
+5. Choose whether to delete the transcript or move it to `scribe/transcripts/`, the same
+   question and folder as for personal notes.
 
 `Action Items.md` shows everyone's open items, grouped by owner.
 
