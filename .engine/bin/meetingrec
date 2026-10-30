@@ -960,8 +960,9 @@ for f in sys.argv[3:]:
 #   meetingrec uninstall [--keep-notes | --delete-notes]
 #                        [--keep-claude | --remove-claude] [--yes] [--dry-run]
 #
-# --dry-run changes nothing. Its first line is machine-read by the menu bar:
+# --dry-run changes nothing. Its first two lines are machine-read by the menu bar:
 #   plan <files of yours> <remove|keep Hammerspoon> <offer|none for Claude Code>
+#   stays <the other programs on this Mac that stay, as a phrase>
 # followed by the same list a real run shows.
 
 # Files of yours in scribe/ and teamnotes/: anything git didn't ship, or that
@@ -976,6 +977,18 @@ user_files() {
         cmp -s "$REPO_ROOT/$f" "$REPO_ROOT/${f%.md}.example.md" && continue
         printf '%s\n' "$f"
       done
+}
+
+# "a", "a and b", "a, b and c"
+and_list() {
+  local out="" i=0
+  for v in "$@"; do
+    i=$((i + 1))
+    if [ "$i" -eq 1 ]; then out="$v"
+    elif [ "$i" -eq $# ]; then out="$out and $v"
+    else out="$out, $v"; fi
+  done
+  printf '%s' "$out"
 }
 
 cmd_uninstall() {
@@ -1065,9 +1078,19 @@ cmd_uninstall() {
     case "$v/" in /|"$repo/"*) ;; *) [ -d "$v" ] && outside+=("$v") ;; esac
   done
 
+  # Other programs that stay, named only if they're on this Mac.
+  local stays=()
+  [ -z "$hs_app" ] && [ -n "$(ls -d /Applications/Hammerspoon.app "$HOME/Applications/Hammerspoon.app" 2>/dev/null)" ] \
+    && stays+=("Hammerspoon")
+  [ ${#claude_parts[@]} -eq 0 ] && { command -v claude >/dev/null || [ -x "$HOME/.local/bin/claude" ]; } \
+    && stays+=("Claude Code")
+  stays+=("Apple's command line tools")
+  [ -x /opt/homebrew/bin/brew ] && stays+=("Homebrew")
+
   if [ "$dry" -eq 1 ]; then
     printf 'plan %s %s %s\n' "$count" "$([ -n "$hs_app" ] && echo remove || echo keep)" \
       "$([ ${#claude_parts[@]} -gt 0 ] && echo offer || echo none)"
+    printf 'stays %s\n' "$(and_list "${stays[@]}")"
   fi
   echo "This removes:"
   for p in "${gone[@]}"; do printf '  %s\n' "${p/#$HOME/~}"; done
@@ -1079,14 +1102,18 @@ cmd_uninstall() {
   [ "$count" -gt 0 ] && [ "$notes" = keep ] && printf '  %s\n' "$yours"
   [ "$count" -gt 0 ] && [ -z "$notes" ] && printf '  %s, unless you choose to delete them\n' "$yours"
   for v in ${outside[@]+"${outside[@]}"}; do printf '  %s\n' "${v/#$HOME/~}"; done
-  [ -z "$hs_app" ] && [ -n "$(ls -d /Applications/Hammerspoon.app "$HOME/Applications/Hammerspoon.app" 2>/dev/null)" ] \
-    && printf '  Hammerspoon (you had it before, or it runs a config of yours)\n'
-  case "$claude" in
-    remove) ;;
-    "") printf '  Claude Code, unless you choose to remove it (the installer added it)\n' ;;
-    *)  printf '  Claude Code\n' ;;
-  esac
-  printf '  Apple'\''s command line tools and Homebrew\n'
+  if [ ${#claude_parts[@]} -gt 0 ]; then
+    case "$claude" in
+      "")   printf '  Claude Code, unless you choose to remove it (the installer added it)\n' ;;
+      keep) printf '  Claude Code\n' ;;
+    esac
+  fi
+  for v in "${stays[@]}"; do
+    case "$v" in
+      Hammerspoon) printf '  Hammerspoon (you had it before, or it runs a config of yours)\n' ;;
+      *) printf '  %s\n' "$v" ;;
+    esac
+  done
   [ "$dry" -eq 1 ] && return 0
 
   if [ "$yes" -eq 0 ]; then

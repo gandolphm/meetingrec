@@ -624,7 +624,7 @@ This removes:
 It keeps:
   your notes, recordings and settings in ~/meetingrec/scribe and teamnotes (12 files), unless you choose to delete them
   Claude Code, unless you choose to remove it (the installer added it)
-  Apple's command line tools and Homebrew
+  Apple's command line tools
 Uninstall meetingrec? [y/N] y
 Delete your 12 files in scribe and teamnotes too? They can't be recovered. [y/N] n
 Remove Claude Code too? The installer added it. Its settings and history in ~/.claude stay. [y/N] n

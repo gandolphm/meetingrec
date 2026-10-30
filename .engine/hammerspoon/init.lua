@@ -454,11 +454,12 @@ local function uninstall()
     end
     local count, hsAction, claudeOffer = stdOut:match("^plan (%d+) (%a+) (%a+)")
     count = tonumber(count) or 0
+    local stays = stdOut:match("\nstays ([^\n]+)") or "Apple's command line tools"
     local button = hs.dialog.blockAlert("Uninstall meetingrec?",
       "This removes meetingrec's programs, settings and commands, and this menu-bar button" ..
         (hsAction == "remove" and ", and Hammerspoon, which the installer added for it" or "") .. ".\n\n" ..
-        (claudeOffer == "offer" and "Apple's command line tools and Homebrew stay. You'll be asked about Claude Code."
-          or "Claude Code, Apple's command line tools and Homebrew stay."),
+        "These stay on your Mac: " .. stays .. "." ..
+        (claudeOffer == "offer" and " You'll be asked about Claude Code." or ""),
       "Cancel", "Uninstall", "warning")
     if button ~= "Uninstall" then return end
     local notes = "--keep-notes"
