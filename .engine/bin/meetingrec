@@ -10,6 +10,7 @@
 #   meetingrec move <folder>
 #   meetingrec uninstall [--keep-notes | --delete-notes] [--keep-claude | --remove-claude]
 #                        [--yes] [--dry-run]
+#   meetingrec vault-root <folder>   (for the installer, skills and menu bar)
 #
 # Captures only. Transcription is a separate, later process (the `meeting-notes`
 # skill) so a bad transcription run can never cost a recording.
@@ -1181,6 +1182,31 @@ cmd_uninstall() {
 }
 
 # --------------------------------------------------------------------------
+# vault-root
+# --------------------------------------------------------------------------
+# Notes go in meeting-notes/ inside the folder picked for them, so a folder
+# inside a vault (often the vault's own meeting-notes) would nest them where
+# the vault's notes table can't see them. Prints the folder to use instead and
+# exits 0; exits 1 when the folder is fine as it is. The installer, both skills
+# and the menu bar's folder pickers ask "use this instead?" with it.
+#
+#   meetingrec vault-root <folder>
+cmd_vault_root() {
+  [ $# -eq 1 ] || die "usage: meetingrec vault-root <folder>"
+  local f="${1%/}" p
+  case "$f" in "~") f="$HOME" ;; "~/"*) f="$HOME/${f#\~/}" ;; esac
+  case "$f" in /*) ;; *) f="$PWD/$f" ;; esac
+  [ -d "$f/.obsidian" ] && return 1
+  p="$(dirname "$f")"
+  while [ "$p" != / ] && [ "$p" != "$HOME" ]; do
+    [ -d "$p/.obsidian" ] && { echo "$p"; return 0; }
+    p="$(dirname "$p")"
+  done
+  [ "$(basename "$f")" = meeting-notes ] && { dirname "$f"; return 0; }
+  return 1
+}
+
+# --------------------------------------------------------------------------
 # status
 # --------------------------------------------------------------------------
 cmd_status() {
@@ -1207,6 +1233,7 @@ case "${1:-}" in
   config) shift; cmd_config "$@" ;;
   move)   shift; cmd_move "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
+  vault-root) shift; cmd_vault_root "$@" ;;
   *) cat >&2 <<EOF
 usage: meetingrec start [title] [--mic-only]
        meetingrec stop

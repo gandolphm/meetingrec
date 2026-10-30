@@ -462,6 +462,15 @@ EOF
     case "$reply" in
       *[\"\$\`\\]*) note "the folder name can't contain \", \$, \` or \\. Try another."; continue ;;
     esac
+    # A folder inside a vault, often its own meeting-notes: notes would land a
+    # level too deep, where the vault's notes table can't see them.
+    local better
+    if better="$("$mr" vault-root "$reply")"; then
+      note "Notes go in a meeting-notes folder inside the folder you pick, so this would"
+      note "put them in ${reply/#$HOME/~}/meeting-notes."
+      read -r -p "  Use ${better/#$HOME/~} instead? [Y/n] " yn
+      case "$yn" in [nN]*) ;; *) reply="$better" ;; esac
+    fi
     if [ ! -d "$reply" ]; then
       read -r -p "  ${reply/#$HOME/~} doesn't exist. Create it? [Y/n] " yn
       case "$yn" in [nN]*) continue ;; esac

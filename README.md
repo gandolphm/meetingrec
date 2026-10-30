@@ -471,6 +471,12 @@ shows every setting and `meetingrec config set NOTES_VAULT ~/path` changes one (
 `TEAM_VAULT`, `OUTPUT_ROOT`, and `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`). Changing a notes
 folder doesn't move the notes already in the old one; ask Claude to move them.
 
+Pick the vault itself, not its `meeting-notes` folder: notes go in a `meeting-notes` folder
+inside whatever you pick, and meetingrec offers the vault instead if you pick a folder inside
+one. A vault that already has a `meeting-notes` folder is fine: new notes go in beside your
+own, and nothing is ever overwritten. A note whose name is taken (a weekly meeting, say)
+gets the date added, like `Acme check-in (2026-10-30).md`.
+
 ### What Claude asks the first time
 
 - **Your name** (personal notes), and how Whisper tends to mishear it. It's how Claude

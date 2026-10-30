@@ -407,7 +407,21 @@ local function chooseFolder(name, label)
   if not path then return end
   path = path:gsub("^file://", ""):gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)
   path = path:gsub("(.)/$", "%1")
-  saveSetting(name, path, function() folderChanged(name, label, old) end)
+  local function save(p) saveSetting(name, p, function() folderChanged(name, label, old) end) end
+  if name == "OUTPUT_ROOT" then save(path) return end
+  -- A folder inside a vault (often its own meeting-notes) would put notes a
+  -- level too deep, where the vault's notes table can't see them.
+  run({ "vault-root", path }, function(exitCode, stdOut)
+    local better = exitCode == 0 and stdOut:match("^([^\n]+)")
+    if better then
+      local button = hs.dialog.blockAlert("Use " .. tilde(better) .. " instead?",
+        "Notes go in a meeting-notes folder inside the folder you pick, so " .. tilde(path) ..
+          " would put them in " .. tilde(path) .. "/meeting-notes.",
+        "Use " .. tilde(better), "Keep my choice")
+      if button ~= "Keep my choice" then path = better end
+    end
+    save(path)
+  end)
 end
 
 local function folderMenu(name, label)

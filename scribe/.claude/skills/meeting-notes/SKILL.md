@@ -107,6 +107,17 @@ Save the answer, then re-run Step 0 so `$VAULT` holds the new folder:
 "$MR" config set NOTES_VAULT "<their folder>"  # option 2
 ```
 
+Before saving a folder of their own, check it isn't inside a vault (often the vault's own
+`meeting-notes`), which would put the notes a level too deep, where the vault's notes table
+can't see them:
+
+```bash
+"$MR" vault-root "<their folder>"   # prints the folder to use instead, or nothing
+```
+
+If it prints a folder, ask with `AskUserQuestion` whether to use that one instead
+(Recommended) or keep theirs, and save whichever they pick.
+
 If `config set` says the folder doesn't exist, check the path with the user (a typo is the
 usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says the folder is
 already the team-notes vault, explain that personal and team notes need separate folders and
@@ -453,6 +464,17 @@ Write a single file to `$VAULT/meeting-notes/<Title>.md` (Step 0 already created
 `file.inFolder("meeting-notes")`, which does not match a nested path. Don't put the date in the filename — it lives in the `date:` frontmatter field,
 which is the single source of truth and what the Base sorts on. Follow the frontmatter
 conventions and template below exactly — they are what make backlinks and the Base work.
+
+**Never overwrite a note.** A recurring meeting reuses its title, and a vault the user
+already had may hold notes of their own, so check the name first:
+
+```bash
+[ -e "$VAULT/meeting-notes/<Title>.md" ] && echo TAKEN
+```
+
+If it's taken, add the meeting's date: `<Title> (YYYY-MM-DD).md`. If that is taken too, add
+` 2`, ` 3` and so on: `<Title> (YYYY-MM-DD) 2.md`. Use the final name everywhere the note is
+referred to afterwards, including the report.
 
 ### Step 4 — Ensure the Notes Base exists
 

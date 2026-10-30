@@ -111,6 +111,17 @@ Save the answer, then re-run Step 0 so `$VAULT` holds the new folder:
 "$MR" config set TEAM_VAULT "<their folder>"  # option 2
 ```
 
+Before saving a folder of their own, check it isn't inside a vault (often the vault's own
+`meeting-notes`), which would put the notes a level too deep, where the vault's notes table
+can't see them:
+
+```bash
+"$MR" vault-root "<their folder>"   # prints the folder to use instead, or nothing
+```
+
+If it prints a folder, ask with `AskUserQuestion` whether to use that one instead
+(Recommended) or keep theirs, and save whichever they pick.
+
 If `config set` says the folder doesn't exist, check the path with the user (a typo is the
 usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says the folder is
 already the personal-notes vault, explain that team and personal notes need separate vaults
@@ -424,6 +435,16 @@ script will list them again.
 Write one file to `$VAULT/meeting-notes/<filename prefix> — YYYY-MM-DD.md`, prefix from the
 profile (e.g. `Acme Team — 2026-09-10.md`). The date **is** in the filename here: every meeting of a team has the same title, so the date
 is what makes filenames unique. `date:` in the frontmatter is still the sort key.
+
+**Never overwrite a note or a share copy.** Two meetings of one team on the same day, or a
+vault that already held notes, can collide, so check both folders first:
+
+```bash
+ls "$VAULT/meeting-notes/<basename>.md" "$VAULT/share/<basename>.md" 2>/dev/null
+```
+
+If either exists, add ` 2`, ` 3` and so on until neither does: `Acme Team — 2026-09-10 2.md`.
+The share copy in Step 3.5 takes the same name automatically.
 
 Follow the frontmatter conventions and the template at the end of this file exactly,
 inserting the profile's extra sections where the template marks them.
