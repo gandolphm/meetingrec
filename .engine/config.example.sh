@@ -3,9 +3,9 @@
 #   mkdir -p ~/.config/meetingrec && cp .engine/config.example.sh ~/.config/meetingrec/config.sh
 
 # Path to the audiotee binary (install.sh puts it here; see .engine/docs/manual-install.md step 3).
-AUDIOTEE_BIN="$HOME/bin/audiotee"
+AUDIOTEE_BIN="$HOME/.local/share/meetingrec/bin/audiotee"
 
-# The audiotee commit in use. If you built it yourself: git -C ~/src/audiotee rev-parse --short HEAD
+# The audiotee commit in use. If you built it yourself: git -C <your audiotee clone> rev-parse --short HEAD
 #
 # audiotee publishes no releases or tags, so this is the only version identifier
 # that exists. It is written into every session.json — if a recording ever comes
@@ -15,7 +15,7 @@ AUDIOTEE_BIN="$HOME/bin/audiotee"
 #
 # In this file (config.example.sh) it's the pin: install.sh and the GitHub Action
 # install and build this commit. In your config.sh it's only a fallback: when
-# install.sh installed audiotee, the commit it wrote to ~/bin/audiotee.commit wins.
+# install.sh installed audiotee, the commit it wrote next to it (audiotee.commit) wins.
 AUDIOTEE_SHA="56ac954"
 
 # SHA-256 of the prebuilt audiotee for that commit, published by the "Build

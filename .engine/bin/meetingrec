@@ -8,6 +8,8 @@
 #   meetingrec update [--check]
 #   meetingrec config get|set <NAME> [value] | list
 #   meetingrec move <folder>
+#   meetingrec uninstall [--keep-notes | --delete-notes] [--keep-claude | --remove-claude]
+#                        [--yes] [--dry-run]
 #
 # Captures only. Transcription is a separate, later process (the `meeting-notes`
 # skill) so a bad transcription run can never cost a recording.
@@ -28,7 +30,7 @@ CONFIG="${MEETINGREC_CONFIG:-$HOME/.config/meetingrec/config.sh}"
 # shellcheck source=/dev/null
 [ -f "$CONFIG" ] && . "$CONFIG"
 
-AUDIOTEE_BIN="${AUDIOTEE_BIN:-$HOME/bin/audiotee}"
+AUDIOTEE_BIN="${AUDIOTEE_BIN:-$HOME/.local/share/meetingrec/bin/audiotee}"
 # install.sh records the commit it installed next to the binary, and rewrites it
 # whenever an update installs a new one. The config's AUDIOTEE_SHA is a copy taken
 # at install time, so it only counts when that file is missing (a manual build).
@@ -944,6 +946,212 @@ for f in sys.argv[3:]:
 }
 
 # --------------------------------------------------------------------------
+# uninstall
+# --------------------------------------------------------------------------
+# Removes what the installer put on this Mac: the code, the downloads, the
+# settings, the commands and the menu bar. Notes and recordings inside the
+# meetingrec folder stay unless you say otherwise; a notes folder elsewhere is
+# never touched. Hammerspoon goes only if the installer installed it and the
+# menu bar was all it ran. Claude Code can go too, if the installer installed
+# it and you say so; its settings and history in ~/.claude always stay. Apple's
+# command line tools, Homebrew and the PATH line in ~/.zprofile stay: other
+# things use them.
+#
+#   meetingrec uninstall [--keep-notes | --delete-notes]
+#                        [--keep-claude | --remove-claude] [--yes] [--dry-run]
+#
+# --dry-run changes nothing. Its first line is machine-read by the menu bar:
+#   plan <files of yours> <remove|keep Hammerspoon> <offer|none for Claude Code>
+# followed by the same list a real run shows.
+
+# Files of yours in scribe/ and teamnotes/: anything git didn't ship, or that
+# changed since. A settings file still identical to its template doesn't count.
+user_files() {
+  local entry f
+  git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain -z --ignored \
+      --untracked-files=all -- scribe teamnotes 2>/dev/null \
+    | while IFS= read -r -d '' entry; do
+        f="${entry:3}"
+        case "$f" in */.DS_Store) continue ;; esac
+        cmp -s "$REPO_ROOT/$f" "$REPO_ROOT/${f%.md}.example.md" && continue
+        printf '%s\n' "$f"
+      done
+}
+
+cmd_uninstall() {
+  local notes="" claude="" yes=0 dry=0 from_menu=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --keep-notes)   notes=keep ;;
+      --delete-notes) notes=delete ;;
+      --keep-claude)   claude=keep ;;
+      --remove-claude) claude=remove ;;
+      --yes)          yes=1 ;;
+      --dry-run)      dry=1 ;;
+      --from-menu)    from_menu=1; yes=1 ;;
+      *) die "unknown option: $arg" ;;
+    esac
+  done
+  # The menu bar can't show this run's output, so a failure has to say so.
+  [ "$from_menu" -eq 1 ] && trap '[ $? -eq 0 ] || notify "meetingrec — uninstall stopped" "Run meetingrec uninstall in Terminal to see why."' EXIT
+  case "$(cmd_status)" in
+    recording*) die "a recording is running. Stop it first, then uninstall." ;;
+  esac
+  local repo="$REPO_ROOT" data="$HOME/.local/share/meetingrec" hs="$HOME/.hammerspoon"
+  # Everything below deletes inside $repo, so make sure it's a meetingrec folder.
+  { [ -f "$repo/.engine/bin/meetingrec" ] && [ "$repo" != "$HOME" ] && [ "$repo" != / ]; } \
+    || die "$repo doesn't look like a meetingrec folder, so nothing was removed."
+  local count
+  count="$(user_files | wc -l | tr -d ' ')"
+  [ "$count" -eq 0 ] && notes=delete
+
+  # The menu-bar config: written outright, or loaded from your own init.lua.
+  local hs_files=() hs_own=0
+  if grep -q '^-- MeetingRec menu bar' "$hs/init.lua" 2>/dev/null; then
+    hs_files+=("$hs/init.lua")
+  elif [ -f "$hs/init.lua" ]; then
+    hs_own=1
+  fi
+  [ -f "$hs/meetingrec.lua" ] && hs_files+=("$hs/meetingrec.lua")
+  [ -f "$hs/meetingrec.log" ] && hs_files+=("$hs/meetingrec.log")
+
+  # What the installer added that wasn't there before (see install.sh's RECORD).
+  local hs_app="" formulae=() claude_ours=0 what detail
+  if [ -f "$data/install-record" ]; then
+    while read -r what detail; do
+      case "$what" in
+        hammerspoon-app) hs_app="$detail" ;;
+        brew-formula)    formulae+=("$detail") ;;
+        claude-code)     claude_ours=1 ;;
+      esac
+    done < "$data/install-record"
+  fi
+  # Hammerspoon stays if it runs a config of yours, or isn't where it was put.
+  case "$hs_app" in
+    brew) [ -x /opt/homebrew/bin/brew ] || hs_app="" ;;
+    */Hammerspoon.app) [ -d "$hs_app" ] || hs_app="" ;;
+    *) hs_app="" ;;
+  esac
+  [ "$hs_own" -eq 1 ] && hs_app=""
+
+  # Claude Code's program files, as its own installer lays them out. Offered only
+  # if meetingrec's installer put them there.
+  local claude_parts=() p
+  if [ "$claude_ours" -eq 1 ]; then
+    for p in "$HOME/.local/bin/claude" "$HOME/.local/share/claude" "$HOME/.local/state/claude" \
+        "$HOME/.cache/claude" "$HOME/Applications/Claude Code URL Handler.app"; do
+      { [ -e "$p" ] || [ -L "$p" ]; } && claude_parts+=("$p")
+    done
+  fi
+  [ ${#claude_parts[@]} -eq 0 ] && claude=keep
+
+  # What goes. Old locations are from installs before everything moved into $data.
+  local gone=() name n v outside=()
+  for p in "$repo/.engine" "$repo/.git" "$repo/.github" "$repo/.gitignore" \
+      "$repo/LICENSE" "$repo/README.md" "$repo/.claude" "$repo/.DS_Store" \
+      "$data" "$HOME/.config/meetingrec" "$STATE_DIR" \
+      ${hs_files[@]+"${hs_files[@]}"} \
+      "$HOME/bin/audiotee" "$HOME/bin/audiotee.commit" "$HOME/src/audiotee" \
+      "$HOME/.whisper-models/ggml-small.en.bin"; do
+    [ -e "$p" ] && gone+=("$p")
+  done
+  for name in meetingrec scribe teamnotes; do
+    p="$HOME/.local/bin/$name"
+    [ -L "$p" ] && [ "$(readlink "$p")" = "$repo/.engine/bin/$name" ] && gone+=("$p")
+  done
+  # Notes folders you picked elsewhere, named so nobody wonders.
+  for n in NOTES_VAULT TEAM_VAULT OUTPUT_ROOT; do
+    v="$(cmd_config get "$n" 2>/dev/null)"
+    case "$v/" in /|"$repo/"*) ;; *) [ -d "$v" ] && outside+=("$v") ;; esac
+  done
+
+  if [ "$dry" -eq 1 ]; then
+    printf 'plan %s %s %s\n' "$count" "$([ -n "$hs_app" ] && echo remove || echo keep)" \
+      "$([ ${#claude_parts[@]} -gt 0 ] && echo offer || echo none)"
+  fi
+  echo "This removes:"
+  for p in "${gone[@]}"; do printf '  %s\n' "${p/#$HOME/~}"; done
+  [ -n "$hs_app" ] && printf '  Hammerspoon (the installer added it for the menu bar)\n'
+  local yours="your notes, recordings and settings in ${repo/#$HOME/~}/scribe and teamnotes ($count files)"
+  [ "$count" -gt 0 ] && [ "$notes" = delete ] && printf '  %s\n' "$yours"
+  [ "$claude" = remove ] && printf '  Claude Code (the installer added it; ~/.claude stays)\n'
+  echo "It keeps:"
+  [ "$count" -gt 0 ] && [ "$notes" = keep ] && printf '  %s\n' "$yours"
+  [ "$count" -gt 0 ] && [ -z "$notes" ] && printf '  %s, unless you choose to delete them\n' "$yours"
+  for v in ${outside[@]+"${outside[@]}"}; do printf '  %s\n' "${v/#$HOME/~}"; done
+  [ -z "$hs_app" ] && [ -n "$(ls -d /Applications/Hammerspoon.app "$HOME/Applications/Hammerspoon.app" 2>/dev/null)" ] \
+    && printf '  Hammerspoon (you had it before, or it runs a config of yours)\n'
+  case "$claude" in
+    remove) ;;
+    "") printf '  Claude Code, unless you choose to remove it (the installer added it)\n' ;;
+    *)  printf '  Claude Code\n' ;;
+  esac
+  printf '  Apple'\''s command line tools and Homebrew\n'
+  [ "$dry" -eq 1 ] && return 0
+
+  if [ "$yes" -eq 0 ]; then
+    [ -t 0 ] || die "nothing was removed. Run this in Terminal to confirm, or add --yes."
+    local yn
+    read -r -p "Uninstall meetingrec? [y/N] " yn
+    case "$yn" in [yY]*) ;; *) echo "Nothing was removed."; return 0 ;; esac
+    if [ -z "$notes" ]; then
+      read -r -p "Delete your $count files in scribe and teamnotes too? They can't be recovered. [y/N] " yn
+      case "$yn" in [yY]*) notes=delete ;; *) notes=keep ;; esac
+    fi
+    if [ -z "$claude" ]; then
+      read -r -p "Remove Claude Code too? The installer added it. Its settings and history in ~/.claude stay. [y/N] " yn
+      case "$yn" in [yY]*) claude=remove ;; *) claude=keep ;; esac
+    fi
+  fi
+  [ -n "$notes" ] || notes=keep
+  [ -n "$claude" ] || claude=keep
+  [ "$notes" = delete ] && gone+=("$repo/scribe" "$repo/teamnotes")
+  [ "$claude" = remove ] && gone+=("${claude_parts[@]}")
+
+  for p in "${gone[@]}"; do
+    # Never anything outside the home folder, whatever went wrong above.
+    case "$p" in "$HOME"/?*) ;; *) warn "skipped $p"; continue ;; esac
+    rm -rf -- "$p" || warn "couldn't remove $p"
+  done
+  [ "$hs_own" -eq 1 ] && sed -i '' '/^require("meetingrec")$/d' "$hs/init.lua"
+  # Only if that left them empty: a ~/bin of yours stays.
+  rmdir "$hs" "$HOME/bin" "$HOME/src" "$HOME/.whisper-models" "$repo" 2>/dev/null
+
+  local msg="Everything was removed."
+  [ -d "$repo" ] && msg="Your notes are still in ${repo/#$HOME/~}."
+  echo
+  echo "meetingrec is uninstalled. $msg"
+  if [ ${#formulae[@]} -gt 0 ]; then
+    echo "Homebrew installed ${formulae[*]} for it. If nothing else uses ${formulae[*]}: brew uninstall ${formulae[*]}"
+  fi
+  if [ "$claude" = remove ]; then
+    echo "Removed Claude Code. Its settings, sign-in and history are still in ~/.claude and ~/.claude.json; delete them if you don't need them."
+  fi
+  [ "$from_menu" -eq 1 ] && notify "meetingrec is uninstalled" "$msg"
+
+  # Last, because the menu bar runs this from inside Hammerspoon.
+  if [ -n "$hs_app" ]; then
+    killall Hammerspoon 2>/dev/null && sleep 1
+    if [ "$hs_app" = brew ]; then
+      /opt/homebrew/bin/brew uninstall --quiet --cask hammerspoon >/dev/null || warn "couldn't remove Hammerspoon"
+    else
+      rm -rf -- "$hs_app" || warn "couldn't remove $hs_app"
+    fi
+    # Its permissions, so System Settings doesn't list an app that's gone.
+    tccutil reset All org.hammerspoon.Hammerspoon >/dev/null 2>&1
+    echo "Removed Hammerspoon."
+  elif pgrep -x Hammerspoon >/dev/null; then
+    killall Hammerspoon 2>/dev/null && sleep 1
+    if [ "$hs_own" -eq 1 ]; then
+      open -a Hammerspoon   # back with your own config, without the ○
+    else
+      echo "Hammerspoon stays, since you had it before. It opens at login; turn that off in its Preferences if you don't need it."
+    fi
+  fi
+  return 0
+}
+
+# --------------------------------------------------------------------------
 # status
 # --------------------------------------------------------------------------
 cmd_status() {
@@ -969,6 +1177,7 @@ case "${1:-}" in
   update) shift; cmd_update "$@" ;;
   config) shift; cmd_config "$@" ;;
   move)   shift; cmd_move "$@" ;;
+  uninstall) shift; cmd_uninstall "$@" ;;
   *) cat >&2 <<EOF
 usage: meetingrec start [title] [--mic-only]
        meetingrec stop
@@ -976,6 +1185,8 @@ usage: meetingrec start [title] [--mic-only]
        meetingrec update [--check]
        meetingrec config get|set <NAME> [value] | list
        meetingrec move <folder>
+       meetingrec uninstall [--keep-notes | --delete-notes]
+                            [--keep-claude | --remove-claude] [--yes] [--dry-run]
 
   --mic-only   Record the microphone only, no system tap. Use when you are on
                speakers rather than headphones: the mic hears both sides, so one
@@ -983,6 +1194,8 @@ usage: meetingrec start [title] [--mic-only]
   --check      Only say whether an update is available; change nothing.
   move         Move meetingrec to another folder and fix everything that
                points at the old one, including the menu bar.
+  uninstall    Remove meetingrec from this Mac. Lists what goes first and asks;
+               your notes stay unless you choose to delete them.
 EOF
      exit 64 ;;
 esac

@@ -56,7 +56,7 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 - [Usage](#usage): [record](#record-a-virtual-meeting) ·
   [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
 - [Make it yours](#make-it-yours): where notes go, names, rules, teams, moving things
-- [Updating](#updating)
+- [Updating](#updating) · [Uninstalling](#uninstalling)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -130,13 +130,14 @@ The script goes through these steps and skips any that are already done:
 | Claude Code | [claude.ai](https://docs.claude.com/en/docs/claude-code/overview) |
 
 Every download is checked against the SHA-256 fingerprint pinned in
-[config.example.sh](.engine/config.example.sh), and refused if it doesn't match. ffmpeg and
-`whisper-cli` go in `~/.local/share/meetingrec/bin`, where only meetingrec uses them, so
-they never replace other copies you might have.
+[config.example.sh](.engine/config.example.sh), and refused if it doesn't match. The model,
+ffmpeg, `whisper-cli` and audiotee all go in `~/.local/share/meetingrec`, where only
+meetingrec uses them: they never replace other copies you might have, and
+[uninstalling](#uninstalling) removes them in one go.
 
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
 Hammerspoon, links the `meetingrec`, `scribe` and `teamnotes` commands into `~/.local/bin`,
-and adds `~/.local/bin` to your PATH in `~/.zprofile` if it isn't there already. It doesn't change anything else. You can [read the script](install.sh) first, or
+and adds `~/.local/bin` to your PATH in `~/.zprofile` if it isn't there already. It doesn't change anything else. You can [read the script](.engine/install.sh) first, or
 download it, look at it, then run it:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/.engine/install.sh -o install.sh
@@ -188,7 +189,7 @@ You should see something like this (each line starting with ✓ is a finished st
   ✓ whisper-cli downloaded (verified)
 
 ==> audiotee (system-audio capture)
-  ✓ downloaded commit 56ac954 (verified) → /Users/you/bin/audiotee
+  ✓ downloaded commit 56ac954 (verified) → /Users/you/.local/share/meetingrec/bin/audiotee
 
 ==> Hammerspoon (menu-bar button)
   ✓ installed in /Applications
@@ -459,6 +460,7 @@ meeting, or a click in **○ → Settings**.
 | Set rules for one team only | "from now on, for this team, record vote counts" | *Rules* in that team's profile |
 | Record somewhere else | — | ○ → Settings → *Recordings* |
 | Move the meetingrec folder itself | — | `meetingrec move ~/Projects` (see [Moving things](#moving-things)) |
+| Remove meetingrec from this Mac | — | ○ → Settings → *Uninstall meetingrec…* (see [Uninstalling](#uninstalling)) |
 | Stop the daily update check | — | ○ → Settings → untick *Check for updates daily* |
 | Use Homebrew's ffmpeg and whisper.cpp instead | — | `meetingrec config set USE_HOMEBREW on`, then `meetingrec update` |
 | Use a more accurate Whisper model | "re-run with medium.en" (download it first, below) | — |
@@ -553,7 +555,7 @@ not the rest: check `meetingrec config list` for folders that still name the old
 - **Whisper model:** `small.en` is the default. For poor audio, download `medium.en`
   (1.5 GB), then ask the skill to re-run with it:
   ```bash
-  curl -L -o ~/.whisper-models/ggml-medium.en.bin \
+  curl -L -o ~/.local/share/meetingrec/models/ggml-medium.en.bin \
     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.en.bin
   ```
   Expected: a progress table that ends at `100` with a size of about `1462M`.
@@ -592,6 +594,62 @@ once by hand:
 ```bash
 git -C ~/meetingrec pull && ~/meetingrec/.engine/bin/meetingrec update
 ```
+
+---
+
+## Uninstalling
+
+**From the menu bar:** click **○** → *Settings* → *Uninstall meetingrec…*. A window lists
+what goes; click **Uninstall**. If you have notes or recordings inside the meetingrec
+folder, a second window asks whether to keep them. If the installer added Claude Code, a
+third asks whether to remove it. Keeping is always the default: pressing Return in any of
+these windows never deletes anything. A notification says when it's done, and
+the ○ disappears.
+
+**From the terminal:**
+```bash
+meetingrec uninstall --dry-run   # only list what would go
+meetingrec uninstall
+```
+Expected: the list, then the questions (the Claude Code one only if the installer added it).
+```text
+This removes:
+  ~/meetingrec/.engine
+  ...
+  ~/.local/share/meetingrec
+  ~/.config/meetingrec
+  ~/.hammerspoon/init.lua
+  ~/.local/bin/meetingrec
+  ...
+It keeps:
+  your notes, recordings and settings in ~/meetingrec/scribe and teamnotes (12 files), unless you choose to delete them
+  Claude Code, unless you choose to remove it (the installer added it)
+  Apple's command line tools and Homebrew
+Uninstall meetingrec? [y/N] y
+Delete your 12 files in scribe and teamnotes too? They can't be recovered. [y/N] n
+Remove Claude Code too? The installer added it. Its settings and history in ~/.claude stay. [y/N] n
+
+meetingrec is uninstalled. Your notes are still in ~/meetingrec.
+```
+
+What it removes:
+- **meetingrec's own files** in the meetingrec folder, the downloads in
+  `~/.local/share/meetingrec` (model, ffmpeg, whisper-cli, audiotee), your settings in
+  `~/.config/meetingrec`, the three commands, and the menu-bar config.
+- **Hammerspoon**, only if the installer added it and the menu bar was all it ran. If you
+  had Hammerspoon before, it stays, along with your own config.
+- **Claude Code**, only if the installer added it and you say yes. Its settings, sign-in
+  and conversation history in `~/.claude` and `~/.claude.json` stay; delete them yourself
+  if you don't need them. If you had Claude Code before, you aren't asked.
+
+What it never touches: notes folders outside the meetingrec folder (like an Obsidian vault
+you picked), Apple's command line tools, Homebrew, and the PATH line in `~/.zprofile`,
+since other things use them. If Homebrew installed ffmpeg or whisper.cpp for
+meetingrec, it tells you the command to remove them.
+
+Kept your notes? They stay in `~/meetingrec/scribe` and `teamnotes`; move or delete them
+whenever you like. To install again later, put them somewhere else first, or install into
+another folder: the installer won't use a folder that already has things in it.
 
 ---
 

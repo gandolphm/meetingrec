@@ -27,12 +27,18 @@ REPO_URL="https://github.com/gandolphm/meetingrec.git"
 AUDIOTEE_URL="https://github.com/makeusabrew/audiotee.git"
 # Prebuilt audiotee, ffmpeg and whisper-cli, made by .github/workflows/build-*.yml.
 RELEASES="https://github.com/gandolphm/meetingrec/releases/download"
-# ffmpeg and whisper-cli go here, off the PATH, so someone who uses a fuller
-# ffmpeg from Homebrew for other work keeps getting that one. meetingrec's own
-# scripts look here first.
-TOOLS_DIR="$HOME/.local/share/meetingrec/bin"
+# Everything the installer downloads or builds lives in one folder, so
+# `meetingrec uninstall` can remove it in one go and the home folder stays tidy.
+DATA_DIR="$HOME/.local/share/meetingrec"
+# ffmpeg, whisper-cli and audiotee go here, off the PATH, so someone who uses a
+# fuller ffmpeg from Homebrew for other work keeps getting that one.
+# meetingrec's own scripts look here first.
+TOOLS_DIR="$DATA_DIR/bin"
 MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin"
-MODEL_FILE="$HOME/.whisper-models/ggml-small.en.bin"
+MODEL_FILE="$DATA_DIR/models/ggml-small.en.bin"
+# What this installer added that wasn't there before, one "<what> <detail>" per
+# line, so uninstall removes those and never something you already had.
+RECORD="$DATA_DIR/install-record"
 # From Hugging Face's X-Linked-ETag for that file. A truncated or swapped
 # download fails here instead of later, mid-transcription.
 MODEL_SHA256="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"
@@ -82,6 +88,12 @@ die()  {
 # skipped: grep given a missing file reports an error even when the other matches.
 in_shell_startup() {
   cat "$HOME/.zprofile" "$HOME/.zshrc" 2>/dev/null | grep -qF -- "$1"
+}
+
+# Note something in the install record (see RECORD), once.
+record() {
+  mkdir -p "$DATA_DIR"
+  grep -qxF "$*" "$RECORD" 2>/dev/null || printf '%s\n' "$*" >> "$RECORD"
 }
 
 # Add a line to a shell startup file unless it's already there.
@@ -200,6 +212,7 @@ brew_formula() {
   else
     note "installing $1 with Homebrew (a few minutes)…"
     "$BREW" install --quiet "$1" || die "brew install $1 failed."
+    record brew-formula "$1"
     ok "$1 installed with Homebrew"
   fi
 }
@@ -235,6 +248,7 @@ install_hammerspoon_app() {
   if [ "$HOMEBREW_TOOLS" = on ]; then
     need_brew
     "$BREW" install --quiet --cask hammerspoon || die "brew install --cask hammerspoon failed."
+    record hammerspoon-app brew
     ok "installed with Homebrew"
     return
   fi
@@ -250,6 +264,7 @@ install_hammerspoon_app() {
     || { rm -rf "$tmp"; die "Couldn't download Hammerspoon. Check your internet connection, then run this again."; }
   ditto -x -k "$tmp/Hammerspoon.zip" "$dest" || { rm -rf "$tmp"; die "Couldn't unpack Hammerspoon into $dest."; }
   rm -rf "$tmp"
+  record hammerspoon-app "$dest/Hammerspoon.app"
   ok "installed in $dest"
 }
 
@@ -314,6 +329,32 @@ get_repo() {
   chmod +x "$REPO"/.engine/bin/*
 }
 
+# Older installs put audiotee in ~/bin, its source in ~/src and the model in
+# ~/.whisper-models. Move them into DATA_DIR instead of downloading them again,
+# and drop those folders if that leaves them empty.
+move_old_downloads() {
+  local cfg="$HOME/.config/meetingrec/config.sh" moved=0
+  carry_over() {
+    { [ -e "$1" ] && [ ! -e "$2" ]; } || return 0
+    [ "$moved" -eq 1 ] || step "Moving downloads into ${DATA_DIR/#$HOME/~}"
+    moved=1
+    mkdir -p "$(dirname "$2")" && mv "$1" "$2" || die "Couldn't move $1 to $2."
+    ok "${1/#$HOME/~} → ${2/#$HOME/~}"
+    rmdir "$(dirname "$1")" 2>/dev/null
+    return 0
+  }
+  carry_over "$HOME/.whisper-models/ggml-small.en.bin" "$MODEL_FILE"
+  carry_over "$HOME/bin/audiotee" "$TOOLS_DIR/audiotee"
+  carry_over "$HOME/bin/audiotee.commit" "$TOOLS_DIR/audiotee.commit"
+  carry_over "$HOME/src/audiotee" "$DATA_DIR/src/audiotee"
+  # config.sh has the old default written into it.
+  if grep -qxF 'AUDIOTEE_BIN="$HOME/bin/audiotee"' "$cfg" 2>/dev/null; then
+    sed -i '' 's|^AUDIOTEE_BIN="\$HOME/bin/audiotee"$|AUDIOTEE_BIN="$HOME/.local/share/meetingrec/bin/audiotee"|' "$cfg" \
+      || die "Couldn't update AUDIOTEE_BIN in $cfg."
+  fi
+  return 0
+}
+
 install_model() {
   step "Whisper model (small.en, 465 MB)"
   if [ -f "$MODEL_FILE" ]; then
@@ -334,11 +375,11 @@ install_audiotee() {
   step "audiotee (system-audio capture)"
   # The pinned commit lives in config.example.sh, so the build and the
   # version recorded in session.json can't drift apart.
-  local sha sha256 bin="$HOME/bin/audiotee"
+  local sha sha256 bin="$TOOLS_DIR/audiotee"
   sha="$(sed -n 's/^AUDIOTEE_SHA="\(.*\)"/\1/p' "$REPO/.engine/config.example.sh")"
   sha256="$(sed -n 's/^AUDIOTEE_SHA256="\(.*\)"/\1/p' "$REPO/.engine/config.example.sh")"
   [ -n "$sha" ] || die "Couldn't read AUDIOTEE_SHA from $REPO/.engine/config.example.sh."
-  mkdir -p "$HOME/bin"
+  mkdir -p "$TOOLS_DIR"
 
   if [ -n "$sha256" ] && [ -z "${AUDIOTEE_FROM_SOURCE:-}" ]; then
     if [ -x "$bin" ] && [ "$(shasum -a 256 "$bin" | cut -d' ' -f1)" = "$sha256" ]; then
@@ -358,12 +399,12 @@ install_audiotee() {
 }
 
 build_audiotee() {
-  local sha="$1" bin="$2" src="$HOME/src/audiotee"
+  local sha="$1" bin="$2" src="$DATA_DIR/src/audiotee"
   if [ -x "$bin" ] && [ "$(git -C "$src" rev-parse --short=7 HEAD 2>/dev/null)" = "$sha" ]; then
     ok "already built at commit $sha"
     return
   fi
-  mkdir -p "$HOME/src"
+  mkdir -p "$(dirname "$src")"
   if [ ! -d "$src/.git" ]; then
     git clone --quiet "$AUDIOTEE_URL" "$src" || die "Couldn't download audiotee."
   fi
@@ -471,6 +512,7 @@ install_claude() {
     note "not installed. To install it: curl -fsSL https://claude.ai/install.sh | bash"
   else
     curl -fsSL https://claude.ai/install.sh | bash || die "Claude Code didn't install."
+    record claude-code
     ok "installed"
   fi
   if [ -x "$HOME/.local/bin/claude" ] && ! in_shell_startup ".local/bin"; then
@@ -673,6 +715,7 @@ main() {
   install_config
   choose_notes_dir
   choose_tool_source
+  move_old_downloads
   install_model
   install_tools
   install_audiotee

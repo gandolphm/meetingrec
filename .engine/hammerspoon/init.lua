@@ -437,6 +437,51 @@ local function openPersonal(folder, skill)
   hs.execute('open -t "' .. file .. '"')
 end
 
+-- Two windows before anything goes: "Uninstall?" and, if you have notes in the
+-- meetingrec folder, whether to keep them; a third asks about Claude Code if
+-- the installer added it. Cancel and Keep are the buttons Return presses. The uninstall then runs detached, because it quits
+-- Hammerspoon at the end; it sends its own notification when it's done.
+local function uninstall()
+  run({ "uninstall", "--dry-run" }, function(exitCode, stdOut, stdErr)
+    if exitCode ~= 0 then
+      notify("MeetingRec — can't uninstall", cliError(stdErr, stdOut))
+      return
+    end
+    local count, hsAction, claudeOffer = stdOut:match("^plan (%d+) (%a+) (%a+)")
+    count = tonumber(count) or 0
+    local button = hs.dialog.blockAlert("Uninstall meetingrec?",
+      "This removes meetingrec's programs, settings and commands, and this menu-bar button" ..
+        (hsAction == "remove" and ", and Hammerspoon, which the installer added for it" or "") .. ".\n\n" ..
+        (claudeOffer == "offer" and "Apple's command line tools and Homebrew stay. You'll be asked about Claude Code."
+          or "Claude Code, Apple's command line tools and Homebrew stay."),
+      "Cancel", "Uninstall", "warning")
+    if button ~= "Uninstall" then return end
+    local notes = "--keep-notes"
+    if count > 0 then
+      button = hs.dialog.blockAlert("Keep your notes?",
+        "You have " .. count .. (count == 1 and " file" or " files") .. " of your own in " ..
+          tilde(REPO) .. "/scribe and teamnotes: notes, recordings and settings.\n\n" ..
+          "Deleting them can't be undone.",
+        "Keep them", "Delete them", "warning")
+      if button == "Delete them" then notes = "--delete-notes" end
+    end
+    local claude = "--keep-claude"
+    if claudeOffer == "offer" then
+      button = hs.dialog.blockAlert("Remove Claude Code too?",
+        "The meetingrec installer added Claude Code. Remove it only if you don't use it for " ..
+          "anything else.\n\nIts settings and history in ~/.claude stay either way.",
+        "Keep it", "Remove it", "warning")
+      if button == "Remove it" then claude = "--remove-claude" end
+    end
+    log("uninstall: %s %s", notes, claude)
+    notify("MeetingRec", "Uninstalling…")
+    local logFile = (os.getenv("TMPDIR") or "/tmp/") .. "meetingrec-uninstall.log"
+    hs.task.new("/bin/sh", nil, { "-c",
+      'nohup "$0" uninstall --from-menu "$1" "$2" >"$3" 2>&1 </dev/null &',
+      MEETINGREC, notes, claude, logFile }):start()
+  end)
+end
+
 local function settingsMenu()
   local auto = settings.AUTO_UPDATE_CHECK
   local autoOn = not auto or auto.value ~= "off"
@@ -457,6 +502,8 @@ local function settingsMenu()
     { title = "Team profiles…", fn = function()
         hs.execute('open "' .. REPO .. '/teamnotes/.claude/skills/team-notes/profiles"')
       end },
+    { title = "-" },
+    { title = "Uninstall meetingrec…", disabled = isRecording, fn = uninstall },
   }
 end
 

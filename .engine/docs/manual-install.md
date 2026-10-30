@@ -25,19 +25,19 @@ If instead you get a message saying the command line tools are already installed
 
 **The Whisper model** (`small.en`, 465 MB):
 ```bash
-mkdir -p ~/.whisper-models
-curl -L -o ~/.whisper-models/ggml-small.en.bin \
+mkdir -p ~/.local/share/meetingrec/models
+curl -L -o ~/.local/share/meetingrec/models/ggml-small.en.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin
 ```
 `mkdir` prints nothing. `curl` shows a progress table while it downloads. When it
 finishes, the `% Total` column reads `100` and the size is `465M`. To check the file isn't
 damaged:
 ```bash
-shasum -a 256 ~/.whisper-models/ggml-small.en.bin
+shasum -a 256 ~/.local/share/meetingrec/models/ggml-small.en.bin
 ```
 Expected:
 ```text
-c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d  /Users/you/.whisper-models/ggml-small.en.bin
+c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d  /Users/you/.local/share/meetingrec/models/ggml-small.en.bin
 ```
 If the long number is different, delete the file and download it again.
 
@@ -121,33 +121,33 @@ publishes (**A**) or build it yourself (**B**). Both give you the same program.
 **A. Download it.** It's built from audiotee's source by a
 [GitHub Action](../../.github/workflows/build-audiotee.yml) in this repo:
 ```bash
-mkdir -p ~/bin
-curl -fL --progress-bar -o ~/bin/audiotee https://github.com/gandolphm/meetingrec/releases/download/audiotee-56ac954/audiotee
-chmod +x ~/bin/audiotee
-shasum -a 256 ~/bin/audiotee
+mkdir -p ~/.local/share/meetingrec/bin
+curl -fL --progress-bar -o ~/.local/share/meetingrec/bin/audiotee https://github.com/gandolphm/meetingrec/releases/download/audiotee-56ac954/audiotee
+chmod +x ~/.local/share/meetingrec/bin/audiotee
+shasum -a 256 ~/.local/share/meetingrec/bin/audiotee
 grep AUDIOTEE_SHA256 .engine/config.example.sh
 ```
 Expected: a download progress bar, then the same 64-character code twice:
 ```text
 ###################################################################### 100.0%
-<64-character code>  /Users/you/bin/audiotee
+<64-character code>  /Users/you/.local/share/meetingrec/bin/audiotee
 AUDIOTEE_SHA256="<the same 64-character code>"
 ```
-If the two codes differ, the download is damaged: delete it with `rm ~/bin/audiotee` and
+If the two codes differ, the download is damaged: delete it with `rm ~/.local/share/meetingrec/bin/audiotee` and
 use **B** instead.
 
 **B. Build it from source:**
 
 ```bash
-mkdir -p ~/src ~/bin
-git clone https://github.com/makeusabrew/audiotee.git ~/src/audiotee
-git -C ~/src/audiotee checkout 56ac954
-cd ~/src/audiotee && swift build -c release && cd -
-cp ~/src/audiotee/.build/release/audiotee ~/bin/audiotee
+mkdir -p ~/.local/share/meetingrec/src ~/.local/share/meetingrec/bin
+git clone https://github.com/makeusabrew/audiotee.git ~/.local/share/meetingrec/src/audiotee
+git -C ~/.local/share/meetingrec/src/audiotee checkout 56ac954
+cd ~/.local/share/meetingrec/src/audiotee && swift build -c release && cd -
+cp ~/.local/share/meetingrec/src/audiotee/.build/release/audiotee ~/.local/share/meetingrec/bin/audiotee
 ```
 The build takes a minute or two. Expected (`mkdir` and `cp` print nothing):
 ```text
-Cloning into '/Users/you/src/audiotee'...
+Cloning into '/Users/you/.local/share/meetingrec/src/audiotee'...
 ...
 Note: switching to '56ac954'.
 ...
@@ -161,11 +161,11 @@ The last line is `cd -` taking you back to the repo folder.
 
 Check that the binary is in place:
 ```bash
-ls -l ~/bin/audiotee
+ls -l ~/.local/share/meetingrec/bin/audiotee
 ```
 Expected (the `x`s in `-rwxr-xr-x` mean it can run):
 ```text
--rwxr-xr-x  1 you  staff  412496 Oct 26 14:02 /Users/you/bin/audiotee
+-rwxr-xr-x  1 you  staff  412496 Oct 26 14:02 /Users/you/.local/share/meetingrec/bin/audiotee
 ```
 
 ## 4. Configure the recorder
@@ -298,3 +298,6 @@ these commands, use `<repo>/.engine/bin/meetingrec`, and start note-writing from
 `cd <repo>/scribe && claude`.
 
 Now go back to the README and [set up Obsidian](../../README.md#set-up-obsidian) (recommended).
+
+To remove everything later, see [Uninstalling](../../README.md#uninstalling). It removes Hammerspoon
+only when the quick install added it, so after a manual install Hammerspoon stays.

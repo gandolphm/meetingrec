@@ -39,14 +39,15 @@ if command -v whisper-cli >/dev/null 2>&1; then
 
   # Locate a ggml model file in common spots.
   MODELFILE=""
-  for d in "$HOME/.whisper-models" "/opt/homebrew/share/whisper-cpp/models" \
+  for d in "$HOME/.local/share/meetingrec/models" "$HOME/.whisper-models" \
+           "/opt/homebrew/share/whisper-cpp/models" \
            "/usr/local/share/whisper-cpp/models" "./models" "."; do
     if [ -f "$d/ggml-$MODEL.bin" ]; then MODELFILE="$d/ggml-$MODEL.bin"; break; fi
   done
   if [ -z "$MODELFILE" ]; then
     echo "MODEL_NOT_FOUND ggml-$MODEL.bin" >&2
     echo "Get it with:" >&2
-    echo "  mkdir -p ~/.whisper-models && curl -L -o ~/.whisper-models/ggml-$MODEL.bin \\" >&2
+    echo "  mkdir -p ~/.local/share/meetingrec/models && curl -L -o ~/.local/share/meetingrec/models/ggml-$MODEL.bin \\" >&2
     echo "    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$MODEL.bin" >&2
     rm -f "$WAV"; exit 3
   fi
