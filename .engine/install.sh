@@ -654,9 +654,13 @@ test_recording() {
 
     1. Click ○ in the menu bar → Start recording…
     2. Type ${B}test${N} as the title and click Start.
-    3. Click ${B}Allow${N} on the Microphone prompt.
+    3. Click ${B}Allow${N} on the Microphone prompt, and on the prompt to let
+       Hammerspoon send notifications if one appears.
     4. Play a YouTube video and talk for about 15 seconds.
     5. Click the ● in the menu bar → Stop.
+
+  Notifications are how meetingrec warns you mid-call when a track isn't recording.
+  To check they're on: System Settings → Notifications → Hammerspoon → Allow notifications.
 
 EOF
   local reply

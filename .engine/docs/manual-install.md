@@ -269,7 +269,10 @@ the terminal commands work too, but it's much easier mid-meeting.
    **System Settings → Privacy & Security → Screen & System Audio Recording**, under
    **System Audio Recording Only**, click **+**, choose **Hammerspoon**, and make sure its
    switch is on. Quit Hammerspoon and open it again. Then start a test recording from the
-   ○ menu and allow the Microphone prompt. Stop it from the menu after 15 seconds. If a
+   ○ menu and allow the Microphone prompt, and Hammerspoon's notifications prompt if one
+   appears: notifications are how meetingrec warns you mid-call when a track isn't
+   recording. If you missed it, turn on **System Settings → Notifications → Hammerspoon →
+   Allow notifications**. Stop the recording from the menu after 15 seconds. If a
    notification says *check this recording*, a permission is missing: check **Hammerspoon**
    under **Microphone** and **System Audio Recording Only** in System Settings (see step 5).
    Delete the test session afterwards, as in step 5.

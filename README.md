@@ -164,7 +164,9 @@ bash install.sh
   make sure its switch is on. Then press Enter in Terminal again.
 - **A test recording.** The script tells you to click the **○** in the menu bar, start a
   recording called `test`, click **Allow** on the Microphone prompt, play a video while
-  you talk for 15 seconds, then stop it. Then press Enter in Terminal and the script checks
+  you talk for 15 seconds, then stop it. If macOS asks whether Hammerspoon may send
+  notifications, click **Allow**: notifications are how meetingrec warns you mid-call when a
+  track isn't recording, and how it tells you an update or uninstall finished. Then press Enter in Terminal and the script checks
   that both tracks captured audio.
 
 You should see something like this (each line starting with ✓ is a finished step):
@@ -401,9 +403,10 @@ The skill:
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
 4. sends the transcript to Claude, which writes `meeting-notes/<Title>.md` in your notes
    vault and tells you the path (see [What leaves your Mac](#what-leaves-your-mac));
-5. asks whether to delete the transcript or move it to `transcripts/`, then clears the
-   recording out of `input/`. Say "always keep transcripts" (or "always delete them") and
-   it stops asking;
+5. asks whether to delete the transcript or move it to `~/meetingrec/scribe/transcripts/`,
+   then clears the recording out of `input/`. The audio is deleted either way, unless you
+   say "keep the recording". Say "always keep transcripts" (or "always delete them") and it
+   stops asking;
 6. offers to remember any names Whisper got wrong, and any preferences your corrections
    suggested.
 
@@ -509,6 +512,7 @@ gets the date added, like `Acme check-in (2026-10-30).md`.
 | What | File |
 | --- | --- |
 | Where notes and recordings go | `~/.config/meetingrec/config.sh` |
+| Transcripts you kept, personal and team | `scribe/transcripts/`, in the meetingrec folder even if your notes go to a vault of your own. A meetingrec recording gets a folder with the transcript in `merged.txt` |
 | Your name, names and rules for personal notes | `scribe/.claude/skills/meeting-notes/reference/personal.md` |
 | Names and rules for team notes, for every team | `teamnotes/.claude/skills/team-notes/reference/personal.md` |
 | One team's name, roster, sections and rules | `teamnotes/.claude/skills/team-notes/profiles/<team>.md` |
@@ -686,6 +690,7 @@ another folder: the installer won't use a folder that already has things in it.
 | `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](.engine/docs/manual-install.md#3-install-ffmpeg-whisper-cli-and-audiotee), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
 | "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See [manual steps 5 and 6](.engine/docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). |
 | Skill says the inbox is empty | The recording isn't where the skill looks: `scribe/input/`, or wherever `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points. Click **○** → *Open recordings folder* to see what's there. Team notes look in `teamnotes/input/`. |
+| No notifications from the menu bar (starting, updates, warnings) | Turn on **System Settings → Notifications → Hammerspoon → Allow notifications**. Without them you won't hear about a track that stops recording mid-call. |
 | `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |
