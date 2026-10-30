@@ -322,20 +322,27 @@ EOF
 Tell the user before transcribing. If the *other* track is fine, carry on with it alone and
 say what was lost. Relay any `warnings` verbatim.
 
-Then ask, in **one compact round** (`AskUserQuestion`; roll call as a multi-select over the
-profile's roster):
+Then ask, in **one compact round**, **with `AskUserQuestion`, not as a written list.** It
+takes up to four questions per call, each with two to four options, and always adds a
+free-text answer. Fill the options with real guesses, so most answers are one click:
 
-- **Date** of the meeting (default: today, or the date in the file name).
+- **Date** of the meeting. Options: the date in the file or folder name (Recommended) and
+  today, if they differ.
 - **Meeting type** — the profile lists its usual types; also scan existing notes for this
-  team and offer a way to type a new one:
+  team. Offer up to four; a new type is typed in the free-text answer:
   ```bash
   grep -l '^team: "\[\[<Team>\]\]"' "$VAULT"/meeting-notes/*.md 2>/dev/null \
     | xargs grep -h '^type:' 2>/dev/null | sed 's/^type: *//' | sort -u
   ```
-- **Roll call** — which roster members were present. Everyone not selected goes under
-  `absent:`. Ask separately for **guests** (anyone not on the roster) with their org if known.
+- **Roll call** — which roster members were present, as a multi-select. A question holds
+  at most four options, so split a larger roster across several multi-select questions
+  ("Who was there? (1 of 2)"), in the same or a second call. Everyone not selected goes under
+  `absent:`.
+- **Guests** — anyone not on the roster, with their org if known. Options: "No guests", and
+  guests from this team's earlier notes; others are typed in the free-text answer.
 - **Agenda or context** worth knowing — what was on the docket, anything being followed up
-  from the previous meeting.
+  from the previous meeting. Options: "Nothing to add", with the agenda typed in the
+  free-text answer.
 
 If the user already gave some of this in chat, fill only the gaps.
 

@@ -303,33 +303,42 @@ permission problem, and the meeting audio is simply gone. Relay any `warnings` t
 Do not treat a silent track as a reason to abandon the note: if the *other* track is fine, say
 what was lost and carry on with the single track, tagging nothing.
 
-Then ask for the handful of things that improve both the transcript and the frontmatter. Keep
-it to one compact round of questions:
+Then ask for the handful of things that improve both the transcript and the frontmatter.
+**Ask with `AskUserQuestion`, not as a written list.** It takes up to four questions per
+call, each with two to four options, and always adds a free-text answer, so these seven fit
+in two calls: title, date, type and context first, then attendees, company and agenda. Fill
+the options with real guesses, so most answers are one click and anything else can be typed:
 
-- **Title / topic** of the meeting
-- **Date** (default to today if not given)
+- **Title / topic** of the meeting. Options: the title the recording was given (the session
+  folder's name, e.g. `2026-10-30T10-00_acme-check-in` → "Acme check-in"), and the title of
+  an earlier note that looks like the same meeting, if there is one.
+- **Date**. Options: the recording's date (from the folder name or `session.json`) and
+  today, if they differ. Mark the recording's date "(Recommended)".
 - **Type**: the set of types is open-ended and grows over time — don't rely on a fixed
   list. Scan existing notes for types used so far:
   ```bash
-  grep -h '^type:' "$VAULT"/meeting-notes/*.md 2>/dev/null | sed 's/^type: *//' | sort -u
+  grep -h '^type:' "$VAULT"/meeting-notes/*.md 2>/dev/null | sed 's/^type: *//' | sort | uniq -c | sort -rn
   ```
-  Present these as options (via AskUserQuestion or similar) alongside a clear way to enter
-  a brand-new type. If the user picks or types a new type, just use it — no need to ask
-  permission or treat it as special. Standard ones to expect even on a fresh vault:
-  standup, strategy, client, 1:1, interview, other.
-- **Attendees** (names → these become `[[wikilinks]]`)
-- **Company / org** (→ a `[[wikilink]]`)
+  Offer the most used (up to four); a brand-new type is typed in the free-text answer. If the
+  user picks or types a new type, just use it — no need to ask permission or treat it as
+  special. On a fresh vault, offer the common ones: standup, strategy, client, 1:1.
 - **Context** — the single word every action item from this meeting gets tagged with
   (`context: work` → `#work` on each to-do). This is what makes the Tasks dashboard
   filterable. The default is `work`; a different value only makes sense for a meeting the
-  user wants kept on a separate dashboard (e.g. a specific partner or workstream). **State the
-  default and let the user override it.** Offer existing values first:
+  user wants kept on a separate dashboard (e.g. a specific partner or workstream). Offer
+  "work (Recommended)" first, then existing values:
   ```bash
   grep -h '^context:' "$VAULT"/meeting-notes/*.md 2>/dev/null | sed 's/^context: *//' | sort -u
   ```
   One lowercase word, no `#`, no spaces — it becomes a tag, and Obsidian tags can't contain
   spaces or colons.
-- **Any agenda or context** worth knowing
+- **Attendees** (names → these become `[[wikilinks]]`). A multi-select of up to four likely
+  people: those in earlier notes with the same title or company, or in the *Names* tables.
+  Anyone else is typed in the free-text answer.
+- **Company / org** (→ a `[[wikilink]]`). Options: companies from earlier notes with the
+  same title or attendees (`grep -h '^company:'`), plus "No company" for an internal meeting.
+- **Any agenda or context** worth knowing. Options: "Nothing to add", with the agenda typed
+  in the free-text answer.
 
 Why this comes first: the attendee names, company, and jargon get passed to Whisper as a
 **priming prompt**, which sharply improves how it transcribes proper nouns (company, product and
