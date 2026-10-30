@@ -600,7 +600,7 @@ grant_system_audio() {
   [ -d "$dir/Hammerspoon.app" ] || dir="$HOME/Applications"
   cat <<EOF
   Hammerspoon can't ask for this permission itself, so macOS never shows a
-  prompt for it. Turn it on by hand in System Settings (opening now):
+  prompt for it. Turn it on by hand in System Settings:
 
     1. Under ${B}System Audio Recording Only${N}, click ${B}+${N}.
     2. Choose ${B}Hammerspoon${N} in ${dir/#$HOME/~} and click Open.
@@ -609,9 +609,16 @@ grant_system_audio() {
   If Hammerspoon is already listed there and on, there's nothing to do.
 
 EOF
+  # Opened only when asked: the window would otherwise cover these steps
+  # before anyone has read them.
+  local reply
+  read -r -p "  Press Enter to open System Settings (or type s to skip): " reply
+  if [ "$reply" = "s" ]; then
+    note "skipped. The system-audio track will be silent until it's on."
+    return
+  fi
   open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null \
     || note "Open System Settings → Privacy & Security → Screen & System Audio Recording."
-  local reply
   read -r -p "  Press Enter when Hammerspoon is on (or type s to skip): " reply
   if [ "$reply" = "s" ]; then
     note "skipped. The system-audio track will be silent until it's on."

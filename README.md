@@ -159,9 +159,9 @@ bash install.sh
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
   it.
 - **System audio permission for Hammerspoon.** macOS never shows a prompt for this one,
-  so the script opens System Settings for you: under *System Audio Recording Only*, click
-  **+**, choose **Hammerspoon** in Applications, and make sure its switch is on. Then press
-  Enter in Terminal.
+  so the script shows the steps, then opens System Settings when you press Enter: under
+  *System Audio Recording Only*, click **+**, choose **Hammerspoon** in Applications, and
+  make sure its switch is on. Then press Enter in Terminal again.
 - **A test recording.** The script tells you to click the **○** in the menu bar, start a
   recording called `test`, click **Allow** on the Microphone prompt, play a video while
   you talk for 15 seconds, then stop it. Then press Enter in Terminal and the script checks
@@ -218,6 +218,7 @@ You should see something like this (each line starting with ✓ is a finished st
 
 ==> System audio permission
   ...
+  Press Enter to open System Settings (or type s to skip):
   Press Enter when Hammerspoon is on (or type s to skip):
   ✓ restarted Hammerspoon so the permission takes effect
 
