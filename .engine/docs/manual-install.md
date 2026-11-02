@@ -43,7 +43,7 @@ If the long number is different, delete the file and download it again.
 
 **Claude Code:** skip this if `claude` already runs in Terminal. If you use only the
 [Claude app](https://claude.ai/download), you can skip it too: *Write up notes…* in the
-menu bar opens the app, but the `scribe` and `teamnotes` commands need the `claude` command.
+menu bar opens the app, but the `scribe` and `teamnotes` commands need the `claude` command. Support for other agents coming soon.
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 ```
