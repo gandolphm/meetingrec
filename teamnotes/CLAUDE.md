@@ -18,7 +18,7 @@ chooses to keep goes in `../scribe/transcripts/`, where all kept transcripts liv
 
 ## Profiles
 
-Each meeting type is a profile file in `.claude/skills/team-notes/profiles/`. A profile
+Each meeting type is a profile file in `settings/profiles/`. A profile
 holds the team's wikilink and org, the roster with roles, ownership hints, the extra
 template sections that team needs, the filename prefix, tag, and Whisper priming terms.
 
@@ -52,7 +52,7 @@ in the frontmatter, wikilinked, with their org or role in the Discussion text if
 ## Names and rules
 
 Whisper mis-transcribes proper nouns, and each user wants notes written a little
-differently. Both live with the skill, in `.claude/skills/team-notes/reference/`:
+differently. Both live in `settings/`:
 `shared.md` holds names and rules for everyone using this copy of the repo (tracked in git,
 and empty unless a team has forked it), and `personal.md` holds the user's own, which git
 ignores. A team's profile can add rules for that team. The skill loads them all before

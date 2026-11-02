@@ -21,11 +21,17 @@ teamnotes/meeting-notes/*
 teamnotes/share/*
 !**/.gitkeep
 
-# Each user's own settings (names and rules) and team profiles. The skills create
-# these from the tracked templates (*.example.md) on first run, so updates never
-# collide with them. names.local.md is the old name of personal.md.
-**/reference/personal.md
-**/reference/names.local.md
-teamnotes/.claude/skills/team-notes/profiles/*
-!teamnotes/.claude/skills/team-notes/profiles/other.md
-!teamnotes/.claude/skills/team-notes/profiles/*.example.md
+# Each user's own settings (names and rules) and team profiles: everything in the
+# settings folders except the tracked templates (*.example.md), shared.md and the
+# `other` profile. The skills and the installer create the user's copies from the
+# templates, so updates never collide with them.
+scribe/settings/*
+!scribe/settings/*.example.md
+!scribe/settings/shared.md
+teamnotes/settings/*
+!teamnotes/settings/*.example.md
+!teamnotes/settings/shared.md
+!teamnotes/settings/profiles/
+teamnotes/settings/profiles/*
+!teamnotes/settings/profiles/*.example.md
+!teamnotes/settings/profiles/other.md

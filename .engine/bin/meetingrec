@@ -11,6 +11,9 @@
 #   meetingrec uninstall [--keep-notes | --delete-notes] [--keep-claude | --remove-claude]
 #                        [--yes] [--dry-run]
 #   meetingrec vault-root <folder>   (for the installer, skills and menu bar)
+#   meetingrec prepare | session-info | transcribe | note-path | share-copy | clear-input
+#                                    (the routine steps of writing notes, for the skills;
+#                                    see "Writing notes" below)
 #
 # Captures only. Transcription is a separate, later process (the `meeting-notes`
 # skill) so a bad transcription run can never cost a recording.
@@ -21,6 +24,9 @@
 #
 set -uo pipefail
 
+# Kept for transcribe: a pip-installed Whisper, the fallback engine, is
+# wherever the caller's PATH says.
+CALLER_PATH="${PATH:-}"
 # Hammerspoon's hs.task starts with a minimal environment, so PATH is set
 # explicitly rather than inherited. ffmpeg is the copy install.sh downloads,
 # or Homebrew's on a Mac that installed it that way.
@@ -684,6 +690,41 @@ PY
 # once a day. The first line is machine-read by .engine/hammerspoon/init.lua:
 #   up-to-date <sha>    or    available <count>
 # followed by one "  • <subject>" line per new commit.
+#
+# Before pulling, your own files in the repo (settings, team profiles, notes,
+# kept transcripts) are copied to $BACKUPS. Git treats a file it ignores as
+# disposable: it would replace one without asking if an update ever shipped a
+# file at the same path. Untracked files that aren't ignored are safe (git
+# refuses instead), and recordings are left out because of their size.
+BACKUPS="$HOME/.local/share/meetingrec/backups"
+BACKUPS_KEPT=5
+
+backup_own_files() {
+  local list="$BACKUPS/.list.$$" file
+  mkdir -p "$BACKUPS" || die "couldn't create $BACKUPS, so nothing was changed."
+  git -C "$REPO_ROOT" ls-files -z --others --ignored --exclude-standard 2>/dev/null \
+    | python3 -c '
+import sys
+skip = ("scribe/input/", "teamnotes/input/")
+for p in sys.stdin.buffer.read().split(b"\0"):
+    s = p.decode("utf-8", "surrogateescape")
+    if not s or s.startswith(skip) or s.endswith(".DS_Store") or "/__pycache__/" in s:
+        continue
+    sys.stdout.buffer.write(p + b"\0")' > "$list"
+  if [ ! -s "$list" ]; then
+    rm -f "$list"; return 0
+  fi
+  file="$BACKUPS/$(date +%Y-%m-%dT%H-%M-%S).tar.gz"
+  tar -C "$REPO_ROOT" -czf "$file" --null -T "$list" 2>/dev/null \
+    || { rm -f "$list" "$file"; die "couldn't back up your files before updating, so nothing was changed."; }
+  rm -f "$list"
+  echo "backed up your settings and notes → ${file/#$HOME/~}"
+  # Keep the newest few.
+  ls -1t "$BACKUPS"/*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEPT + 1)) | while IFS= read -r file; do
+    rm -f "$file"
+  done
+}
+
 cmd_update() {
   local check=0 from_menu=0 arg
   for arg in "$@"; do
@@ -718,6 +759,7 @@ cmd_update() {
   esac
 
   if [ "$count" -gt 0 ]; then
+    backup_own_files
     # --ff-only never merges or rewrites anything. Git itself refuses, before
     # touching a file, if an update would overwrite a change made on this Mac.
     local out
@@ -1224,6 +1266,308 @@ cmd_vault_root() {
 }
 
 # --------------------------------------------------------------------------
+# Writing notes: the routine steps of the two skills
+# --------------------------------------------------------------------------
+# The skills ask the questions and write the notes. The steps that have to go
+# the same way every time (finding folders and recordings, transcribing,
+# naming a note, tidying the inbox) live here, so no agent has to carry them
+# out correctly from instructions. Lines meant for the skills are KEY=value
+# or start with an upper-case word.
+#
+#   meetingrec prepare scribe|teamnotes
+#   meetingrec session-info <session folder>
+#   meetingrec transcribe <session folder | audio file> [--prompt TEXT] [--model NAME]
+#   meetingrec note-path scribe|teamnotes <name> [--date YYYY-MM-DD]
+#   meetingrec share-copy <team note>
+#   meetingrec clear-input <input> --delete|--keep-transcript|--keep-recording --note <file>...
+
+LIB="$REPO_ROOT/.engine/lib"
+# Kept transcripts, personal and team alike.
+KEEP_DIR="$REPO_ROOT/scribe/transcripts"
+AUDIO_EXT="m4a|mp3|wav|mp4|aac|caf"
+TEXT_EXT="txt|srt|vtt|md"
+
+# Sets KIND, VAULT_SETTING, KIND_DIR and SETTINGS for scribe or teamnotes.
+notes_kind() {
+  case "${1:-}" in
+    scribe)    VAULT_SETTING=NOTES_VAULT ;;
+    teamnotes) VAULT_SETTING=TEAM_VAULT ;;
+    *) die "say which notes: scribe or teamnotes" ;;
+  esac
+  KIND="$1" KIND_DIR="$REPO_ROOT/$1" SETTINGS="$REPO_ROOT/$1/settings"
+}
+
+notes_inbox() {
+  if [ "$KIND" = scribe ]; then cmd_config get OUTPUT_ROOT; else echo "$KIND_DIR/input"; fi
+}
+
+# The starter notes table, unless the vault already has a Base of any name: a
+# Base someone has is theirs, with views built by hand. The starter ships in
+# the skill's folder, which sits inside the default vault, so that's skipped.
+ensure_base() {
+  local vault="$1" starter="$2"
+  [ -n "$(find "$vault" -name '*.base' -not -path '*/.claude/*' -not -path '*/.obsidian/*' \
+      -not -path '*/.trash/*' 2>/dev/null | head -n 1)" ] && return 0
+  cp -n "$starter" "$vault/index.base" 2>/dev/null && echo "MADE BASE $vault/index.base"
+}
+
+# Prints the folders, what needs the user's attention, the recordings waiting,
+# and the user's settings, creating what a first run is missing.
+cmd_prepare() {
+  [ $# -eq 1 ] || die "usage: meetingrec prepare scribe|teamnotes"
+  notes_kind "$1"
+  local vault saved=yes inbox
+  vault="$(cmd_config get "$VAULT_SETTING")" || saved=no
+  inbox="$(notes_inbox)"
+  printf 'MEETINGREC=%s\nVAULT=%s\nVAULT_SAVED=%s\nINBOX=%s\nKEEP=%s\nSETTINGS=%s\n' \
+    "$REPO_ROOT/.engine/bin/meetingrec" "$vault" "$saved" "$inbox" "$KEEP_DIR" "$SETTINGS"
+
+  [ -d "$inbox" ] || echo "MISSING INBOX"
+  if [ ! -d "$vault" ]; then
+    echo "MISSING VAULT"
+  elif [ "$saved" = yes ]; then
+    mkdir -p "$vault/meeting-notes" || die "couldn't create $vault/meeting-notes"
+    [ "$KIND" = teamnotes ] && { mkdir -p "$vault/share" || die "couldn't create $vault/share"; }
+    [ -d "$vault/.obsidian" ] || echo "NOT A VAULT YET"
+    if [ "$KIND" = scribe ]; then
+      [ -f "$vault/Tasks.md" ] || echo "NO DASHBOARD"
+      ensure_base "$vault" "$KIND_DIR/.claude/skills/meeting-notes/assets/index.base"
+    else
+      [ -f "$vault/Action Items.md" ] || echo "NO ACTION ITEMS PAGE"
+      ensure_base "$vault" "$KIND_DIR/.claude/skills/team-notes/assets/index.base"
+    fi
+  fi
+
+  # personal.md is made from its template on a first run (the installer
+  # usually has already), and gets a Rules section if an old copy lacks one.
+  local personal="$SETTINGS/personal.md"
+  [ -f "$personal" ] || cp "$SETTINGS/personal.example.md" "$personal" \
+    || die "couldn't create $personal"
+  grep -q '^## Rules' "$personal" \
+    || { echo; sed -n '/^## Rules/,$p' "$SETTINGS/personal.example.md"; } >> "$personal"
+  [ "$KIND" = scribe ] && grep -qF '{Your Name}' "$personal" && echo "NAME NEEDED"
+
+  if [ "$KIND" = teamnotes ]; then
+    local p
+    [ -f "$SETTINGS/profiles/team.md" ] || echo "PROFILE team NOT SET UP"
+    for p in "$SETTINGS"/profiles/*.md; do
+      case "$p" in *.example.md) continue ;; esac
+      [ -f "$p" ] && echo "PROFILE $(basename "$p" .md) $p"
+    done
+  fi
+
+  # Newest first: meetingrec's session folders, then single files.
+  if [ -d "$inbox" ]; then
+    local found=0 entry
+    while IFS= read -r entry; do
+      if [ -d "$inbox/$entry" ]; then echo "INPUT session $inbox/$entry"; found=1; fi
+    done < <(ls -t "$inbox")
+    while IFS= read -r entry; do
+      echo "INPUT file $inbox/$entry"; found=1
+    done < <(ls -t "$inbox" | grep -iE "\.($AUDIO_EXT|$TEXT_EXT)$")
+    [ "$found" -eq 1 ] || echo "NO INPUT"
+  fi
+
+  local f
+  for f in "$SETTINGS/shared.md" "$personal"; do
+    printf '\n===== %s\n' "$f"
+    cat "$f"
+  done
+}
+
+# What meetingrec measured when the recording stopped: the title, date and
+# tracks to pre-fill the questions, and whether each track captured sound.
+cmd_session_info() {
+  [ $# -eq 1 ] && [ -d "$1" ] || die "usage: meetingrec session-info <session folder>"
+  python3 - "$1" <<'PY'
+import datetime, json, os, sys
+d = sys.argv[1]
+name = os.path.basename(os.path.normpath(d))
+try:
+    doc = json.load(open(os.path.join(d, "session.json")))
+except (OSError, ValueError):
+    doc = None
+if doc is None:
+    # A half-written session still gets a note: go by the audio files.
+    tracks = [t for t in ("mic", "system") if os.path.exists(os.path.join(d, t + ".wav"))]
+    print("NO SESSION FILE")
+    print("TITLE=" + name.split("_", 1)[-1].replace("-", " "))
+    print("DATE=" + name[:10])
+    print("TRACKS=" + ",".join(tracks))
+    sys.exit(0)
+started = doc.get("started") or ""
+try:
+    date = (datetime.datetime.fromisoformat(started.replace("Z", "+00:00"))
+            .astimezone().date().isoformat())
+except ValueError:
+    date = name[:10]
+print("TITLE=" + (doc.get("title") or name.split("_", 1)[-1].replace("-", " ")))
+print("DATE=" + date)
+print("TRACKS=" + ",".join(doc.get("tracks") or []))
+for track, c in (doc.get("checks") or {}).items():
+    if not isinstance(c, dict):
+        continue
+    peak = c.get("peak_dbfs")
+    print(f"TRACK {track}: peak {peak} dBFS, {c.get('audio_seconds')}s")
+    # Healthy speech peaks around -5 to -30; below -60 is digital silence.
+    if peak is None or peak < -60:
+        print(f"SILENT {track}")
+for w in doc.get("warnings") or []:
+    print("WARNING " + w)
+PY
+}
+
+cmd_transcribe() {
+  local input="" prompt="" model="small.en"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --prompt) prompt="${2:-}"; shift 2 ;;
+      --model)  model="${2:-}"; shift 2 ;;
+      -*) die "unknown option: $1" ;;
+      *) [ -z "$input" ] || die "transcribe takes one input"; input="$1"; shift ;;
+    esac
+  done
+  [ -n "$input" ] || die "usage: meetingrec transcribe <session folder | audio file> [--prompt TEXT] [--model NAME]"
+  if [ -d "$input" ]; then
+    # Strips silence before Whisper sees each track and merges them as [Me]/[Them].
+    PATH="$PATH:$CALLER_PATH" python3 "$LIB/transcribe_session.py" "$input" --model "$model" --prompt "$prompt"
+  elif echo "$input" | grep -qiE "\.($TEXT_EXT)$"; then
+    echo "OK $input (already a transcript)"
+  elif [ -f "$input" ]; then
+    PATH="$PATH:$CALLER_PATH" bash "$LIB/transcribe.sh" "$input" "$(dirname "$input")" "$model" "$prompt"
+  else
+    die "no such file or folder: $input"
+  fi
+}
+
+# A note's name never overwrites another. Personal notes: "<Title>", then
+# "<Title> (<date>)", then "<Title> (<date>) 2", 3... Team notes (the date is
+# already in the name): "<name>", then "<name> 2"..., free in share/ as well.
+# Characters Obsidian and Finder refuse in a name become "-".
+cmd_note_path() {
+  local kind="${1:-}" name="${2:-}" date=""
+  [ $# -ge 2 ] || die "usage: meetingrec note-path scribe|teamnotes <name> [--date YYYY-MM-DD]"
+  shift 2
+  [ "${1:-}" = --date ] && date="${2:-}"
+  notes_kind "$kind"
+  local vault
+  vault="$(cmd_config get "$VAULT_SETTING")"
+  name="$(printf '%s' "$name" | sed -E 's/[[:space:]]*:[[:space:]]*/ - /g; s#[\\/*?"<>|]+#-#g; s/^[[:space:].]+//; s/[[:space:]]+$//')"
+  [ -n "$name" ] || die "the note needs a name"
+  taken() {
+    [ -e "$vault/meeting-notes/$1.md" ] \
+      || { [ "$KIND" = teamnotes ] && [ -e "$vault/share/$1.md" ]; }
+  }
+  local base="$name" n=2
+  if [ "$KIND" = scribe ] && taken "$base"; then
+    [ -n "$date" ] || die "\"$name\" is taken; give the meeting's date with --date"
+    base="$name ($date)"
+  fi
+  local try="$base"
+  while taken "$try"; do try="$base $n"; n=$((n + 1)); done
+  echo "$vault/meeting-notes/$try.md"
+}
+
+cmd_share_copy() {
+  [ $# -eq 1 ] && [ -f "$1" ] || die "usage: meetingrec share-copy <team note>"
+  python3 "$LIB/make_share_copy.py" "$1"
+}
+
+# A free name in the transcripts folder: "x.srt", then "x (<date>).srt", "x (<date>) 2.srt"...
+keep_path() {
+  local file="$1" date="$2" stem ext try n=2
+  stem="$(basename "$file")"; ext=""
+  [ -d "$file" ] || { ext=".${stem##*.}"; stem="${stem%.*}"; }
+  try="$KEEP_DIR/$stem$ext"
+  [ -e "$try" ] || { echo "$try"; return; }
+  try="$KEEP_DIR/$stem ($date)$ext"
+  while [ -e "$try" ]; do try="$KEEP_DIR/$stem ($date) $n$ext"; n=$((n + 1)); done
+  echo "$try"
+}
+
+# Takes a used recording or transcript out of the inbox once the note is
+# written, so the next run doesn't write it up again. Refuses unless every
+# --note exists and isn't empty, and touches only things in an inbox.
+cmd_clear_input() {
+  local input="" mode="" notes=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --delete|--keep-transcript|--keep-recording) mode="${1#--}"; shift ;;
+      --note) notes+=("${2:-}"); shift 2 ;;
+      -*) die "unknown option: $1" ;;
+      *) [ -z "$input" ] || die "clear-input takes one input"; input="${1%/}"; shift ;;
+    esac
+  done
+  [ -n "$input" ] && [ -n "$mode" ] && [ ${#notes[@]} -gt 0 ] \
+    || die "usage: meetingrec clear-input <input> --delete|--keep-transcript|--keep-recording --note <file>..."
+  [ -e "$input" ] || die "no such file or folder: $input"
+  local n
+  for n in "${notes[@]}"; do
+    [ -s "$n" ] || die "the note $n isn't saved (or is empty), so nothing was removed"
+  done
+
+  local real parent ok=0 box
+  real="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$input")"
+  parent="$(dirname "$real")"
+  for box in "$(cmd_config get OUTPUT_ROOT)" "$REPO_ROOT/scribe/input" "$REPO_ROOT/teamnotes/input"; do
+    [ "$parent" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$box")" ] && ok=1
+  done
+  [ "$ok" -eq 1 ] || die "$input isn't in a meetingrec inbox, so it was left where it is"
+  if [ "$mode" != delete ]; then
+    [ -d "$KEEP_DIR" ] || die "the transcripts folder $KEEP_DIR is missing, so nothing was moved or removed"
+  fi
+  local date
+  date="$(stat -f %Sm -t %Y-%m-%d "$real")"
+
+  if [ -d "$real" ]; then
+    case "$mode" in
+      delete) rm -rf "$real" && echo "DELETED $real" ;;
+      keep-recording)
+        local dest; dest="$(keep_path "$real" "$date")"
+        mv "$real" "$dest" && echo "KEPT $dest" ;;
+      keep-transcript)
+        # The text and the session file that explains it; the audio goes.
+        local dest f; dest="$(keep_path "$real" "$date")"
+        mkdir "$dest" || die "couldn't create $dest"
+        for f in merged.txt mic.srt system.srt session.json; do
+          [ -f "$real/$f" ] && mv "$real/$f" "$dest/"
+        done
+        if [ -f "$dest/merged.txt" ] || [ -f "$dest/mic.srt" ] || [ -f "$dest/system.srt" ]; then
+          rm -rf "$real" && echo "KEPT $dest"
+        else
+          mv "$dest"/* "$real/" 2>/dev/null; rmdir "$dest"
+          die "no transcript found in $real, so nothing was removed"
+        fi ;;
+    esac
+    return
+  fi
+
+  # A single file, plus what transcribing it made: <name>.srt next to it, and
+  # the 16 kHz copy if a run stopped half-way.
+  local stem="${real%.*}" transcript
+  if echo "$real" | grep -qiE "\.($TEXT_EXT)$"; then transcript="$real"; else transcript="$stem.srt"; fi
+  case "$mode" in
+    delete)
+      rm -f "$real" "$stem.srt" "$stem.16k.wav" && echo "DELETED $real" ;;
+    keep-transcript)
+      [ -f "$transcript" ] || die "no transcript found for $real, so nothing was removed"
+      local dest; dest="$(keep_path "$transcript" "$date")"
+      mv -n "$transcript" "$dest" || die "couldn't move $transcript"
+      [ "$transcript" = "$real" ] || rm -f "$real"
+      rm -f "$stem.16k.wav"
+      echo "KEPT $dest" ;;
+    keep-recording)
+      local dest f
+      for f in "$real" "$stem.srt"; do
+        [ -f "$f" ] || continue
+        dest="$(keep_path "$f" "$date")"
+        mv -n "$f" "$dest" && echo "KEPT $dest"
+      done
+      rm -f "$stem.16k.wav" ;;
+  esac
+}
+
+# --------------------------------------------------------------------------
 # status
 # --------------------------------------------------------------------------
 cmd_status() {
@@ -1251,6 +1595,12 @@ case "${1:-}" in
   move)   shift; cmd_move "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   vault-root) shift; cmd_vault_root "$@" ;;
+  prepare)      shift; cmd_prepare "$@" ;;
+  session-info) shift; cmd_session_info "$@" ;;
+  transcribe)   shift; cmd_transcribe "$@" ;;
+  note-path)    shift; cmd_note_path "$@" ;;
+  share-copy)   shift; cmd_share_copy "$@" ;;
+  clear-input)  shift; cmd_clear_input "$@" ;;
   *) cat >&2 <<EOF
 usage: meetingrec start [title] [--mic-only]
        meetingrec stop
@@ -1260,6 +1610,14 @@ usage: meetingrec start [title] [--mic-only]
        meetingrec move <folder>
        meetingrec uninstall [--keep-notes | --delete-notes]
                             [--keep-claude | --remove-claude] [--yes] [--dry-run]
+
+The skills use these to write up notes (you don't need them yourself):
+       meetingrec prepare scribe|teamnotes
+       meetingrec session-info <session folder>
+       meetingrec transcribe <session folder | audio file> [--prompt TEXT] [--model NAME]
+       meetingrec note-path scribe|teamnotes <name> [--date YYYY-MM-DD]
+       meetingrec share-copy <team note>
+       meetingrec clear-input <input> --delete|--keep-transcript|--keep-recording --note <file>...
 
   --mic-only   Record the microphone only, no system tap. Use when you are on
                speakers rather than headphones: the mic hears both sides, so one

@@ -440,18 +440,13 @@ local function folderMenu(name, label)
   } }
 end
 
--- The skill creates personal.md on its first run; if someone opens it first,
--- make it now. A names.local.md from before is opened as-is: the skill carries
--- it over properly on its next run.
-local function openPersonal(folder, skill)
-  local ref = REPO .. "/" .. folder .. "/.claude/skills/" .. skill .. "/reference"
-  local file = ref .. "/personal.md"
+-- The installer and the skill create personal.md; if someone opens it before
+-- either has, make it now.
+local function openPersonal(folder)
+  local dir = REPO .. "/" .. folder .. "/settings"
+  local file = dir .. "/personal.md"
   if not exists(file) then
-    if exists(ref .. "/names.local.md") then
-      file = ref .. "/names.local.md"
-    else
-      hs.execute('cp -n "' .. ref .. '/personal.example.md" "' .. file .. '"')
-    end
+    hs.execute('cp -n "' .. dir .. '/personal.example.md" "' .. file .. '"')
   end
   hs.execute('open -t "' .. file .. '"')
 end
@@ -528,10 +523,10 @@ local function settingsMenu()
     folderMenu("TEAM_VAULT", "Team notes"),
     folderMenu("OUTPUT_ROOT", "Recordings"),
     { title = "-" },
-    { title = "Edit my rules and names…", fn = function() openPersonal("scribe", "meeting-notes") end },
-    { title = "Edit team rules and names…", fn = function() openPersonal("teamnotes", "team-notes") end },
+    { title = "Edit my rules and names…", fn = function() openPersonal("scribe") end },
+    { title = "Edit team rules and names…", fn = function() openPersonal("teamnotes") end },
     { title = "Team profiles…", fn = function()
-        hs.execute('open "' .. REPO .. '/teamnotes/.claude/skills/team-notes/profiles"')
+        hs.execute('open "' .. REPO .. '/teamnotes/settings/profiles"')
       end },
     { title = "-" },
     { title = "Uninstall meetingrec…", disabled = isRecording, fn = uninstall },

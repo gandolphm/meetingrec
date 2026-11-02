@@ -26,20 +26,21 @@ meetingrec/
 │   ├── install.sh              #   the installer, also run by updates
 │   ├── config.example.sh       #   template for ~/.config/meetingrec/config.sh
 │   ├── docs/manual-install.md  #   the install, one step at a time
+│   ├── lib/                    #   transcription and share-copy scripts the commands run
 │   └── tools/                  #   build scripts for the prebuilt downloads
 ├── scribe/                     # notes folder #1 (an Obsidian vault) — personal notes
 │   ├── input/                  #   recordings land here
 │   ├── meeting-notes/          #   notes are written here, unless you pick your own vault (made on first write-up)
 │   ├── transcripts/            #   transcripts you chose to keep, personal and team
 │   ├── Tasks.md                #   to-do dashboard
-│   └── .claude/skills/meeting-notes/
-│       └── reference/          #   your personal.md (names, rules) lives here
+│   ├── settings/               #   your personal.md (names, rules) lives here
+│   └── .claude/skills/meeting-notes/  # the instructions Claude follows
 └── teamnotes/                  # notes folder #2 (an Obsidian vault) — team notes
     ├── input/  meeting-notes/  share/
     ├── Action Items.md         #   everyone's open items, by owner
+    ├── settings/               #   your personal.md for team notes, and
+    │   └── profiles/           #   one file per team: roster, sections, rules
     └── .claude/skills/team-notes/
-        ├── reference/          #   your personal.md for team notes
-        └── profiles/           #   one file per team: roster, sections, rules
 ```
 
 Recordings, transcripts and notes are git-ignored, so nothing you record gets committed. So
@@ -526,9 +527,9 @@ gets the date added, like `Acme check-in (2026-10-30).md`.
 | --- | --- |
 | Where notes and recordings go | `~/.config/meetingrec/config.sh` |
 | Transcripts you kept, personal and team | `scribe/transcripts/`, in the meetingrec folder even if your notes go to a vault of your own. A meetingrec recording gets a folder with the transcript in `merged.txt` |
-| Your name, names and rules for personal notes | `scribe/.claude/skills/meeting-notes/reference/personal.md` |
-| Names and rules for team notes, for every team | `teamnotes/.claude/skills/team-notes/reference/personal.md` |
-| One team's name, roster, sections and rules | `teamnotes/.claude/skills/team-notes/profiles/<team>.md` |
+| Your name, names and rules for personal notes | `scribe/settings/personal.md` |
+| Names and rules for team notes, for every team | `teamnotes/settings/personal.md` |
+| One team's name, roster, sections and rules | `teamnotes/settings/profiles/<team>.md` |
 
 Rules are plain English, one bullet each, and take priority over the skills' defaults. A
 team's rules beat your general ones for that team. A few things can't be changed by a rule,
@@ -629,6 +630,12 @@ anything the new version needs, like a new audiotee or a new menu bar. Your reco
 notes, settings (names and rules), team profiles and `~/.config/meetingrec/config.sh` are never
 touched.
 
+Before downloading, an update also copies your own files in the meetingrec folder (settings,
+team profiles, notes and kept transcripts, but not recordings) to a backup in
+`~/.local/share/meetingrec/backups/`. The last five are kept. Nothing should ever need it,
+but if a file of yours goes missing after an update, open the newest backup in Finder (it
+unpacks into a folder) and copy the file back.
+
 If you installed before updates existed (no *Check for updates…* in the menu), update
 once by hand:
 ```bash
@@ -674,7 +681,7 @@ meetingrec is uninstalled. Your notes are still in ~/meetingrec.
 
 What it removes:
 - **meetingrec's own files** in the meetingrec folder, the downloads in
-  `~/.local/share/meetingrec` (model, ffmpeg, whisper-cli, audiotee), your settings in
+  `~/.local/share/meetingrec` (model, ffmpeg, whisper-cli, audiotee, update backups), your settings in
   `~/.config/meetingrec`, the three commands, and the menu-bar config.
 - **Hammerspoon**, only if the installer added it and the menu bar was all it ran. If you
   had Hammerspoon before, it stays, along with your own config.

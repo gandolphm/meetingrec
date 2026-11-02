@@ -67,7 +67,7 @@ often, plus any from the agenda.
 ## Rules
 
 How this team's notes should be written, in plain English, one bullet each. They apply to
-this team only and take priority over your rules in `reference/personal.md`. Say "from now
+this team only and take priority over your rules in `settings/personal.md`. Say "from now
 on…" while writing up this team's meeting and Claude adds a rule here.
 
 Examples, not active (anything inside `<!-- -->` is ignored):

@@ -13,37 +13,45 @@ scribe/                         (Obsidian vault root — open this folder as a v
 ├── input/                      # recorder inbox: meetingrec session dirs, or a dropped audio/transcript file
 ├── transcripts/                # transcripts you chose to keep at the end of a run
 ├── meeting-notes/              # output — one .md file per meeting (created on the first run)
+├── settings/
+│   ├── shared.md               # names + rules shared across a fork of this repo (tracked; empty here)
+│   ├── personal.example.md     # template for personal.md (tracked; don't edit)
+│   └── personal.md             # yours: the "Me" row, your names and rules (git-ignored, made on first run)
 └── .claude/
     └── skills/meeting-notes/
         ├── SKILL.md                     # full workflow spec
-        ├── reference/shared.md          # names + rules shared across a fork of this repo (tracked; empty here)
-        ├── reference/personal.md        # yours: the "Me" row, your names and rules (git-ignored, made on first run)
-        ├── scripts/transcribe.sh        # flat audio file → .srt (whisper.cpp or openai-whisper)
-        ├── scripts/transcribe_session.py# meetingrec session dir → per-track .srt + merged.txt
         └── assets/index.base            # starter Base, copied to the vault root if missing
 ```
 
+The routine steps run through the `meetingrec` command (`../.engine/bin/meetingrec`), so they
+go the same way every time: `prepare`, `session-info`, `transcribe`, `note-path` and
+`clear-input`. The transcription scripts are in `../.engine/lib/`.
+
 ## Pipeline (input → output)
 
-1. **Set roots** — the skill and the archive are found from the skill's own location, so the
-   repo can live anywhere. The vault (`NOTES_VAULT`, default this folder) and the inbox
-   (`OUTPUT_ROOT`, default `input/`) come from `~/.config/meetingrec/config.sh` via
-   `.engine/bin/meetingrec config get`. The first run asks where notes go and saves the answer.
-2. **Load settings** — names and rules from `reference/shared.md` and your `personal.md` (created from its template on
-   the first run, when it also asks your name for the `Me` row that says whose notes these are).
+1. **Prepare** — `meetingrec prepare scribe` prints the folders: the vault (`NOTES_VAULT`,
+   default this folder) and the inbox (`OUTPUT_ROOT`, default `input/`) from
+   `~/.config/meetingrec/config.sh`, the archive and the settings folder. It also checks the
+   vault, creates what a first run is missing (the notes folder, the Base, your
+   `personal.md`), and lists the recordings waiting. The first run asks where notes go and
+   saves the answer.
+2. **Load settings** — names and rules from `settings/shared.md` and your `settings/personal.md`
+   (on the first run the skill also asks your name for the `Me` row that says whose notes
+   these are).
 3. **Locate input** — newest meetingrec session directory in `input/`, else a single flat
    audio/transcript file. 0 → ask you to drop one in; >1 → ask which one.
 4. **Gather context (chat, before transcribing)** — title, date (default today), type
    (open-ended; scanned from existing notes), attendees, company, context (default `work`),
    agenda. This becomes a **priming prompt** fed to Whisper to improve proper nouns.
-5. **Transcribe (audio only)** — `transcribe_session.py` for a session dir, `transcribe.sh`
-   for a flat file. Default model `small.en`. Engine is `whisper-cli` (whisper.cpp) if
+5. **Transcribe (audio only)** — `meetingrec transcribe`, for a session dir or a flat file.
+   Default model `small.en`. Engine is `whisper-cli` (whisper.cpp) if
    present, else openai-whisper. Failure exits (`NO_ENGINE`, `MODEL_NOT_FOUND`,
    `NO_FFMPEG`) are relayed verbatim — never worked around.
 6. **Analyse** — Key Points, Decisions, To-Do (your commitments only, max five), Action Items
    (overflow and others' commitments you depend on), Questions to Ask. A two-track session
    tags lines `[Me]`/`[Them]`, so ownership is read off the tags rather than guessed.
-7. **Write note** — `meeting-notes/<Title>.md`. Frontmatter:
+7. **Write note** — `meeting-notes/<Title>.md`, the free name `meetingrec note-path` gives
+   (never over an existing note). Frontmatter:
    ```yaml
    date: 2026-06-11
    type: strategy
@@ -54,9 +62,11 @@ scribe/                         (Obsidian vault root — open this folder as a v
    ```
    Body: TL;DR callout → To-Do (checkboxes with `#work`, priority, ⏳/📅) → Action Items →
    Decisions → Questions to Ask → Key Points. Empty sections are omitted.
-8. **Ensure Base exists** — copy `assets/index.base` to the vault root if no Base exists yet.
+8. **Base** — `prepare` copied `assets/index.base` to the vault root in step 1 if no Base
+   existed yet.
 9. **Clean up input** — only after the note is written, ask whether to delete the transcript
-   or move it to `transcripts/`; either way the consumed session dir or file leaves `input/`.
+   or move it to `transcripts/`, then `meetingrec clear-input`; either way the consumed
+   session dir or file leaves `input/`.
 10. **Report** — note path + one-line summary (e.g. "3 to-dos, 1 decision").
 
 ## Key architectural notes

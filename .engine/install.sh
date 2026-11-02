@@ -488,20 +488,51 @@ EOF
   done
 }
 
+# Settings and team profiles used to live inside the skills' folders. An
+# update leaves them there (git ignores them), so carry them over to
+# scribe/settings and teamnotes/settings. A file already at the new place wins,
+# unless it's still the untouched template.
+move_old_settings() {
+  local pair old new f name moved=0
+  for pair in \
+      "scribe/.claude/skills/meeting-notes/reference:scribe/settings" \
+      "teamnotes/.claude/skills/team-notes/reference:teamnotes/settings" \
+      "teamnotes/.claude/skills/team-notes/profiles:teamnotes/settings/profiles"; do
+    old="$REPO/${pair%%:*}" new="$REPO/${pair#*:}"
+    [ -d "$old" ] || continue
+    for f in "$old"/*; do
+      [ -f "$f" ] || continue
+      name="$(basename "$f")"
+      case "$name" in *.example.md|shared.md|other.md) continue ;; esac
+      if [ -e "$new/$name" ] && ! cmp -s "$new/$name" "$new/${name%.md}.example.md"; then
+        [ "$moved" -eq 1 ] || step "Moving your settings"
+        moved=1
+        note "left ${f/#$HOME/~} where it is: ${new/#$HOME/~} already has a $name"
+        continue
+      fi
+      [ "$moved" -eq 1 ] || step "Moving your settings"
+      moved=1
+      mkdir -p "$new" && mv -f "$f" "$new/$name" || die "Couldn't move $f to $new."
+      ok "${f#$REPO/} → ${new#$REPO/}/$name"
+    done
+    rm -f "$old/.DS_Store"
+    rmdir "$old" 2>/dev/null
+  done
+  return 0
+}
+
 install_personal_files() {
   step "Your settings and team profile"
   # Git ignores these, so they can't come down with the clone: each is copied
   # from its tracked template. The skills do the same on first run, so this
-  # only saves a step. Existing copies are never touched, and a names.local.md
-  # from before personal.md existed is left for the skill to carry over.
+  # only saves a step. Existing copies are never touched.
   local tmpl copy made=0
   for tmpl in \
-      "$REPO/scribe/.claude/skills/meeting-notes/reference/personal.example.md" \
-      "$REPO/teamnotes/.claude/skills/team-notes/reference/personal.example.md" \
-      "$REPO/teamnotes/.claude/skills/team-notes/profiles/team.example.md"; do
+      "$REPO/scribe/settings/personal.example.md" \
+      "$REPO/teamnotes/settings/personal.example.md" \
+      "$REPO/teamnotes/settings/profiles/team.example.md"; do
     copy="${tmpl%.example.md}.md"
     [ -f "$copy" ] && continue
-    [ -f "$(dirname "$tmpl")/names.local.md" ] && continue
     cp "$tmpl" "$copy" || die "Couldn't create $copy."
     made=1
   done
@@ -774,6 +805,7 @@ main() {
   choose_notes_dir
   choose_tool_source
   move_old_downloads
+  move_old_settings
   install_model
   install_tools
   install_audiotee
