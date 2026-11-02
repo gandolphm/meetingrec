@@ -65,7 +65,9 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
 
 - A Mac with **Apple silicon**, running **macOS 14.2 or later**. System-audio capture uses
   Core Audio taps, which first shipped in 14.2.
-- A **Claude Code** subscription or API access.
+- A **Claude Code** subscription or API access. Claude Code itself can be the `claude`
+  command or the **[Claude app](https://claude.ai/download)** for Mac (its Code tab). If
+  your Mac has neither, the installer asks whether to install the `claude` command.
 - **Disk space:** about **0.55 GB** for the Whisper model (465 MB), ffmpeg, whisper.cpp and
   Hammerspoon. If your Mac doesn't have them yet, add about 1.3 GB for Apple's Command Line
   Tools and about 0.3 GB for Claude Code, which grows toward 0.8 GB as it keeps previous
@@ -75,7 +77,8 @@ are your settings and team rosters (see [Make it yours](#make-it-yours)).
   choose Homebrew in the [install options](#install-options)). If your Mac doesn't have
   Apple's Command Line Tools yet, macOS may ask an administrator to approve them.
 - *Optional:* the **[Claude app](https://claude.ai/download)** for Mac, so *Write up notes…*
-  in the menu bar opens there instead of in Terminal.
+  in the menu bar opens there instead of in Terminal. The `scribe` and `teamnotes` commands
+  need the `claude` command.
 
 ### What leaves your Mac
 
@@ -156,6 +159,9 @@ bash install.sh
   [Moving things](#moving-things)).
 - **Install the command line developer tools.** If a window asks, click *Install* and
   agree. The script waits until it finishes.
+- **Install Claude Code?** Only if your Mac has neither the `claude` command nor the Claude
+  app. Press Enter to install it. If you type `n`, install the Claude app or Claude Code
+  yourself before your first write-up.
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
   it.
 - **System audio permission for Hammerspoon.** macOS never shows a prompt for this one,
@@ -208,6 +214,9 @@ You should see something like this (each line starting with ✓ is a finished st
   ✓ created. Claude fills them in the first time you write up a meeting
 
 ==> Claude Code
+  meetingrec writes up notes with Claude Code, and this Mac doesn't have it yet
+  (neither the claude command nor the Claude app).
+  Install Claude Code now? [Y/n]
   ✓ installed
 
 ==> Commands: meetingrec, scribe, teamnotes
@@ -258,7 +267,8 @@ PATH, and run:
 claude
 ```
 Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
-prompts. When you reach the `>` prompt, type `/exit`.
+prompts. When you reach the `>` prompt, type `/exit`. If you use only the Claude app,
+open it and sign in there instead.
 
 Then [set up Obsidian](#set-up-obsidian) (recommended).
 
@@ -668,7 +678,8 @@ What it removes:
   had Hammerspoon before, it stays, along with your own config.
 - **Claude Code**, only if the installer added it and you say yes. Its settings, sign-in
   and conversation history in `~/.claude` and `~/.claude.json` stay; delete them yourself
-  if you don't need them. If you had Claude Code before, you aren't asked.
+  if you don't need them. If you had Claude Code or the Claude app before, or installed it
+  yourself, you aren't asked, and it stays.
 
 What it never touches: notes folders outside the meetingrec folder (like an Obsidian vault
 you picked), Apple's command line tools, Homebrew, and the PATH line in `~/.zprofile`,

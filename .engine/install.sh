@@ -512,17 +512,37 @@ install_personal_files() {
   fi
 }
 
+# Claude Code comes two ways, and either one writes up notes: the claude command,
+# and the Code tab of the Claude app (which the menu bar opens first).
+has_claude_cli() { command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; }
+claude_app() { ls -d /Applications/Claude.app "$HOME/Applications/Claude.app" 2>/dev/null | head -n 1; }
+
 install_claude() {
   step "Claude Code"
-  if command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; then
+  local app yn
+  app="$(claude_app)"
+  if has_claude_cli; then
     ok "already installed"
+  elif [ -n "$app" ]; then
+    ok "the Claude app is installed (${app/#$HOME/~}). Write up notes… in the menu bar opens it"
+    note "the scribe and teamnotes commands need the claude command too. To add it: curl -fsSL https://claude.ai/install.sh | bash"
   elif [ -n "$UPDATE" ]; then
     # Claude Code updates itself; an update shouldn't install it behind someone's back.
     note "not installed. To install it: curl -fsSL https://claude.ai/install.sh | bash"
   else
-    curl -fsSL https://claude.ai/install.sh | bash || die "Claude Code didn't install."
-    record claude-code
-    ok "installed"
+    echo "  meetingrec writes up notes with Claude Code, and this Mac doesn't have it yet"
+    echo "  (neither the claude command nor the Claude app)."
+    read -r -p "  Install Claude Code now? [Y/n] " yn
+    case "$yn" in
+      [nN]*)
+        note "skipped. Before your first write-up, install the Claude app (https://claude.ai/download)"
+        note "or Claude Code: curl -fsSL https://claude.ai/install.sh | bash" ;;
+      *)
+        curl -fsSL https://claude.ai/install.sh | bash || die "Claude Code didn't install."
+        # Only what this installer added is offered for removal by `meetingrec uninstall`.
+        record claude-code
+        ok "installed" ;;
+    esac
   fi
   if [ -x "$HOME/.local/bin/claude" ] && ! in_shell_startup ".local/bin"; then
     add_line "$HOME/.zprofile" 'export PATH="$HOME/.local/bin:$PATH"'
@@ -715,13 +735,22 @@ EOF
 }
 
 finish() {
+  local sign_in
+  if has_claude_cli; then
+    sign_in="Open a ${B}new${N} Terminal window, run ${B}claude${N} once, sign in, then type ${B}/exit${N}.
+     The menu bar's \"Write up notes…\" works only after that first session ends."
+  elif [ -n "$(claude_app)" ]; then
+    sign_in="Open the ${B}Claude${N} app and sign in, if you haven't yet."
+  else
+    sign_in="Install Claude Code before your first write-up: the Claude app
+     (https://claude.ai/download), or in Terminal: curl -fsSL https://claude.ai/install.sh | bash"
+  fi
   cat <<EOF
 
 ${G}${B}Done.${N} meetingrec is installed in ${B}$REPO${N}
 
 What's left (see the README for details):
-  1. Open a ${B}new${N} Terminal window, run ${B}claude${N} once, sign in, then type ${B}/exit${N}.
-     The menu bar's "Write up notes…" works only after that first session ends.
+  1. $sign_in
   2. Set up Obsidian ("Set up Obsidian" in the README).
 
 The first time you write up a meeting, Claude asks your name, where your notes

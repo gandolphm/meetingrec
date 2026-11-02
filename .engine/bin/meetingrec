@@ -1099,6 +1099,8 @@ cmd_uninstall() {
     && stays+=("Hammerspoon")
   [ ${#claude_parts[@]} -eq 0 ] && { command -v claude >/dev/null || [ -x "$HOME/.local/bin/claude" ]; } \
     && stays+=("Claude Code")
+  [ -n "$(ls -d /Applications/Claude.app "$HOME/Applications/Claude.app" 2>/dev/null)" ] \
+    && stays+=("the Claude app")
   stays+=("Apple's command line tools")
   [ -x /opt/homebrew/bin/brew ] && stays+=("Homebrew")
 

@@ -41,7 +41,9 @@ c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d  /Users/you/.lo
 ```
 If the long number is different, delete the file and download it again.
 
-**Claude Code:**
+**Claude Code:** skip this if `claude` already runs in Terminal. If you use only the
+[Claude app](https://claude.ai/download), you can skip it too: *Write up notes…* in the
+menu bar opens the app, but the `scribe` and `teamnotes` commands need the `claude` command.
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 ```
