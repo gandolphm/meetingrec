@@ -696,8 +696,12 @@ PY
 # disposable: it would replace one without asking if an update ever shipped a
 # file at the same path. Untracked files that aren't ignored are safe (git
 # refuses instead), and recordings are left out because of their size.
+# Right after the pull, every one of those files is checked: if git left them
+# all as they were, which is the normal case, the backup is deleted again, so
+# backups only stay on a Mac when an update did change a file of yours.
 BACKUPS="$HOME/.local/share/meetingrec/backups"
 BACKUPS_KEPT=5
+BACKUP_FILE=""
 
 backup_own_files() {
   local list="$BACKUPS/.list.$$" file
@@ -714,12 +718,53 @@ for p in sys.stdin.buffer.read().split(b"\0"):
   if [ ! -s "$list" ]; then
     rm -f "$list"; return 0
   fi
-  file="$BACKUPS/$(date +%Y-%m-%dT%H-%M-%S).tar.gz"
+  file="$BACKUPS/$(date +%Y-%m-%dT%H-%M-%S)"
+  [ -e "$file.tar.gz" ] && file="$file-$$"
+  file="$file.tar.gz"
+  # The archive, plus a fingerprint of each file to check against afterwards.
   tar -C "$REPO_ROOT" -czf "$file" --null -T "$list" 2>/dev/null \
-    || { rm -f "$list" "$file"; die "couldn't back up your files before updating, so nothing was changed."; }
+    && python3 - "$REPO_ROOT" "$list" > "$file.sums" <<'PY' \
+    || { rm -f "$list" "$file" "$file.sums"; die "couldn't back up your files before updating, so nothing was changed."; }
+import hashlib, json, os, sys
+root, names = sys.argv[1], open(sys.argv[2], "rb").read().split(b"\0")
+sums = {}
+for n in filter(None, names):
+    path = os.path.join(root.encode(), n)
+    if os.path.isfile(path):
+        sums[n.decode("utf-8", "surrogateescape")] = hashlib.sha256(open(path, "rb").read()).hexdigest()
+json.dump(sums, sys.stdout)
+PY
   rm -f "$list"
-  echo "backed up your settings and notes → ${file/#$HOME/~}"
-  # Keep the newest few.
+  BACKUP_FILE="$file"
+}
+
+# After the pull. Unchanged: delete the backup. Changed: keep it, say which
+# files, and keep only the newest few such backups.
+settle_backup() {
+  [ -n "$BACKUP_FILE" ] || return 0
+  local changed file
+  changed="$(python3 - "$REPO_ROOT" "$BACKUP_FILE.sums" <<'PY'
+import hashlib, json, os, sys
+root, sums = sys.argv[1], json.load(open(sys.argv[2]))
+for name, digest in sorted(sums.items()):
+    path = os.path.join(root, name)
+    try:
+        same = hashlib.sha256(open(path, "rb").read()).hexdigest() == digest
+    except OSError:
+        same = False
+    if not same:
+        print(name)
+PY
+)" || changed="(couldn't check)"
+  rm -f "$BACKUP_FILE.sums"
+  if [ -z "$changed" ]; then
+    rm -f "$BACKUP_FILE"
+    return 0
+  fi
+  warn "the update changed or removed these files of yours:"
+  printf '%s\n' "$changed" | sed 's/^/  /' >&2
+  warn "a copy from before the update is in ${BACKUP_FILE/#$HOME/~} (open it in Finder to unpack it)."
+  notify "MeetingRec" "The update changed $(printf '%s\n' "$changed" | wc -l | tr -d ' ') of your files. A copy from before is in ~/.local/share/meetingrec/backups."
   ls -1t "$BACKUPS"/*.tar.gz 2>/dev/null | tail -n +$((BACKUPS_KEPT + 1)) | while IFS= read -r file; do
     rm -f "$file"
   done
@@ -764,9 +809,12 @@ cmd_update() {
     # touching a file, if an update would overwrite a change made on this Mac.
     local out
     if ! out="$("${git[@]}" merge --ff-only --quiet '@{u}' 2>&1)"; then
+      # Git refused before touching a file, so the backup isn't needed.
+      [ -n "$BACKUP_FILE" ] && rm -f "$BACKUP_FILE" "$BACKUP_FILE.sums"
       printf '%s\n' "$out" | sed 's/^/  /' >&2
       die "couldn't update, so nothing was changed. Git's reason is above: usually a file in $REPO_ROOT was edited on this Mac and the update changes it too. Ask Claude (run claude in $REPO_ROOT) to help keep your edit, then try again."
     fi
+    settle_backup
     echo "updated $before → $("${git[@]}" rev-parse --short HEAD):"
     "${git[@]}" log --reverse --format='  • %s' "$before..HEAD"
   else

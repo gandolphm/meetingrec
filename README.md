@@ -630,10 +630,11 @@ anything the new version needs, like a new audiotee or a new menu bar. Your reco
 notes, settings (names and rules), team profiles and `~/.config/meetingrec/config.sh` are never
 touched.
 
-Before downloading, an update also copies your own files in the meetingrec folder (settings,
-team profiles, notes and kept transcripts, but not recordings) to a backup in
-`~/.local/share/meetingrec/backups/`. The last five are kept. Nothing should ever need it,
-but if a file of yours goes missing after an update, open the newest backup in Finder (it
+As a safety net, an update first copies your own files in the meetingrec folder (settings,
+team profiles, notes and kept transcripts, but not recordings) to a backup, then checks them
+once the new code is in. If none changed, which is what should always happen, the backup is
+deleted straight away, so nothing builds up. If an update did change or remove one, it says
+which, and the backup stays in `~/.local/share/meetingrec/backups/`: open it in Finder (it
 unpacks into a folder) and copy the file back.
 
 If you installed before updates existed (no *Check for updates…* in the menu), update
