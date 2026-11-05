@@ -700,6 +700,9 @@ test_recording() {
   grant_system_audio
 
   step "Test recording (gives the menu-bar button its permissions)"
+  # The test is whichever recording starts after this point, whatever its title.
+  local since
+  since="$(mktemp -t meetingrec-test)" || die "Couldn't create a temporary file."
   cat <<EOF
   macOS asks for microphone permission the first time Hammerspoon records.
   Do a short test now so the prompt doesn't appear during a real call:
@@ -719,6 +722,7 @@ EOF
   while :; do
     read -r -p "  Press Enter when you've clicked Stop (or type s to skip): " reply
     if [ "$reply" = "s" ]; then
+      rm -f "$since"
       note "skipped. To do it later, run this installer again."
       return
     fi
@@ -734,11 +738,17 @@ EOF
   local inbox session
   inbox="$("$REPO/.engine/bin/meetingrec" config get OUTPUT_ROOT 2>/dev/null)"
   [ -n "$inbox" ] || inbox="$REPO/scribe/input"
-  # Newest first by time, not by name: a second test in the same minute is
-  # named <minute>-<seconds>_test, which sorts before <minute>_test.
-  session="$(ls -1dt "$inbox"/*_test 2>/dev/null | head -n 1)"
-  if [ -z "$session" ] || [ ! -f "$session/session.json" ]; then
-    note "No finished test recording found in $inbox."
+  # The newest recording whose session.json (written at start) is newer than the
+  # instructions, so a title other than "test" still counts. By time, not by
+  # name: a second one in the same minute is named <minute>-<seconds>_<title>,
+  # which sorts before <minute>_<title>.
+  session="$(ls -1dt "$inbox"/*/ 2>/dev/null | while IFS= read -r d; do
+    d="${d%/}"
+    if [ "$d/session.json" -nt "$since" ]; then printf '%s\n' "$d"; break; fi
+  done)"
+  rm -f "$since"
+  if [ -z "$session" ]; then
+    note "No recording made since these instructions appeared, in $inbox."
     note "To do the test later, run this installer again."
     return
   fi
@@ -768,8 +778,17 @@ EOF
 EOF
     return
   fi
-  rm -rf "$session"
-  ok "both tracks recorded audio. Test recording deleted"
+  # Deleted only when it's titled test, as the steps say: anything else might be
+  # a real recording, and a deleted one can't be brought back.
+  case "$session" in
+    *_test)
+      rm -rf "$session"
+      ok "both tracks recorded audio. Test recording deleted" ;;
+    *)
+      ok "both tracks recorded audio"
+      note "The recording wasn't titled test, so it was kept: $session"
+      note "Delete that folder if you don't need it." ;;
+  esac
 }
 
 finish() {
