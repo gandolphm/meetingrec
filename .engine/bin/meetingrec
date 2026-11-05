@@ -24,8 +24,8 @@
 #
 set -uo pipefail
 
-# Kept for transcribe: a pip-installed Whisper, the fallback engine, is
-# wherever the caller's PATH says.
+# Kept for transcribe, as a last place to look: a whisper-cli or ffmpeg someone
+# built or installed themselves is wherever the caller's PATH says.
 CALLER_PATH="${PATH:-}"
 # Hammerspoon's hs.task starts with a minimal environment, so PATH is set
 # explicitly rather than inherited. ffmpeg is the copy install.sh downloads,

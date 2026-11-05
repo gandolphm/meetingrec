@@ -1,7 +1,9 @@
 # Lints the scripts and runs the tests on every push and pull request. Changes
 # nothing and publishes nothing.
 #
-# Run the tests on a Mac yourself: bash .engine/tests/recorder.sh
+# Run the tests on a Mac yourself:
+#   bash .engine/tests/recorder.sh
+#   python3 -m unittest discover -s .engine/tests
 name: Check
 
 on:
@@ -28,7 +30,8 @@ jobs:
 
       - name: Python compiles
         run: |
-          python3 -m py_compile .engine/lib/*.py .engine/bin/clock-check .engine/bin/drift-check
+          python3 -m py_compile .engine/lib/*.py .engine/bin/clock-check .engine/bin/drift-check \
+            .engine/tests/*.py
 
   test:
     runs-on: macos-15  # the recorder uses macOS's stat, and it's what users run
@@ -37,3 +40,6 @@ jobs:
 
       - name: Recorder and clear-input tests
         run: bash .engine/tests/recorder.sh
+
+      - name: Transcription and share-copy tests
+        run: python3 -m unittest discover -s .engine/tests -v

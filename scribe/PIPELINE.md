@@ -44,9 +44,8 @@ go the same way every time: `prepare`, `session-info`, `transcribe`, `note-path`
    (open-ended; scanned from existing notes), attendees, company, context (default `work`),
    agenda. This becomes a **priming prompt** fed to Whisper to improve proper nouns.
 5. **Transcribe (audio only)** — `meetingrec transcribe`, for a session dir or a flat file.
-   Default model `small.en`. Engine is `whisper-cli` (whisper.cpp) if
-   present, else openai-whisper. Failure exits (`NO_ENGINE`, `MODEL_NOT_FOUND`,
-   `NO_FFMPEG`) are relayed verbatim — never worked around.
+   Default model `small.en`. Engine is `whisper-cli` (whisper.cpp). Failure exits
+   (`NO_ENGINE`, `MODEL_NOT_FOUND`, `NO_FFMPEG`) are relayed verbatim — never worked around.
 6. **Analyse** — Key Points, Decisions, To-Do (your commitments only, max five), Action Items
    (overflow and others' commitments you depend on), Questions to Ask. A two-track session
    tags lines `[Me]`/`[Them]`, so ownership is read off the tags rather than guessed.
