@@ -72,8 +72,9 @@ from the shell's working directory, so the skill can't land in `../scribe/` by m
   `../scribe/` this skill touches.
 - **`SETTINGS`** — `teamnotes/settings/`: the user's settings files (Step 0.1) and the team
   profiles (Step 0.25).
+- **`STARTERS`** — the starter `Action Items.md` page and notes table (Step 0.15).
 
-In the commands below, `$MEETINGREC`, `$VAULT`, `$INBOX`, `$KEEP` and `$SETTINGS` stand for
+In the commands below, `$MEETINGREC`, `$VAULT`, `$INBOX`, `$KEEP`, `$SETTINGS` and `$STARTERS` stand for
 those paths. Shell variables don't carry over from one command to the next, so write the
 paths themselves into each command.
 
@@ -172,9 +173,10 @@ follow the protected rule and tell the user which rule was set aside and why:
 - The frontmatter fields, their formats, and the action-item format (owner as the `###`
   heading, priority then `📅`) stay as specified below: `index.base` and `Action Items.md`
   depend on them. A rule can change their *values*.
-- Never write to a tracked file: this `SKILL.md`, `shared.md`, `personal.example.md`,
-  `other.md`, `team.example.md`, anything in `.engine/`, `Action Items.md`. Writes go to `personal.md`
-  or to the user's own profile files.
+- Never write to a file meetingrec ships: this `SKILL.md` and its `assets/`, `shared.md`,
+  `personal.example.md`, `other.md`, `team.example.md`, anything in `.engine/`. Nor to
+  `Action Items.md`, which is the user's, except to copy the starter in (Step 0.15). Writes
+  go to `personal.md` or to the user's own profile files.
 - Never write into the scribe vault or the user's personal-notes vault, never invent
   transcript content, and every attendee in the roll call comes from the user's answers.
 
@@ -195,8 +197,8 @@ checks on every run:
 - **`NO ACTION ITEMS PAGE`** — there's no page collecting everyone's action items, so this
   note's items won't show up on one. Unless a rule in `personal.md` says not to offer it for
   this vault, offer once to copy the starter page in. On a yes, copy it with
-  `cp -n "$SETTINGS/../Action Items.md" "$VAULT/Action Items.md"` (the starter is in the
-  `teamnotes/` folder; never copy over an existing file). On a no, add a rule to `personal.md` so the offer isn't repeated: *"Don't offer to
+  `cp -n "$STARTERS/Action Items.md" "$VAULT/Action Items.md"` (never copy over an
+  existing file). On a no, add a rule to `personal.md` so the offer isn't repeated: *"Don't offer to
   copy Action Items.md into <vault path>."* Tell the user you saved it and that deleting the
   rule brings the offer back.
 

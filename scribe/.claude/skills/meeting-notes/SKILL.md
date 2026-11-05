@@ -62,8 +62,9 @@ first command prints the folders as `NAME=value` lines:
   recordings.
 - **`KEEP`** — the transcript archive, `scribe/transcripts/` (Step 5).
 - **`SETTINGS`** — the folder with the user's settings files (Step 0.1).
+- **`STARTERS`** — the starter `Tasks.md` dashboard and notes table (Step 0.15).
 
-In the commands below, `$MEETINGREC`, `$VAULT`, `$INBOX`, `$KEEP` and `$SETTINGS` stand for
+In the commands below, `$MEETINGREC`, `$VAULT`, `$INBOX`, `$KEEP`, `$SETTINGS` and `$STARTERS` stand for
 those paths. Shell variables don't carry over from one command to the next, so write the
 paths themselves into each command.
 
@@ -168,8 +169,9 @@ rule and tell the user which rule was set aside and why:
 - The frontmatter fields, their formats, and the to-do line format (`#{context}` tag,
   priority, `⏳`, `📅`) stay as specified below: `index.base` and `Tasks.md` depend on them.
   A rule can change their *values*, such as which context a meeting gets.
-- Never write to a tracked file: this `SKILL.md`, `shared.md`, `personal.example.md`,
-  anything in `.engine/`, `Tasks.md` (Step 6). Every write goes to `personal.md`.
+- Never write to a file meetingrec ships: this `SKILL.md` and its `assets/`, `shared.md`,
+  `personal.example.md`, anything in `.engine/`. Nor to `Tasks.md`, which is the user's
+  (Step 6), except to copy the starter in (Step 0.15). Every write goes to `personal.md`.
 - Never write into the team-notes vault, and never invent transcript content.
 
 The **`Me` row** in `personal.md` names the person running the skill — "the user"
@@ -197,9 +199,8 @@ checks on every run:
   either way.
 - **`NO DASHBOARD`** — there's no to-do page, so this note's to-dos won't show up on one.
   Unless a rule in `personal.md` says not to offer it for this vault, offer once to copy the
-  starter dashboard in. On a yes, copy it with `cp -n "$KEEP/../Tasks.md" "$VAULT/Tasks.md"`
-  (the starter is in the `scribe/` folder; never copy over an existing file: a `Tasks.md`
-  that exists is theirs). On a no, add a rule to
+  starter dashboard in. On a yes, copy it with `cp -n "$STARTERS/Tasks.md" "$VAULT/Tasks.md"`
+  (never copy over an existing file: a `Tasks.md` that exists is theirs). On a no, add a rule to
   `personal.md` so the offer isn't repeated: *"Don't offer to copy Tasks.md into
   <vault path>."* Tell the user you saved it and that deleting the rule brings the offer back.
 

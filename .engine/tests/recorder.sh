@@ -27,6 +27,12 @@ STATE_FILE="$XDG_STATE_HOME/meetingrec/current"
 
 mkdir -p "$REPO/scribe/transcripts" "$INBOX" "$REPO/teamnotes/input" "$STUBS"
 cp -R "$SRC/.engine" "$REPO/.engine"
+# For prepare: the settings templates and the skills (with their starters).
+for kind in scribe teamnotes; do
+  mkdir -p "$REPO/$kind/settings/profiles"
+  cp "$SRC/$kind/settings/"*.md "$REPO/$kind/settings/"
+  cp -R "$SRC/$kind/.claude" "$REPO/$kind/.claude"
+done
 printf 'OUTPUT_ROOT="%s"\n' "$INBOX" > "$MEETINGREC_CONFIG"
 
 # The background byte-rate checks outlive a test by up to ~30 s. Removing the
@@ -183,6 +189,47 @@ print("returned")' "$REPO/.engine/lib" 2>&1)"
 rc=$?
 check "a failed ffmpeg run stops the transcription" [ "$rc" -ne 0 ]
 check "...and says why" has "$out" 'silence detection failed'
+
+echo "a missing recordings folder"
+# Its own config: the folder is chosen in the config, not the environment.
+gone="$T/Unplugged drive/Recordings"
+printf 'OUTPUT_ROOT="%s"\n' "$gone" > "$T/config-gone.sh"
+out="$(MEETINGREC_CONFIG="$T/config-gone.sh" "$MR" start "Gone" --mic-only 2>&1)"; rc=$?
+check "start refuses a custom folder that's missing" [ "$rc" -ne 0 ]
+check "...says what to do" has "$out" 'choose the folder again'
+check "...and doesn't re-create it" absent "$T/Unplugged drive"
+check "...and isn't left recording" [ "$("$MR" status)" = idle ]
+"$MR" stop >/dev/null 2>&1
+# No OUTPUT_ROOT saved: the default inbox, which start creates when it's missing.
+default_inbox="$REPO/scribe/input"
+mv "$default_inbox" "$T/inbox-aside"
+: > "$T/config-default.sh"
+out="$(MEETINGREC_CONFIG="$T/config-default.sh" "$MR" start "Default" --mic-only 2>&1)" \
+  || bad "start re-creates the default inbox" "$out"
+check "start re-creates the default inbox" exist "$default_inbox"
+MEETINGREC_CONFIG="$T/config-default.sh" "$MR" stop >/dev/null 2>&1
+rm -rf "$default_inbox"; mv "$T/inbox-aside" "$default_inbox"
+
+echo "prepare and the starter files"
+vault="$T/My Vault"
+mkdir -p "$vault"
+"$MR" config set NOTES_VAULT "$vault" >/dev/null
+out="$("$MR" prepare scribe 2>&1)"
+check "prepare prints STARTERS" has "$out" '^STARTERS=.*/scribe/.claude/skills/meeting-notes/assets$'
+check "...where the starter Tasks.md is" exist "$REPO/scribe/.claude/skills/meeting-notes/assets/Tasks.md"
+check "a vault without Tasks.md says NO DASHBOARD" has "$out" '^NO DASHBOARD$'
+check "...and gets the starter notes table" \
+  cmp -s "$vault/index.base" "$REPO/scribe/.claude/skills/meeting-notes/assets/index.base"
+team="$T/Team Vault"
+mkdir -p "$team"
+"$MR" config set TEAM_VAULT "$team" >/dev/null
+out="$("$MR" prepare teamnotes 2>&1)"
+check "team prepare prints its own STARTERS" \
+  has "$out" '^STARTERS=.*/teamnotes/.claude/skills/team-notes/assets$'
+check "...where the starter Action Items.md is" \
+  exist "$REPO/teamnotes/.claude/skills/team-notes/assets/Action Items.md"
+check "...and the team vault gets the team's notes table" \
+  cmp -s "$team/index.base" "$REPO/teamnotes/.claude/skills/team-notes/assets/index.base"
 
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"

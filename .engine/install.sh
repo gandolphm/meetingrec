@@ -128,7 +128,23 @@ install_clt() {
   xcode-select --install >/dev/null 2>&1
   note "A window opened asking to install the command line developer tools."
   note "Click Install and agree. This takes 5–15 minutes; this script waits for it."
-  until xcode-select -p >/dev/null 2>&1; do sleep 5; done
+  # Apple's install window stays open until the tools are in, so if it's gone and
+  # they still aren't, it was cancelled or failed: stop rather than wait forever.
+  # 20 s of grace, for the window to appear and for the tools to register after
+  # Done. Matched by its path: process names are cut to 16 characters. An hour at
+  # most, for a download that stalls.
+  local app="Install Command Line Developer Tools.app/" waited=0 gone=0
+  until xcode-select -p >/dev/null 2>&1; do
+    sleep 5
+    waited=$((waited + 5))
+    if pgrep -f "$app" >/dev/null 2>&1; then gone=0; else gone=$((gone + 5)); fi
+    if [ "$gone" -ge 20 ] && ! xcode-select -p >/dev/null 2>&1; then
+      die "The command line developer tools weren't installed: Apple's install window was closed before they finished."
+    fi
+    if [ "$waited" -ge 3600 ]; then
+      die "Still no command line developer tools after an hour. Check your internet connection, or install them from https://developer.apple.com/download/all/ (search for Command Line Tools)."
+    fi
+  done
   ok "installed"
 }
 
@@ -541,6 +557,23 @@ install_personal_files() {
     ok "created. Claude fills them in the first time you write up a meeting"
   else
     ok "keeping your existing files"
+  fi
+
+  # The to-do dashboard and the team's Action Items page and notes table, in the
+  # default vaults. Git used to ship them; now they're yours, so the starters
+  # come from the skills' assets/. Once per install: the update that stopped
+  # shipping them took away unedited copies, and this puts them back. Later
+  # runs leave a page you deleted deleted. Never copied over an existing file.
+  if ! grep -qx 'starter-files' "$RECORD" 2>/dev/null; then
+    local src dst
+    while IFS='|' read -r src dst; do
+      [ -e "$REPO/$dst" ] || cp "$REPO/$src" "$REPO/$dst" || die "Couldn't create $REPO/$dst."
+    done <<'EOF'
+scribe/.claude/skills/meeting-notes/assets/Tasks.md|scribe/Tasks.md
+teamnotes/.claude/skills/team-notes/assets/Action Items.md|teamnotes/Action Items.md
+teamnotes/.claude/skills/team-notes/assets/index.base|teamnotes/index.base
+EOF
+    record starter-files
   fi
 }
 

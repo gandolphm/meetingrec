@@ -10,8 +10,8 @@ in `../scribe/` is a transcript you chose to keep, in `../scribe/transcripts/`.
 teamnotes/                      (Obsidian vault root, working dir for the skill)
 ├── CLAUDE.md                   # voice rules, profile index
 ├── PIPELINE.md                 # this file
-├── index.base                  # Obsidian Base — All Meetings, By Team, By Type
-├── Action Items.md             # Tasks-plugin page — every open item, grouped by owner heading
+├── index.base                  # Obsidian Base — All Meetings, By Team, By Type (yours; git-ignored, made at install)
+├── Action Items.md             # Tasks-plugin page — every open item, grouped by owner heading (yours; git-ignored)
 ├── input/                      # drop zone: phone .m4a/.mp3, a .txt/.srt transcript, or a meetingrec session dir
 ├── meeting-notes/              # output — one Obsidian note per meeting, "<prefix> — YYYY-MM-DD.md" (created on the first run)
 ├── share/                      # output — plain-Markdown copy of each note for the team
@@ -26,7 +26,7 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 └── .claude/
     └── skills/team-notes/
         ├── SKILL.md                     # full workflow spec (profile-independent)
-        └── assets/index.base            # starter Base, copied to vault root if missing
+        └── assets/                      # starters: Action Items.md and index.base, copied to the vault root if missing
 ```
 
 The routine steps run through the `meetingrec` command (`../.engine/bin/meetingrec`), so they

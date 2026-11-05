@@ -32,19 +32,20 @@ meetingrec/
 │   ├── input/                  #   recordings land here
 │   ├── meeting-notes/          #   notes are written here, unless you pick your own vault (made on first write-up)
 │   ├── transcripts/            #   transcripts you chose to keep, personal and team
-│   ├── Tasks.md                #   to-do dashboard
+│   ├── Tasks.md                #   to-do dashboard (yours to edit; made at install)
 │   ├── settings/               #   your personal.md (names, rules) lives here
 │   └── .claude/skills/meeting-notes/  # the instructions Claude follows
 └── teamnotes/                  # notes folder #2 (an Obsidian vault) — team notes
     ├── input/  meeting-notes/  share/
-    ├── Action Items.md         #   everyone's open items, by owner
+    ├── Action Items.md         #   everyone's open items, by owner (yours to edit)
     ├── settings/               #   your personal.md for team notes, and
     │   └── profiles/           #   one file per team: roster, sections, rules
     └── .claude/skills/team-notes/
 ```
 
 Recordings, transcripts and notes are git-ignored, so nothing you record gets committed. So
-are your settings and team rosters (see [Make it yours](#make-it-yours)).
+are your settings and team rosters (see [Make it yours](#make-it-yours)), and the dashboards
+and notes tables: change them as you like, and updates leave them alone.
 
 > **Always tell people you're recording.** No bot appears in the participant list, so
 > nobody knows unless you say so.

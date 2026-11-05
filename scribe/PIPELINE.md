@@ -8,8 +8,8 @@ write-ups use `../teamnotes/` instead.
 ```
 scribe/                         (Obsidian vault root — open this folder as a vault)
 ├── PIPELINE.md                 # this file
-├── Tasks.md                    # Tasks-plugin dashboard over every note's to-dos (yours to edit)
-├── index.base                  # Obsidian Base over meeting-notes/ — created on the first run
+├── Tasks.md                    # Tasks-plugin dashboard over every note's to-dos (yours to edit; git-ignored, made at install)
+├── index.base                  # Obsidian Base over meeting-notes/ (yours; git-ignored, created on the first run)
 ├── input/                      # recorder inbox: meetingrec session dirs, or a dropped audio/transcript file
 ├── transcripts/                # transcripts you chose to keep at the end of a run
 ├── meeting-notes/              # output — one .md file per meeting (created on the first run)
@@ -20,7 +20,7 @@ scribe/                         (Obsidian vault root — open this folder as a v
 └── .claude/
     └── skills/meeting-notes/
         ├── SKILL.md                     # full workflow spec
-        └── assets/index.base            # starter Base, copied to the vault root if missing
+        └── assets/                      # starters: Tasks.md and index.base, copied to the vault root if missing
 ```
 
 The routine steps run through the `meetingrec` command (`../.engine/bin/meetingrec`), so they

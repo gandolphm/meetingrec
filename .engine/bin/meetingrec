@@ -324,6 +324,15 @@ cmd_start() {
     rm -f "$STATE_FILE"
   fi
 
+  # A custom recordings folder that's gone (moved or renamed in Finder, or on a
+  # drive that isn't connected) is never re-created. mkdir -p would quietly make
+  # a new folder at the old path, or on the Mac's own disk under /Volumes, and the
+  # recordings waiting in the moved folder would never be written up. The
+  # default inbox is part of meetingrec, so that one is still created.
+  if [ ! -d "$OUTPUT_ROOT" ] && [ "$OUTPUT_ROOT" != "$(config_default OUTPUT_ROOT)" ]; then
+    die "your recordings folder $OUTPUT_ROOT is missing: moved, renamed, or on a drive that isn't connected. Reconnect the drive, or choose the folder again in ○ → Settings → Recordings."
+  fi
+
   [ -z "$title" ] && title="untitled"
   local slug dir
   slug="$(slugify "$title")"
@@ -1078,15 +1087,22 @@ for f in sys.argv[3:]:
 # followed by the same list a real run shows.
 
 # Files of yours in scribe/ and teamnotes/: anything git didn't ship, or that
-# changed since. A settings file still identical to its template doesn't count.
+# changed since. A settings file still identical to its template doesn't count,
+# nor a dashboard or notes table still identical to its starter in assets/.
 user_files() {
-  local entry f
+  local entry f s
   git -C "$REPO_ROOT" -c core.quotePath=false status --porcelain -z --ignored \
       --untracked-files=all -- scribe teamnotes 2>/dev/null \
     | while IFS= read -r -d '' entry; do
         f="${entry:3}"
         case "$f" in */.DS_Store) continue ;; esac
         cmp -s "$REPO_ROOT/$f" "$REPO_ROOT/${f%.md}.example.md" && continue
+        case "$f" in
+          */*/*) ;;
+          *) for s in "$REPO_ROOT/${f%%/*}"/.claude/skills/*/assets/"${f#*/}"; do
+               cmp -s "$REPO_ROOT/$f" "$s" && continue 2
+             done ;;
+        esac
         printf '%s\n' "$f"
       done
 }
@@ -1356,14 +1372,17 @@ KEEP_DIR="$REPO_ROOT/scribe/transcripts"
 AUDIO_EXT="m4a|mp3|wav|mp4|aac|caf"
 TEXT_EXT="txt|srt|vtt|md"
 
-# Sets KIND, VAULT_SETTING, KIND_DIR and SETTINGS for scribe or teamnotes.
+# Sets KIND, VAULT_SETTING, KIND_DIR, SETTINGS and STARTERS for scribe or
+# teamnotes. STARTERS holds the starter dashboard and notes table.
 notes_kind() {
+  local skill
   case "${1:-}" in
-    scribe)    VAULT_SETTING=NOTES_VAULT ;;
-    teamnotes) VAULT_SETTING=TEAM_VAULT ;;
+    scribe)    VAULT_SETTING=NOTES_VAULT skill=meeting-notes ;;
+    teamnotes) VAULT_SETTING=TEAM_VAULT skill=team-notes ;;
     *) die "say which notes: scribe or teamnotes" ;;
   esac
   KIND="$1" KIND_DIR="$REPO_ROOT/$1" SETTINGS="$REPO_ROOT/$1/settings"
+  STARTERS="$KIND_DIR/.claude/skills/$skill/assets"
 }
 
 notes_inbox() {
@@ -1388,8 +1407,8 @@ cmd_prepare() {
   local vault saved=yes inbox
   vault="$(cmd_config get "$VAULT_SETTING")" || saved=no
   inbox="$(notes_inbox)"
-  printf 'MEETINGREC=%s\nVAULT=%s\nVAULT_SAVED=%s\nINBOX=%s\nKEEP=%s\nSETTINGS=%s\n' \
-    "$REPO_ROOT/.engine/bin/meetingrec" "$vault" "$saved" "$inbox" "$KEEP_DIR" "$SETTINGS"
+  printf 'MEETINGREC=%s\nVAULT=%s\nVAULT_SAVED=%s\nINBOX=%s\nKEEP=%s\nSETTINGS=%s\nSTARTERS=%s\n' \
+    "$REPO_ROOT/.engine/bin/meetingrec" "$vault" "$saved" "$inbox" "$KEEP_DIR" "$SETTINGS" "$STARTERS"
 
   [ -d "$inbox" ] || echo "MISSING INBOX"
   if [ ! -d "$vault" ]; then
@@ -1400,11 +1419,10 @@ cmd_prepare() {
     [ -d "$vault/.obsidian" ] || echo "NOT A VAULT YET"
     if [ "$KIND" = scribe ]; then
       [ -f "$vault/Tasks.md" ] || echo "NO DASHBOARD"
-      ensure_base "$vault" "$KIND_DIR/.claude/skills/meeting-notes/assets/index.base"
     else
       [ -f "$vault/Action Items.md" ] || echo "NO ACTION ITEMS PAGE"
-      ensure_base "$vault" "$KIND_DIR/.claude/skills/team-notes/assets/index.base"
     fi
+    ensure_base "$vault" "$STARTERS/index.base"
   fi
 
   # personal.md is made from its template on a first run (the installer

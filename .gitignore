@@ -21,6 +21,14 @@ teamnotes/meeting-notes/*
 teamnotes/share/*
 !**/.gitkeep
 
+# The dashboards and notes tables in the default vaults are the user's to edit.
+# Their starters ship in each skill's assets/; the installer and the skills copy
+# them in, so an update never collides with an edited copy.
+scribe/Tasks.md
+scribe/index.base
+teamnotes/Action Items.md
+teamnotes/index.base
+
 # Each user's own settings (names and rules) and team profiles: everything in the
 # settings folders except the tracked templates (*.example.md), shared.md and the
 # `other` profile. The skills and the installer create the user's copies from the
