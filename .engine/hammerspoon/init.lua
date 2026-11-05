@@ -175,6 +175,9 @@ local function doStart(micOnly)
   end)
 end
 
+-- Defined below doStop, which needs it after a failed stop.
+local resync
+
 local function doStop()
   run({ "stop" }, function(exitCode, stdOut, stdErr)
     isRecording = false
@@ -182,6 +185,9 @@ local function doStop()
     stopTicking()
     if exitCode ~= 0 then
       notify("MeetingRec — stop failed", (stdErr ~= "" and stdErr or stdOut))
+      -- A failed stop may have left ffmpeg running: show what the CLI says,
+      -- not a guess of idle.
+      resync()
       return
     end
     -- Surface a silent/short recording here rather than letting it be
@@ -198,7 +204,7 @@ end
 -- Hammerspoon holds state in memory, which a config reload would silently
 -- discard mid-recording — leaving the button claiming idle while ffmpeg runs.
 -- Asking the CLI on load makes the menu bar reflect reality instead.
-local function resync()
+resync = function()
   run({ "status" }, function(_, stdOut, _)
     local secs, dir = stdOut:match("^recording (%d+) ([^\n]+)")
     if secs then

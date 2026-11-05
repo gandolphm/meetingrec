@@ -66,7 +66,13 @@ STATE_FILE="$STATE_DIR/current"
 
 die()  { printf 'meetingrec: %s\n' "$*" >&2; exit 1; }
 warn() { printf 'meetingrec: %s\n' "$*" >&2; }
-alive() { kill -0 "$1" 2>/dev/null; }
+# Only a real PID counts. A mic-only session stores SYS_FF_PID=0, and
+# `kill -0 0` signals our own process group, so it always succeeds: without the
+# guard a crashed mic-only session reads as recording forever.
+alive() {
+  case "${1:-}" in ''|0|*[!0-9]*) return 1 ;; esac
+  kill -0 "$1" 2>/dev/null
+}
 
 notify() {
   # Visible whether the caller was Terminal or Hammerspoon.
@@ -323,6 +329,13 @@ cmd_start() {
   slug="$(slugify "$title")"
   [ -z "$slug" ] && slug="untitled"
   dir="$OUTPUT_ROOT/$(date +%Y-%m-%dT%H-%M)_$slug"
+  # A second start in the same minute with the same title (a false start, the
+  # installer's test run twice) would reuse the folder, and ffmpeg won't
+  # overwrite the first one's files. Add seconds; the name still ends in _<slug>.
+  if [ -e "$dir" ]; then
+    dir="$OUTPUT_ROOT/$(date +%Y-%m-%dT%H-%M-%S)_$slug"
+    [ -e "$dir" ] && die "a recording called $dir already exists; try again in a second"
+  fi
 
   mkdir -p "$dir" "$STATE_DIR" || die "cannot create $dir"
 
@@ -412,14 +425,16 @@ Install it first — run .engine/install.sh, or see step 3 of .engine/docs/manua
 
   write_session_json "$dir" "$title" "$tracks" "$mic_device" "$out_device" "$tap_meta"
 
-  cat > "$STATE_FILE" <<EOF
-SESSION_DIR='$dir'
-AUDIOTEE_PID=$audiotee_pid
-SYS_FF_PID=$sys_ff_pid
-MIC_PID=$mic_pid
-STARTED_EPOCH=$(date +%s)
-TRACKS='$tracks'
-EOF
+  # %q, not hand-written quotes: the path comes from OUTPUT_ROOT, which may
+  # hold an apostrophe ("Alice's Mac"), and stop and status source this file.
+  {
+    printf 'SESSION_DIR=%q\n' "$dir"
+    printf 'AUDIOTEE_PID=%d\n' "$audiotee_pid"
+    printf 'SYS_FF_PID=%d\n' "$sys_ff_pid"
+    printf 'MIC_PID=%d\n' "$mic_pid"
+    printf 'STARTED_EPOCH=%d\n' "$(date +%s)"
+    printf 'TRACKS=%q\n' "$tracks"
+  } > "$STATE_FILE"
 
   # Detached: the check must outlive this process.
   if [ "$mic_only" -eq 1 ]; then
@@ -457,14 +472,16 @@ cmd_stop() {
   fi
 
   # The mic ffmpeg reads from a device, so it never sees EOF — signal directly.
-  kill -INT "${MIC_PID:-0}" 2>/dev/null
+  # Through alive(): a missing or zero PID must not become `kill -INT 0`, which
+  # would signal this whole process group.
+  alive "${MIC_PID:-0}" && kill -INT "$MIC_PID" 2>/dev/null
 
   for i in 1 2 3 4 5 6 7 8 9 10; do
     alive "${MIC_PID:-0}" || alive "${SYS_FF_PID:-0}" || break
     sleep 1
   done
   for i in "${MIC_PID:-0}" "${SYS_FF_PID:-0}"; do
-    if [ "$i" -ne 0 ] && alive "$i"; then
+    if alive "$i"; then
       warn "pid $i did not exit on SIGINT; sending SIGTERM (its WAV may be truncated)"
       kill -TERM "$i" 2>/dev/null
     fi
@@ -892,6 +909,7 @@ cmd_config() {
       if [ "$name" = OUTPUT_ROOT ]; then
         value="$OUTPUT_ROOT"
       else
+        # shellcheck source=/dev/null
         value="$( . "$CONFIG" 2>/dev/null; eval "printf '%s' \"\${$name:-}\"" )"
       fi
       printf '%s\n' "${value:-$default}"
@@ -910,6 +928,7 @@ cmd_config() {
         printf '%s → %s\n' "$name" "$value"
         return 0
       fi
+      # shellcheck disable=SC2088  # a typed, literal "~" is matched on purpose
       case "$value" in "~") value="$HOME" ;; "~/"*) value="$HOME/${value#\~/}" ;; esac
       case "$value" in
         *'"'*|*'$'*|*'`'*|*'\'*) die "config: the folder name can't contain \", \$, \` or \\" ;;
@@ -956,6 +975,7 @@ cmd_move() {
   case "$(cmd_status)" in
     recording*) die "a recording is running. Stop it first, then move." ;;
   esac
+  # shellcheck disable=SC2088  # a typed, literal "~" is matched on purpose
   case "$dest" in "~") dest="$HOME" ;; "~/"*) dest="$HOME/${dest#\~/}" ;; esac
   case "$dest" in /*) ;; *) dest="$PWD/$dest" ;; esac
   # Resolved the way REPO_ROOT is, so the two compare; nothing is created yet.
@@ -1301,6 +1321,7 @@ cmd_uninstall() {
 cmd_vault_root() {
   [ $# -eq 1 ] || die "usage: meetingrec vault-root <folder>"
   local f="${1%/}" p
+  # shellcheck disable=SC2088  # a typed, literal "~" is matched on purpose
   case "$f" in "~") f="$HOME" ;; "~/"*) f="$HOME/${f#\~/}" ;; esac
   case "$f" in /*) ;; *) f="$PWD/$f" ;; esac
   [ -d "$f/.obsidian" ] && return 1
@@ -1405,6 +1426,7 @@ cmd_prepare() {
   fi
 
   # Newest first: meetingrec's session folders, then single files.
+  # shellcheck disable=SC2010  # recording names never hold a line break
   if [ -d "$inbox" ]; then
     local found=0 entry
     while IFS= read -r entry; do
@@ -1561,6 +1583,16 @@ cmd_clear_input() {
     [ "$parent" = "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$box")" ] && ok=1
   done
   [ "$ok" -eq 1 ] || die "$input isn't in a meetingrec inbox, so it was left where it is"
+  # Never the meeting that's still being recorded. In a subshell, so sourcing the
+  # state file doesn't overwrite this function's variables.
+  # shellcheck source=/dev/null
+  if [ -d "$real" ] && [ -f "$STATE_FILE" ] && (
+      . "$STATE_FILE"
+      { alive "${MIC_PID:-0}" || alive "${SYS_FF_PID:-0}"; } || exit 1
+      [ "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "${SESSION_DIR:-}")" = "$real" ]
+    ); then
+    die "$input is still recording, so it was left where it is (stop the recording first)"
+  fi
   if [ "$mode" != delete ]; then
     [ -d "$KEEP_DIR" ] || die "the transcripts folder $KEEP_DIR is missing, so nothing was moved or removed"
   fi
@@ -1575,17 +1607,21 @@ cmd_clear_input() {
         mv "$real" "$dest" && echo "KEPT $dest" ;;
       keep-transcript)
         # The text and the session file that explains it; the audio goes.
-        local dest f; dest="$(keep_path "$real" "$date")"
+        # Copied, checked, and only then is the recording removed: a move that
+        # fails half-way (a full disk) must not cost the files not yet moved.
+        local dest f found=0
+        for f in merged.txt mic.srt system.srt; do [ -f "$real/$f" ] && found=1; done
+        [ "$found" -eq 1 ] || die "no transcript found in $real, so nothing was removed"
+        dest="$(keep_path "$real" "$date")"
         mkdir "$dest" || die "couldn't create $dest"
         for f in merged.txt mic.srt system.srt session.json; do
-          [ -f "$real/$f" ] && mv "$real/$f" "$dest/"
+          [ -f "$real/$f" ] || continue
+          if ! cp -p "$real/$f" "$dest/$f" || ! cmp -s "$real/$f" "$dest/$f"; then
+            rm -rf "$dest"
+            die "couldn't copy $f to $dest, so nothing was removed"
+          fi
         done
-        if [ -f "$dest/merged.txt" ] || [ -f "$dest/mic.srt" ] || [ -f "$dest/system.srt" ]; then
-          rm -rf "$real" && echo "KEPT $dest"
-        else
-          mv "$dest"/* "$real/" 2>/dev/null; rmdir "$dest"
-          die "no transcript found in $real, so nothing was removed"
-        fi ;;
+        rm -rf "$real" && echo "KEPT $dest" ;;
     esac
     return
   fi

@@ -272,6 +272,7 @@ install_hammerspoon_app() {
 # path taken from the home folder, no trailing slash.
 expand_folder() {
   local f="${1%/}"
+  # shellcheck disable=SC2088  # a typed, literal "~" is matched on purpose
   case "$f" in
     "~")    f="$HOME" ;;
     "~/"*)  f="$HOME/${f#"~/"}" ;;

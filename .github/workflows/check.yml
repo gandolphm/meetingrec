@@ -1,0 +1,39 @@
+# Lints the scripts and runs the tests on every push and pull request. Changes
+# nothing and publishes nothing.
+#
+# Run the tests on a Mac yourself: bash .engine/tests/recorder.sh
+name: Check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest  # shellcheck comes preinstalled
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          shellcheck -S warning \
+            .engine/bin/meetingrec .engine/bin/scribe .engine/bin/teamnotes \
+            .engine/install.sh .engine/lib/transcribe.sh .engine/tools/*.sh \
+            .engine/tests/*.sh
+
+      - name: Python compiles
+        run: |
+          python3 -m py_compile .engine/lib/*.py .engine/bin/clock-check .engine/bin/drift-check
+
+  test:
+    runs-on: macos-15  # the recorder uses macOS's stat, and it's what users run
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Recorder and clear-input tests
+        run: bash .engine/tests/recorder.sh

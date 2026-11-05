@@ -80,6 +80,11 @@ def speech_regions(path, duration):
         ["ffmpeg", "-v", "info", "-nostdin", "-i", path,
          "-af", f"silencedetect=noise={NOISE_DB}:d={MIN_SILENCE}", "-f", "null", "-"],
         capture_output=True, text=True)
+    # No markers reads as "all speech", so a failed run would quietly send the
+    # whole uncompacted track to Whisper: the case this script exists to avoid.
+    if proc.returncode != 0:
+        tail = "\n".join(proc.stderr.strip().splitlines()[-3:])
+        die(f"{path}: ffmpeg's silence detection failed ({proc.returncode}): {tail}")
     marks = [(m.group(1), float(m.group(2))) for m in SIL.finditer(proc.stderr)]
 
     silences, open_start = [], None
