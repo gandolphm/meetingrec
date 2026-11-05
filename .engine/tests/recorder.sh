@@ -121,6 +121,19 @@ out="$("$MR" start "After crash" --mic-only 2>&1)"
 check "a new start clears the stale state and records" has "$out" '^recording:'
 "$MR" stop >/dev/null 2>&1
 
+# What the menu does when its tick finds the recorder dead.
+"$MR" start "Crash then stop" --mic-only >/dev/null 2>&1
+dir="$(state SESSION_DIR)"
+kill -9 "$(state MIC_PID)" 2>/dev/null; sleep 0.3
+check "status says stale, which is what the menu looks for" has "$("$MR" status)" 'stale'
+t0="$(secs)"
+"$MR" stop >/dev/null 2>&1; rc=$?
+t1="$(secs)"
+check "stop on the dead session succeeds" [ "$rc" -eq 0 ]
+check "...in under 3 s" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 3 else 1)"
+check "...records when it ended" has "$(cat "$dir/session.json")" '"ended"'
+check "...and leaves the tool idle" [ "$("$MR" status)" = idle ]
+
 echo "two starts in the same minute with the same title"
 "$MR" start "Dup" --mic-only >/dev/null 2>&1; "$MR" stop >/dev/null 2>&1
 out="$("$MR" start "Dup" --mic-only 2>&1)"

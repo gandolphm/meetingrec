@@ -86,6 +86,11 @@ local isRecording = false
 local startTime = nil
 local sessionDir = nil
 local tickTimer = nil
+-- True while the menu is closing a recording that died on its own, so a Start
+-- in that second can't have its new recording stopped by mistake.
+local finishing = false
+-- Defined with the other CLI calls below; the tick needs it.
+local checkAlive
 
 local IDLE_TITLE = "○"
 
@@ -110,7 +115,10 @@ local function startTicking()
   if tickTimer then tickTimer:stop() end
   -- Started and stopped with the recording rather than left running: an idle
   -- clock has nothing to count.
-  tickTimer = hs.timer.doEvery(30, guard("tick", refreshTitle))
+  tickTimer = hs.timer.doEvery(30, guard("tick", function()
+    refreshTitle()
+    checkAlive()
+  end))
   refreshTitle()
 end
 
@@ -148,7 +156,39 @@ local function run(args, onDone)
   task:start()
 end
 
+-- Every tick while recording: if the recorder quit on its own (a crash, a Force
+-- Quit), the menu would otherwise show ● and count minutes until someone clicks
+-- Stop. The CLI decides; the menu only asks, so a native app can ask the same.
+local checking = false
+checkAlive = function()
+  if not isRecording or checking or finishing then return end
+  checking = true
+  run({ "status" }, function(_, stdOut, _)
+    checking = false
+    if not isRecording or stdOut:match("^recording ") then return end
+    isRecording = false
+    startTime = nil
+    stopTicking()
+    -- Plain "idle" means it was stopped elsewhere (`meetingrec stop` in
+    -- Terminal): nothing went wrong. "stale" means the recorder died.
+    if not stdOut:match("stale") then return end
+    -- Stop closes the session's bookkeeping (session.json, the levels check),
+    -- and its warning says which track is affected.
+    finishing = true
+    run({ "stop" }, function(_, out, err)
+      finishing = false
+      local warning = out:match("WARNING: ([^\n]+)") or err:match("WARNING: ([^\n]+)")
+      notify("MeetingRec — recording stopped unexpectedly",
+             warning or "The recorder quit on its own. What it recorded until then is in the recordings folder.")
+    end)
+  end)
+end
+
 local function doStart(micOnly)
+  if finishing then
+    notify("MeetingRec", "Still closing the last recording. Try again in a moment.")
+    return
+  end
   local args = { "start" }
 
   local button, title = hs.dialog.textPrompt(
