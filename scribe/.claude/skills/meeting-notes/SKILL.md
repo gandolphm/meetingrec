@@ -270,7 +270,16 @@ Then ask for the handful of things that improve both the transcript and the fron
 **Ask with `AskUserQuestion`, not as a written list.** It takes up to four questions per
 call, each with two to four options, and always adds a free-text answer, so these seven fit
 in two calls: title, date, type and context first, then attendees, company and agenda. Fill
-the options with real guesses, so most answers are one click and anything else can be typed:
+the options with real guesses, so most answers are one click and anything else can be typed.
+
+**Every question needs at least two options.** A question with one option makes the tool
+reject the whole call, and the user sees none of it. When a field below has only one real
+guess (the recording is from today, the vault has no earlier notes), don't ask it on its own
+and don't pad it with a made-up option. Put all such fields into one question instead, which
+counts as one of the four: the question lists the guesses ("Date 2026-11-05 · context work ·
+agenda: nothing to add — are these right?"), with the options "Yes, use these (Recommended)"
+and "No, some are wrong". If they pick the second, or type a correction, ask in chat which
+ones to change.
 
 - **Title / topic** of the meeting. Options: the title the recording was given (the session
   folder's name, e.g. `2026-10-30T10-00_acme-check-in` → "Acme check-in"), and the title of
@@ -284,7 +293,8 @@ the options with real guesses, so most answers are one click and anything else c
   ```
   Offer the most used (up to four); a brand-new type is typed in the free-text answer. If the
   user picks or types a new type, just use it — no need to ask permission or treat it as
-  special. On a fresh vault, offer the common ones: standup, strategy, client, 1:1.
+  special. When the vault has fewer than four types, fill the rest from the common ones:
+  standup, strategy, client, 1:1.
 - **Context** — the single word every action item from this meeting gets tagged with
   (`context: work` → `#work` on each to-do). This is what makes the Tasks dashboard
   filterable. The default is `work`; a different value only makes sense for a meeting the

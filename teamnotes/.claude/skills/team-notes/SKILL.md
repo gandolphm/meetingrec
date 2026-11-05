@@ -289,7 +289,16 @@ lost. Relay any `WARNING` lines verbatim.
 
 Then ask, in **one compact round**, **with `AskUserQuestion`, not as a written list.** It
 takes up to four questions per call, each with two to four options, and always adds a
-free-text answer. Fill the options with real guesses, so most answers are one click:
+free-text answer. Fill the options with real guesses, so most answers are one click.
+
+**Every question needs at least two options.** A question with one option makes the tool
+reject the whole call, and the user sees none of it. When a field below has only one real
+guess (the recording is from today, the team has no earlier notes), don't ask it on its own
+and don't pad it with a made-up option. Put all such fields into one question instead, which
+counts as one of the four: the question lists the guesses ("Date 2026-11-05 · no guests ·
+agenda: nothing to add — are these right?"), with the options "Yes, use these (Recommended)"
+and "No, some are wrong". If they pick the second, or type a correction, ask in chat which
+ones to change.
 
 - **Date** of the meeting. Options: the date in the file or folder name (Recommended) and
   today, if they differ.
@@ -301,8 +310,10 @@ free-text answer. Fill the options with real guesses, so most answers are one cl
   ```
 - **Roll call** — which roster members were present, as a multi-select. A question holds
   at most four options, so split a larger roster across several multi-select questions
-  ("Who was there? (1 of 2)"), in the same or a second call. Everyone not selected goes under
-  `absent:`.
+  ("Who was there? (1 of 2)"), in the same or a second call. Split it evenly, so no question
+  is left with one person (five people: three and two, not four and one). A roster of one
+  goes in the "are these right?" question ("Sam was there"). Everyone not selected goes
+  under `absent:`.
 - **Guests** — anyone not on the roster, with their org if known. Options: "No guests", and
   guests from this team's earlier notes; others are typed in the free-text answer.
 - **Agenda or context** worth knowing — what was on the docket, anything being followed up
