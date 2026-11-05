@@ -3,8 +3,9 @@
 
     drift-check <session_dir>
 
-Answers the phase 0 step 6 question, which gates phase 5 (collapse to a single
-Swift binary using one aggregate device and one clock domain).
+Answers whether the start-offset correction meetingrec applies is enough, or
+whether recording needs one clock for both tracks (a single recorder using one
+aggregate device).
 
 The two tracks come from two independent clocks: the Core Audio process tap and
 the avfoundation mic. They start at different moments — that is the constant
@@ -35,7 +36,7 @@ BIN_HZ = 100.0     # envelope resolution: 10 ms bins, far finer than the 0.5 s t
 WINDOW = 20.0      # seconds of audio compared at each end
 MAX_LAG = 3.0      # seconds of search either way
 EDGE = 30.0        # skip this much at each end (device startup, stop straggle)
-THRESHOLD = 0.5    # seconds of drift that makes phase 5 mandatory
+THRESHOLD = 0.5    # seconds of drift that a start-offset correction can't absorb
 
 
 def die(msg):
@@ -136,12 +137,12 @@ def main():
     print()
     if abs(drift) < THRESHOLD:
         print(f"PASS — under the {THRESHOLD}s threshold. The offset is constant, so")
-        print("the correction meetingrec already applies is sufficient. Phase 5")
-        print("(single binary, one clock domain) stays optional.")
+        print("the correction meetingrec already applies is sufficient. A recorder")
+        print("that puts both tracks on one clock isn't needed.")
         return 0
     print(f"FAIL — exceeds {THRESHOLD}s. The clocks run at different speeds, which")
-    print("a single start-offset cannot fix. Phase 5 becomes mandatory: one")
-    print("aggregate device, one clock domain.")
+    print("a single start-offset cannot fix. Fixing it needs a recorder that")
+    print("captures both tracks on one clock (one aggregate device).")
     return 1
 
 

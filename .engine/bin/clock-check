@@ -42,7 +42,7 @@ PROG = re.compile(r"time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)"
 
 SETTLE = 30.0      # ignore the first N seconds: device startup, buffer priming
 MIN_SPAN = 300.0   # refuse to extrapolate from less than this much wall clock
-THRESHOLD = 0.5    # seconds of drift that makes phase 5 mandatory
+THRESHOLD = 0.5    # seconds of drift that a start-offset correction can't absorb
 
 TRACKS = (("mic", "mic-ffmpeg.log"), ("system", "system-ffmpeg.log"))
 
@@ -87,11 +87,12 @@ def verdict(rel, span_secs, span_label):
     if abs(hour) < THRESHOLD:
         print(f"PASS — under {THRESHOLD}s even across a full hour. The offset between")
         print("the tracks is constant, so the single correction `meetingrec stop`")
-        print("records is sufficient. Phase 5 stays optional.")
+        print("records is sufficient. A recorder that puts both tracks on one")
+        print("clock isn't needed.")
         return 0
     print(f"FAIL — exceeds {THRESHOLD}s over an hour. The clocks run at different")
-    print("speeds, which no single start-offset can fix. Phase 5 becomes")
-    print("mandatory: one aggregate device, one clock domain.")
+    print("speeds, which no single start-offset can fix. Fixing it needs a")
+    print("recorder that captures both tracks on one clock (one aggregate device).")
     return 1
 
 

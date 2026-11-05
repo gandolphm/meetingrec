@@ -729,8 +729,14 @@ EOF
     esac
   done
 
-  local inbox="$REPO/scribe/input" session
-  session="$(ls -1d "$inbox"/*_test 2>/dev/null | tail -n 1)"
+  # Wherever recordings go now: a re-run after `meetingrec move` or a changed
+  # recordings folder must look there, not in the default inbox.
+  local inbox session
+  inbox="$("$REPO/.engine/bin/meetingrec" config get OUTPUT_ROOT 2>/dev/null)"
+  [ -n "$inbox" ] || inbox="$REPO/scribe/input"
+  # Newest first by time, not by name: a second test in the same minute is
+  # named <minute>-<seconds>_test, which sorts before <minute>_test.
+  session="$(ls -1dt "$inbox"/*_test 2>/dev/null | head -n 1)"
   if [ -z "$session" ] || [ ! -f "$session/session.json" ]; then
     note "No finished test recording found in $inbox."
     note "To do the test later, run this installer again."

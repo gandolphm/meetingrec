@@ -6,7 +6,7 @@ with to-dos, decisions and follow-ups. The notes are designed for
 dashboard, but any Markdown editor can open them. Transcription runs locally with Whisper;
 no meeting bot joins the call.
 
-Designed to be extremley customizable. Edit settings yourself or ask your agent to change the style your notes are written up to match your workflow and needs. Support for other agents coming soon.
+Designed to be extremely customizable. Edit settings yourself or ask your agent to change the style your notes are written up to match your workflow and needs. Support for other agents coming soon.
 
 There are three parts:
 

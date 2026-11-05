@@ -89,8 +89,8 @@ It also creates the notes folder and, on a first run, the user's `personal.md`.
 
 ### Step 0.05 — Ask where the notes go (first run, or when the user asks)
 
-Do this when Step 0 printed `saved: no` or `MISSING VAULT`, or whenever the user asks to keep
-their notes somewhere else. Ask with `AskUserQuestion`, once:
+Do this when Step 0 printed `VAULT_SAVED=no` or `MISSING VAULT`, or whenever the user
+asks to keep their notes somewhere else. Ask with `AskUserQuestion`, once:
 
 - Question: "Where should your meeting notes go?"
 - Option 1, **"In meetingrec's scribe folder (Recommended)"**: "The scribe folder is

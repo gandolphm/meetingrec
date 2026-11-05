@@ -96,8 +96,8 @@ It also creates the `meeting-notes/` and `share/` folders and, on a first run, t
 
 ### Step 0.05 — Ask where team notes go (first run, or when the user asks)
 
-Do this when Step 0 printed `saved: no` or `MISSING VAULT`, or whenever the user asks to keep
-team notes somewhere else. Ask with `AskUserQuestion`, once:
+Do this when Step 0 printed `VAULT_SAVED=no` or `MISSING VAULT`, or whenever the user
+asks to keep team notes somewhere else. Ask with `AskUserQuestion`, once:
 
 - Question: "Where should team notes go?"
 - Option 1, **"In meetingrec's teamnotes folder (Recommended)"**: "The teamnotes folder is
