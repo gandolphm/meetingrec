@@ -61,7 +61,7 @@ and notes tables: change them as you like, and updates leave them alone.
   [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
 - [Make it yours](#make-it-yours): where notes go, names, rules, teams, moving things
 - [Updating](#updating) · [Uninstalling](#uninstalling)
-- [Troubleshooting](#troubleshooting)
+- [Feedback](#feedback) · [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -648,6 +648,10 @@ git -C ~/meetingrec pull && ~/meetingrec/.engine/bin/meetingrec update
 
 ## Uninstalling
 
+Don't delete the meetingrec folder to start over: unless you chose folders of your own,
+your notes, recordings, kept transcripts and settings are inside it. To repair an install,
+run the [install command](#quick-install-recommended) again. It keeps everything you have.
+
 **From the menu bar:** click **○** → *Settings* → *Uninstall meetingrec…*. A window lists
 what goes; click **Uninstall**. If you have notes or recordings inside the meetingrec
 folder, a second window asks whether to keep them. If the installer added Claude Code, a
@@ -700,6 +704,17 @@ meetingrec, it tells you the command to remove them.
 Kept your notes? They stay in `~/meetingrec/scribe` and `teamnotes`; move or delete them
 whenever you like. To install again later, put them somewhere else first, or install into
 another folder: the installer won't use a folder that already has things in it.
+
+---
+
+## Feedback
+
+Something broken, confusing, or missing? Email meetingrec's feedback address,
+**goblin_outlet.3x@icloud.com**, or [open an issue](https://github.com/gandolphm/meetingrec/issues)
+if you use GitHub. Say which macOS version you're on, and whether you were on headphones or
+speakers.
+
+Issues are public, so never paste a transcript, note text, or anyone's name into one.
 
 ---
 
