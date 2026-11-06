@@ -10,6 +10,8 @@ Designed to be customized: ask Claude to change how your notes are written ("fro
 keep Key Points to five bullets"), or edit the settings files yourself. It works with
 Claude Code today; support for other agents, like Codex, is planned.
 
+*meetingrec is a vibe-coded app.*
+
 There are three parts:
 
 | Part | What it does | Where |
