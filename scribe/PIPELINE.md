@@ -31,16 +31,17 @@ go the same way every time: `prepare`, `session-info`, `transcribe`, `note-path`
 
 1. **Prepare** — `meetingrec prepare scribe` prints the folders: the vault (`NOTES_VAULT`,
    default this folder) and the inbox (`OUTPUT_ROOT`, default `input/`) from
-   `~/.config/meetingrec/config.sh`, the archive and the settings folder. It also checks the
-   vault, creates what a first run is missing (the notes folder, the Base, your
-   `personal.md`), and lists the recordings waiting. The first run asks where notes go and
+   `~/.config/meetingrec/config.sh`, the archive, the settings folder, and `STARTERS` (the
+   skill's `assets/`, with the starter `Tasks.md` and Base). It also checks the vault,
+   creates what a first run is missing (the notes folder, the Base, your `personal.md`),
+   and lists the recordings waiting. The first run asks where notes go and
    saves the answer.
 2. **Load settings** — names and rules from `settings/shared.md` and your `settings/personal.md`
    (on the first run the skill also asks your name for the `Me` row that says whose notes
    these are).
-3. **Locate input** — newest meetingrec session directory in `input/`, else a single flat
-   audio/transcript file. 0 → ask you to drop one in; >1 → ask which one.
-4. **Gather context (chat, before transcribing)** — title, date (default today), type
+3. **Locate input** — the newest meetingrec session directory in `input/`. With none, a
+   dropped audio or transcript file: none → ask you to drop one in; several → ask which.
+4. **Gather context (chat, before transcribing)** — title, date (default the recording's), type
    (open-ended; scanned from existing notes), attendees, company, context (default `work`),
    agenda. This becomes a **priming prompt** fed to Whisper to improve proper nouns.
 5. **Transcribe (audio only)** — `meetingrec transcribe`, for a session dir or a flat file.

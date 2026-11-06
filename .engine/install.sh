@@ -127,7 +127,7 @@ install_clt() {
   fi
   xcode-select --install >/dev/null 2>&1
   note "A window opened asking to install the command line developer tools."
-  note "Click Install and agree. This takes 5–15 minutes; this script waits for it."
+  note "Click Install and agree. It takes around 5 minutes; this script waits for it."
   # Apple's install window stays open until the tools are in, so if it's gone and
   # they still aren't, it was cancelled or failed: stop rather than wait forever.
   # 20 s of grace, for the window to appear and for the tools to register after
@@ -808,6 +808,8 @@ EOF
       add and turn on Hammerspoon
   Then quit Hammerspoon, reopen it, and run this installer again to repeat the test.
   The test recording was kept for reference: $session
+  If you didn't play anything or talk during the test, that's expected: delete
+  that folder and run this installer again to repeat the test.
 EOF
     return
   fi

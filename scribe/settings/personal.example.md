@@ -1,6 +1,7 @@
 # Your settings — personal notes
 
-Yours alone. The skill copied this file from `personal.example.md` the first time it ran.
+Yours alone. The installer copied this file from `personal.example.md` (or the skill did,
+on its first run, if it was missing).
 Git ignores it, so nothing here is ever committed, and updating meetingrec never overwrites
 it. The skill reads it on every run, together with `shared.md`; where they disagree, this
 file wins.

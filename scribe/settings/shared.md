@@ -10,7 +10,7 @@ each member gets it with their next update. Git tracks this file, so anything wr
 is published with the repo.
 
 **Your own names and rules never go here.** They go in `personal.md` next to this file,
-which git ignores. The skill creates it the first time it runs and adds to it as you go.
+which git ignores. The installer creates it, and the skill adds to it as you go.
 
 ## Names
 

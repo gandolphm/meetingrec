@@ -6,7 +6,9 @@ with to-dos, decisions and follow-ups. The notes are designed for
 dashboard, but any Markdown editor can open them. Transcription runs locally with Whisper;
 no meeting bot joins the call.
 
-Designed to be extremely customizable. Edit settings yourself or ask your agent to change the style your notes are written up to match your workflow and needs. Support for other agents coming soon.
+Designed to be customized: ask Claude to change how your notes are written ("from now on,
+keep Key Points to five bullets"), or edit the settings files yourself. It works with
+Claude Code today; support for other agents, like Codex, is planned.
 
 There are three parts:
 
@@ -19,7 +21,7 @@ There are three parts:
 ```
 meetingrec/
 ├── .engine/                    # the machinery, hidden in Finder; you never need to open it
-│   ├── bin/meetingrec          #   the recorder
+│   ├── bin/meetingrec          #   the recorder, plus updates, settings and the skills' routine steps
 │   ├── bin/scribe, teamnotes   #   start writing notes from any Terminal window
 │   ├── bin/clock-check, drift-check  # diagnostics for track timing (rarely needed)
 │   ├── hammerspoon/init.lua    #   the ○ menu-bar button
@@ -69,7 +71,7 @@ and notes tables: change them as you like, and updates leave them alone.
 
 - A Mac with **Apple silicon**, running **macOS 14.2 or later**. System-audio capture uses
   Core Audio taps, which first shipped in 14.2.
-- A **Claude Code** subscription or API access. Claude Code itself can be the `claude`
+- A **Claude plan that includes Claude Code**, or Anthropic API access. Claude Code itself can be the `claude`
   command or the **[Claude app](https://claude.ai/download)** for Mac (its Code tab). If
   your Mac has neither, the installer asks whether to install the `claude` command.
 - **Disk space:** about **0.55 GB** for the Whisper model (465 MB), ffmpeg, whisper.cpp and
@@ -107,8 +109,8 @@ unless you turn that off. These connections only download; nothing you record is
 ## Install
 
 Paste one command and answer a few prompts: the [quick install](#quick-install-recommended)
-below. Less than 5 minutes, mostly waiting with a few prompts. If you'd rather not run a script from the internet,
-or want to see exactly what gets downloaded, follow the
+below. It takes around 5 minutes, mostly waiting, with a few prompts. If you'd rather not
+run a script from the internet, or want to see exactly what gets downloaded, follow the
 **[manual install](.engine/docs/manual-install.md)** instead. Both end up with the same result.
 Either way, finish with [Set up Obsidian](#set-up-obsidian) (recommended).
 
@@ -144,8 +146,13 @@ meetingrec uses them: they never replace other copies you might have, and
 
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts
 Hammerspoon, links the `meetingrec`, `scribe` and `teamnotes` commands into `~/.local/bin`,
-and adds `~/.local/bin` to your PATH in `~/.zprofile` if it isn't there already. It doesn't change anything else. You can [read the script](.engine/install.sh) first, or
-download it, look at it, then run it:
+and adds `~/.local/bin` to your PATH in `~/.zprofile` if it isn't there already. It doesn't
+change anything else.
+
+**Prefer to read the script before running it?** [Read it on GitHub](.engine/install.sh), or
+use these three commands instead of the one above, to download it, look through it, then run
+it:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/gandolphm/meetingrec/main/.engine/install.sh -o install.sh
 less install.sh      # press q to quit
@@ -162,7 +169,8 @@ bash install.sh
   use. Notes go in a `meeting-notes` folder inside it. You can change this later (see
   [Moving things](#moving-things)).
 - **Install the command line developer tools.** If a window asks, click *Install* and
-  agree. The script waits until it finishes.
+  agree. The script waits until it finishes. If you close the window instead, the script
+  stops; run the install command again when you're ready.
 - **Install Claude Code?** Only if your Mac has neither the `claude` command nor the Claude
   app. Press Enter to install it. If you type `n`, install the Claude app or Claude Code
   yourself before your first write-up.
@@ -175,9 +183,11 @@ bash install.sh
 - **A test recording.** The script tells you to click the **○** in the menu bar, start a
   recording called `test`, click **Allow** on the Microphone prompt, play a video while
   you talk for 15 seconds, then stop it. If macOS asks whether Hammerspoon may send
-  notifications, click **Allow**: notifications are how meetingrec warns you mid-call when a
-  track isn't recording, and how it tells you an update or uninstall finished. Then press Enter in Terminal and the script checks
-  that both tracks captured audio.
+  notifications, click **Allow**: that's how the menu bar tells you a recording started or an
+  update finished. Warnings mid-call, like a track that isn't recording, arrive as
+  **Script Editor** notifications instead; macOS shows those without asking, so just leave
+  them on. Then press Enter in Terminal and the script checks that both tracks captured
+  audio.
 
 You should see something like this (each line starting with ✓ is a finished step):
 
@@ -192,6 +202,14 @@ You should see something like this (each line starting with ✓ is a finished st
   Where should meetingrec go? Press Enter for ~/meetingrec, or type a folder:
   ✓ downloaded to /Users/you/meetingrec
 
+==> Recorder config
+  ✓ created /Users/you/.config/meetingrec/config.sh
+
+==> Your notes
+  ...
+  > 
+  ✓ notes go in ~/meetingrec/scribe/meeting-notes
+
 ==> Whisper model (small.en, 465 MB)
 ######################################################################## 100.0%
   ✓ downloaded and verified
@@ -205,14 +223,6 @@ You should see something like this (each line starting with ✓ is a finished st
 
 ==> Hammerspoon (menu-bar button)
   ✓ installed in /Applications
-
-==> Recorder config
-  ✓ created /Users/you/.config/meetingrec/config.sh
-
-==> Your notes
-  ...
-  > 
-  ✓ notes go in ~/meetingrec/scribe/meeting-notes
 
 ==> Your settings and team profile
   ✓ created. Claude fills them in the first time you write up a meeting
@@ -310,8 +320,9 @@ straight to [Your first meeting](#your-first-meeting).
 
 1. **Install Obsidian** from [obsidian.md](https://obsidian.md). It's free. You need
    version 1.9 or later for Bases.
-2. **Open the vaults.** Obsidian → *Open folder as vault* → choose `<repo>/scribe`. Do the
-   same for `<repo>/teamnotes` if you'll write team notes. Each is a separate vault.
+2. **Open the vaults.** Obsidian → *Open folder as vault* → choose `~/meetingrec/scribe` (or
+   `scribe` wherever you installed meetingrec). Do the same for `~/meetingrec/teamnotes` if
+   you'll write team notes. Each is a separate vault.
    (In the file picker, Cmd+Shift+G lets you paste the path.)
 
    **Already use Obsidian?** You can keep your notes in your own vault instead. The
@@ -331,8 +342,8 @@ straight to [Your first meeting](#your-first-meeting).
    skill adds `⏳` scheduled dates when a meeting says when you'll do something, and Day
    Planner picks those up.
 
-`index.base`, the table of meetings, is created in the vault automatically the first time
-you write a note there.
+`index.base`, the table of meetings, is already in meetingrec's own `teamnotes` folder. In
+`scribe`, or a vault of your own, it's created the first time you write a note there.
 
 ---
 
@@ -342,7 +353,7 @@ you write a note there.
    recording…*, type a title, click *Start*. Tell the others you're recording.
 2. **After the call:** click **● 34m** → *Stop*.
 3. **Write it up:** click **○** → *Write up notes…*. The Claude app opens with `scribe`
-   typed in; press **Enter**. The first time, Claude asks your name (and where your notes
+   typed in (or Claude Code opens in Terminal, if you don't have the app); press **Enter**. The first time, Claude asks your name (and where your notes
    should go, if the installer didn't ask). Then it asks a few questions about the meeting (who was there, what kind of
    meeting) and transcribes it.
 4. **Read it:** Claude tells you where the note is. Open it in Obsidian, where your to-dos
@@ -361,7 +372,7 @@ recording's folder into `teamnotes/input/`, then use *Write up team notes…* (s
 **From the menu bar:** click **○** → *Start recording…*, and type a title if you like. The
 button shows **● 12m** while recording. Click it → *Stop* when the call ends.
 
-**From the terminal**, in any folder (if you did the manual install, use `<repo>/.engine/bin/meetingrec`):
+**From the terminal**, in any folder (if you did the manual install without step 7, use `~/meetingrec/.engine/bin/meetingrec`):
 ```bash
 meetingrec start "Acme check-in"   # title is optional
 meetingrec status
@@ -404,7 +415,7 @@ Any of these starts it; they all end up in the same place:
   [step 7](.engine/docs/manual-install.md#7-add-the-commands-optional).)
 - **By hand:**
   ```bash
-  cd <repo>/scribe
+  cd ~/meetingrec/scribe
   claude
   ```
   Expected: Claude Code opens with a `>` prompt. Then type **`scribe`**, or "write up notes
@@ -428,8 +439,8 @@ The skill:
 Open the note in Obsidian or any Markdown editor. To-dos are tagged with the meeting's
 context, `#work` unless your rules say otherwise. In Obsidian they also appear in `Tasks.md`.
 
-You can also drop an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`) or a transcript (`.txt`,
-`.srt`, `.vtt`) into `scribe/input/`, or paste a transcript straight into the chat.
+You can also drop an audio file (`.m4a`, `.mp3`, `.wav`, `.mp4`, `.aac`, `.caf`) or a
+transcript (`.txt`, `.srt`, `.vtt`, `.md`) into `scribe/input/`, or paste a transcript straight into the chat.
 
 ### Write team notes (teamnotes)
 
@@ -443,7 +454,7 @@ For a meeting whose notes go to the whole team:
    Move the folder, not just the `.wav` files inside it. Phone recordings of in-person
    meetings and transcripts can go straight into `teamnotes/input/`.
 2. Click **○** → *Write up team notes…* and press **Enter**, or type `teamnotes` in
-   Terminal. By hand: `cd <repo>/teamnotes`, run `claude`, then type **"team notes"**.
+   Terminal. By hand: `cd ~/meetingrec/teamnotes`, run `claude`, then type **"team notes"**.
 3. Pick the **team** profile (or **other**). The first time you pick **team**, Claude asks
    for your team's name and roster. Mark who was present, and confirm the action-item owners
    before anything is written.
@@ -638,12 +649,6 @@ deleted straight away, so nothing builds up. If an update did change or remove o
 which, and the backup stays in `~/.local/share/meetingrec/backups/`: open it in Finder (it
 unpacks into a folder) and copy the file back.
 
-If you installed before updates existed (no *Check for updates…* in the menu), update
-once by hand:
-```bash
-git -C ~/meetingrec pull && ~/meetingrec/.engine/bin/meetingrec update
-```
-
 ---
 
 ## Uninstalling
@@ -728,7 +733,9 @@ Issues are public, so never paste a transcript, note text, or anyone's name into
 | `audiotee not found or not executable` | Run the quick install command again, redo [manual step 3](.engine/docs/manual-install.md#3-install-ffmpeg-whisper-cli-and-audiotee), or fix `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`. |
 | "system track produced no audio" / silent-track warning | System Audio Recording permission is missing for whatever started the recording (Terminal or Hammerspoon). See [manual steps 5 and 6](.engine/docs/manual-install.md#5-do-a-test-recording-and-grant-permissions). |
 | Skill says the inbox is empty | The recording isn't where the skill looks: `scribe/input/`, or wherever `OUTPUT_ROOT` in `~/.config/meetingrec/config.sh` points. Click **○** → *Open recordings folder* to see what's there. Team notes look in `teamnotes/input/`. |
-| No notifications from the menu bar (starting, updates, warnings) | Turn on **System Settings → Notifications → Hammerspoon → Allow notifications**. Without them you won't hear about a track that stops recording mid-call. |
+| No notifications from the menu bar (starting, stopping, updates) | Turn on **System Settings → Notifications → Hammerspoon → Allow notifications**. |
+| No warning when a track stops recording mid-call | Those warnings come from the recorder script, so macOS lists them as **Script Editor**. Turn on **System Settings → Notifications → Script Editor → Allow notifications**. It only appears there after the first one. |
+| `your recordings folder … is missing` when starting | The recordings folder you chose was moved, renamed, or is on a drive that isn't connected, and meetingrec won't record into a new folder in its place. Reconnect the drive, or choose the folder again in **○ → Settings → Recordings**. |
 | `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |

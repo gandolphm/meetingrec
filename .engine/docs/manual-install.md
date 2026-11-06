@@ -20,7 +20,7 @@ Expected, if they're not installed yet:
 ```text
 xcode-select: note: install requested for command line developer tools
 ```
-A window then opens. Click *Install*, agree, and wait for it to finish (5–15 minutes).
+A window then opens. Click *Install*, agree, and wait for it to finish (around 5 minutes).
 If instead you get a message saying the command line tools are already installed, move on.
 
 **The Whisper model** (`small.en`, 465 MB):
@@ -43,7 +43,7 @@ If the long number is different, delete the file and download it again.
 
 **Claude Code:** skip this if `claude` already runs in Terminal. If you use only the
 [Claude app](https://claude.ai/download), you can skip it too: *Write up notes…* in the
-menu bar opens the app, but the `scribe` and `teamnotes` commands need the `claude` command. Support for other agents coming soon.
+menu bar opens the app, but the `scribe` and `teamnotes` commands need the `claude` command.
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 ```
@@ -78,6 +78,16 @@ Receiving objects: 100% ..., done.
 Resolving deltas: 100% ..., done.
 /Users/you/meetingrec
 ```
+
+Then copy in the to-do dashboard, the team's Action Items page and the team's notes table.
+They're yours to edit, so git doesn't ship them in place: the starters live with the skills.
+`cp -n` never replaces a copy you already have.
+```bash
+cp -n scribe/.claude/skills/meeting-notes/assets/Tasks.md scribe/
+cp -n "teamnotes/.claude/skills/team-notes/assets/Action Items.md" teamnotes/
+cp -n teamnotes/.claude/skills/team-notes/assets/index.base teamnotes/
+```
+Expected: no output.
 
 ## 3. Install ffmpeg, whisper-cli and audiotee
 
@@ -272,9 +282,11 @@ the terminal commands work too, but it's much easier mid-meeting.
    **System Audio Recording Only**, click **+**, choose **Hammerspoon**, and make sure its
    switch is on. Quit Hammerspoon and open it again. Then start a test recording from the
    ○ menu and allow the Microphone prompt, and Hammerspoon's notifications prompt if one
-   appears: notifications are how meetingrec warns you mid-call when a track isn't
-   recording. If you missed it, turn on **System Settings → Notifications → Hammerspoon →
-   Allow notifications**. Stop the recording from the menu after 15 seconds. If a
+   appears: that's how the menu bar tells you a recording started or an update finished. If
+   you missed it, turn on **System Settings → Notifications → Hammerspoon → Allow
+   notifications**. Warnings mid-call, like a track that isn't recording, arrive as
+   **Script Editor** notifications instead; macOS shows those without asking, so leave them
+   on. Stop the recording from the menu after 15 seconds. If a
    notification says *check this recording*, a permission is missing: check **Hammerspoon**
    under **Microphone** and **System Audio Recording Only** in System Settings (see step 5).
    Delete the test session afterwards, as in step 5.

@@ -2,8 +2,9 @@
 
 Triggers: "team notes", "team meeting", "team sync", "write up the meeting for the team".
 
-**This is a template.** The first time you pick the `team` profile, the skill copies it to
-`team.md` next to this file and fills it in by asking you for the team's name and roster.
+**This is a template.** The installer copies it to `team.md` next to this file (or the
+skill does, if it's missing), and the first time you pick the `team` profile, the skill
+fills it in by asking you for the team's name and roster.
 Git ignores `team.md`, so your roster is never committed and an update never overwrites it.
 After that, edit `team.md` directly when the team changes. Don't edit this template.
 
