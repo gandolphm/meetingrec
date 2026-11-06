@@ -17,7 +17,7 @@ description: >-
   meeting audio or transcripts rather than improvising a summary.
   NOT for anything described as "for the team" or meant to be shared with everyone who
   attended — those use the separate team-notes skill in the teamnotes vault.
-allowed-tools: Bash, Read, Write, Edit, Glob
+allowed-tools: Bash, Read, Write, Edit, Glob, AskUserQuestion
 ---
 
 # Meeting Notes (Obsidian)
@@ -340,6 +340,18 @@ For audio — a session directory or a single file — run:
 - If it fails with `NO_ENGINE`, `NO_FFMPEG` or `MODEL_NOT_FOUND`, relay the fix it prints.
   Do **not** try to work around a missing engine by transcribing some other way — stop and
   tell the user.
+
+**How to write the priming prompt.** Names and terms only, separated by commas, with no
+sentences around them. Whisper uses at most the last ~223 tokens of it (roughly 600–700
+characters), dropping the start of anything longer, so:
+- keep it to the names that matter for this meeting, spelled exactly as in the *Names*
+  tables;
+- put the names Whisper is least likely to know **last**: unusual or non-English names,
+  company and product names that sound like ordinary words. Common first names and
+  well-known companies go first;
+- count before running: over ~600 characters is too long. If `transcribe` still warns, the
+  names at the start were ignored: check their spellings in the transcript with extra care
+  in Step 2, rather than transcribing again.
 
 For a **session directory** it writes `mic.srt`, `system.srt` and — for two-track sessions —
 `merged.txt`, which is what you read in Step 2. It prints a short summary; two lines in it

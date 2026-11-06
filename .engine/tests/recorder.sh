@@ -13,7 +13,9 @@
 set -uo pipefail
 
 SRC="$(cd "$(dirname "$0")/../.." && pwd)"
-T="$(mktemp -d "${TMPDIR:-/tmp}/meetingrec-test.XXXXXX")"
+# Normalized: TMPDIR ends in "/", and a "//" in HOME would never match the clean
+# paths meetingrec saves.
+T="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/meetingrec-test.XXXXXX")" && pwd)"
 # The path has an apostrophe and a space on purpose: the state file must survive both.
 REPO="$T/Alice's Mac/meetingrec"
 INBOX="$REPO/scribe/input"
@@ -27,12 +29,15 @@ STATE_FILE="$XDG_STATE_HOME/meetingrec/current"
 
 mkdir -p "$REPO/scribe/transcripts" "$INBOX" "$REPO/teamnotes/input" "$STUBS"
 cp -R "$SRC/.engine" "$REPO/.engine"
-# For prepare: the settings templates and the skills (with their starters).
+# For prepare: the settings templates and the skills (with their starters). Only
+# the files git ships: a developer's own personal.md or team.md stays out.
 for kind in scribe teamnotes; do
   mkdir -p "$REPO/$kind/settings/profiles"
-  cp "$SRC/$kind/settings/"*.md "$REPO/$kind/settings/"
+  cp "$SRC/$kind/settings/"*.example.md "$SRC/$kind/settings/shared.md" "$REPO/$kind/settings/"
   cp -R "$SRC/$kind/.claude" "$REPO/$kind/.claude"
 done
+cp "$SRC/teamnotes/settings/profiles/"*.example.md "$SRC/teamnotes/settings/profiles/other.md" \
+  "$REPO/teamnotes/settings/profiles/"
 printf 'OUTPUT_ROOT="%s"\n' "$INBOX" > "$MEETINGREC_CONFIG"
 
 # The background byte-rate checks outlive a test by up to ~30 s. Removing the
@@ -230,6 +235,114 @@ check "...where the starter Action Items.md is" \
   exist "$REPO/teamnotes/.claude/skills/team-notes/assets/Action Items.md"
 check "...and the team vault gets the team's notes table" \
   cmp -s "$team/index.base" "$REPO/teamnotes/.claude/skills/team-notes/assets/index.base"
+
+# The rest run against a config of their own, starting empty.
+CFG="$T/config-cfg.sh"
+: > "$CFG"
+mrc() { MEETINGREC_CONFIG="$CFG" "$MR" "$@"; }
+
+echo "config"
+out="$(mrc config get NOTES_VAULT)"; rc=$?
+check "an unsaved notes folder prints the default" has "$out" '/scribe$'
+check "...and exits 2, so the skill knows to ask" [ "$rc" -eq 2 ]
+out="$(mrc config set NOTES_VAULT "$T/nowhere" 2>&1)"; rc=$?
+check "a folder that doesn't exist is refused" [ "$rc" -ne 0 ]
+check "...saying so" has "$out" "doesn't exist"
+mkdir -p "$HOME/Notes Vault" "$HOME/Team Notes"
+# shellcheck disable=SC2088  # a literal ~, the way someone types it
+mrc config set NOTES_VAULT "~/Notes Vault" >/dev/null
+# shellcheck disable=SC2016  # the saved line holds a literal $HOME
+check "a folder in the home folder is saved as \$HOME/…" grep -qxF 'NOTES_VAULT="$HOME/Notes Vault"' "$CFG"
+check "...and read back as the full path" [ "$(mrc config get NOTES_VAULT)" = "$HOME/Notes Vault" ]
+out="$(mrc config set TEAM_VAULT "$HOME/Notes Vault" 2>&1)"; rc=$?
+check "team notes can't share the personal notes folder" [ "$rc" -ne 0 ]
+check "...saying why" has "$out" 'separate folders'
+mrc config set TEAM_VAULT "$HOME/Team Notes" >/dev/null
+mkdir -p "$T/say \"hi\""
+out="$(mrc config set OUTPUT_ROOT "$T/say \"hi\"" 2>&1)"; rc=$?
+check "a folder name with a quote is refused" [ "$rc" -ne 0 ]
+out="$(mrc config set AUTO_UPDATE_CHECK maybe 2>&1)"; rc=$?
+check "on/off settings refuse anything else" [ "$rc" -ne 0 ]
+mrc config set AUTO_UPDATE_CHECK off >/dev/null
+check "...and save on or off" [ "$(mrc config get AUTO_UPDATE_CHECK)" = off ]
+out="$(mrc config list)"
+check "list marks a changed setting custom" has "$out" $'^AUTO_UPDATE_CHECK\toff\tcustom$'
+check "...and an unchanged one default" has "$out" $'^USE_HOMEBREW\toff\tdefault$'
+
+echo "note-path"
+notes="$HOME/Notes Vault/meeting-notes"
+mkdir -p "$notes" "$HOME/Team Notes/meeting-notes" "$HOME/Team Notes/share"
+check "a colon becomes a dash" \
+  [ "$(mrc note-path scribe "Acme: check-in")" = "$notes/Acme - check-in.md" ]
+check "characters Finder refuses become -" \
+  [ "$(mrc note-path scribe "Q3/Q4 plan?")" = "$notes/Q3-Q4 plan-.md" ]
+touch "$notes/Acme - check-in.md"
+out="$(mrc note-path scribe "Acme: check-in" 2>&1)"; rc=$?
+check "a taken name without --date is refused" [ "$rc" -ne 0 ]
+check "...asking for the date" has "$out" 'give the meeting'
+check "with --date it gets the date" \
+  [ "$(mrc note-path scribe "Acme: check-in" --date 2026-11-05)" = "$notes/Acme - check-in (2026-11-05).md" ]
+touch "$notes/Acme - check-in (2026-11-05).md"
+check "...and a number when that's taken too" \
+  [ "$(mrc note-path scribe "Acme: check-in" --date 2026-11-05)" = "$notes/Acme - check-in (2026-11-05) 2.md" ]
+touch "$HOME/Team Notes/share/Team — 2026-11-05.md"
+check "a team name taken in share/ counts as taken" \
+  [ "$(mrc note-path teamnotes "Team — 2026-11-05")" = "$HOME/Team Notes/meeting-notes/Team — 2026-11-05 2.md" ]
+out="$(mrc note-path scribe "   " 2>&1)"; rc=$?
+check "an empty name is refused" [ "$rc" -ne 0 ]
+
+echo "session-info"
+s="$T/sessions/2026-01-02T12-00_acme-check-in"
+mkdir -p "$s"
+cat > "$s/session.json" <<'EOF'
+{"title": "Acme check-in", "started": "2026-01-02T12:00:00Z", "tracks": ["mic", "system"],
+ "checks": {"mic": {"peak_dbfs": -18.5, "audio_seconds": 1800},
+            "system": {"peak_dbfs": -91.0, "audio_seconds": 1800}},
+ "warnings": ["tracks started 3 s apart"]}
+EOF
+out="$(mrc session-info "$s")"
+check "prints the title typed at record time" has "$out" '^TITLE=Acme check-in$'
+check "...the date" has "$out" '^DATE=2026-01-02$'
+check "...and the tracks" has "$out" '^TRACKS=mic,system$'
+check "a track below -60 dBFS is SILENT" has "$out" '^SILENT system$'
+check "...and a healthy one isn't" bash -c '! grep -q "^SILENT mic$" <<< "$1"' _ "$out"
+check "warnings are passed on" has "$out" '^WARNING tracks started 3 s apart$'
+s="$T/sessions/2026-01-03T09-00_weekly-sync"
+mkdir -p "$s"; : > "$s/mic.wav"
+out="$(mrc session-info "$s")"
+check "no session.json: says so" has "$out" '^NO SESSION FILE$'
+check "...and works the title, date and tracks out from the folder" \
+  bash -c 'grep -qx "TITLE=weekly sync" <<< "$1" && grep -qx "DATE=2026-01-03" <<< "$1" && grep -qx "TRACKS=mic" <<< "$1"' _ "$out"
+
+echo "prepare"
+inbox2="$T/inbox-prepare"
+mkdir -p "$inbox2/2026-01-04T10-00_standup"
+: > "$inbox2/phone call.m4a"; : > "$inbox2/agenda.pdf"
+mrc config set OUTPUT_ROOT "$inbox2" >/dev/null
+out="$(mrc prepare scribe 2>&1)"
+check "a saved notes folder says VAULT_SAVED=yes" has "$out" '^VAULT_SAVED=yes$'
+check "a fresh personal.md asks for the name" has "$out" '^NAME NEEDED$'
+check "session folders are listed" has "$out" '^INPUT session .*_standup$'
+check "...before single files" \
+  bash -c '[ "$(grep -n "^INPUT session" <<< "$1" | cut -d: -f1)" -lt "$(grep -n "^INPUT file" <<< "$1" | cut -d: -f1)" ]' _ "$out"
+check "...and files that aren't audio or text aren't" bash -c '! grep -q "agenda.pdf" <<< "$1"' _ "$out"
+rm -rf "$inbox2"
+out="$(mrc prepare scribe 2>&1)"
+check "a missing inbox says MISSING INBOX" has "$out" '^MISSING INBOX$'
+out="$(mrc prepare teamnotes 2>&1)"
+check "no team.md yet: PROFILE team NOT SET UP" has "$out" '^PROFILE team NOT SET UP$'
+check "...and the other profile is listed" has "$out" '^PROFILE other '
+
+echo "transcribe: the names prompt"
+long="$(python3 -c 'print(", ".join(["Siobhan Ó Súilleabháin"] * 40))')"
+out="$(mrc transcribe "$T/missing.wav" --prompt "$long" 2>&1)"
+check "a prompt over Whisper's budget gets a warning" has "$out" 'names prompt is about'
+check "...before the usual error" has "$out" 'no such file'
+out="$(mrc transcribe "$T/missing.wav" --prompt "Alice, Bob, Acme Health" 2>&1)"
+check "a short prompt doesn't" bash -c '! grep -q "names prompt" <<< "$1"' _ "$out"
+: > "$T/already.txt"
+out="$(mrc transcribe "$T/already.txt" --prompt "$long" 2>&1)"
+check "a transcript doesn't, since Whisper isn't run" bash -c '! grep -q "names prompt" <<< "$1"' _ "$out"
 
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"

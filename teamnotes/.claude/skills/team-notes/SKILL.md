@@ -328,6 +328,18 @@ If the user already gave some of this in chat, fill only the gaps.
 whether or not everyone attended: absent members get mentioned by name, and the prompt is
 where Whisper learns the spelling. Add guest names and any org/event names from the agenda.
 
+**How to write the priming prompt.** Names and terms only, separated by commas, with no
+sentences around them. Whisper uses at most the last ~223 tokens of it (roughly 600–700
+characters), dropping the start of anything longer, so:
+- the full roster always goes in, spelled exactly as in the profile; if it's too long,
+  trim the extra terms first;
+- put the names Whisper is least likely to know **last**: unusual or non-English names,
+  company and product names that sound like ordinary words. Common first names and
+  well-known companies go first;
+- count before running: over ~600 characters is too long. If `transcribe` still warns, the
+  names at the start were ignored: check their spellings in the transcript with extra care
+  in Step 2, rather than transcribing again.
+
 ### Step 1 — Transcribe (only if the input is audio)
 
 If the input is already a transcript (`.txt`/`.srt`/`.vtt`/`.md` or pasted text), skip to

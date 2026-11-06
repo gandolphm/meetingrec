@@ -1505,6 +1505,18 @@ for w in doc.get("warnings") or []:
 PY
 }
 
+# Whisper (whisper.cpp v1.9.5, whisper_full_with_state) primes each 30 s window
+# with at most 223 tokens of prompt, keeping the END of a longer one: names at
+# the start of an over-long list are dropped without a word. Tokens aren't
+# counted here (that needs Whisper's tokenizer); 3 characters per token is a
+# deliberately high guess for names, so the warning comes early, not late.
+WHISPER_PROMPT_TOKENS=223
+prompt_budget_warning() {
+  local tokens=$(( (${#1} + 2) / 3 ))
+  [ "$tokens" -gt "$WHISPER_PROMPT_TOKENS" ] || return 0
+  warn "warning: the names prompt is about $tokens tokens, and Whisper keeps only the last $WHISPER_PROMPT_TOKENS, so names at the start are dropped. Shorten it, or put the names Whisper is least likely to know last."
+}
+
 cmd_transcribe() {
   local input="" prompt="" model="small.en"
   while [ $# -gt 0 ]; do
@@ -1516,6 +1528,7 @@ cmd_transcribe() {
     esac
   done
   [ -n "$input" ] || die "usage: meetingrec transcribe <session folder | audio file> [--prompt TEXT] [--model NAME]"
+  echo "$input" | grep -qiE "\.($TEXT_EXT)$" || prompt_budget_warning "$prompt"
   if [ -d "$input" ]; then
     # Strips silence before Whisper sees each track and merges them as [Me]/[Them].
     PATH="$PATH:$CALLER_PATH" python3 "$LIB/transcribe_session.py" "$input" --model "$model" --prompt "$prompt"
