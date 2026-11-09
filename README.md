@@ -59,9 +59,10 @@ Either way, finish with [Set up Obsidian](#set-up-obsidian) (recommended).
 - **Disk space:** about **0.55 GB** for the Whisper model and tools, or **2–2.5 GB** if your
   Mac also needs Apple's Command Line Tools and Claude Code. Recordings take about 230 MB per
   hour of meeting until their notes are written.
-- **No Homebrew, and no administrator password** for meetingrec itself (unless you
-  choose Homebrew in the [install options](#install-options)). If your Mac doesn't have
-  Apple's Command Line Tools yet, macOS may ask an administrator to approve them.
+
+You don't need Homebrew or an administrator password for meetingrec itself (unless you
+choose Homebrew in the [install options](#install-options)). If your Mac doesn't have
+Apple's Command Line Tools yet, macOS may ask an administrator to approve them.
 
 ### Quick install (recommended)
 
@@ -196,7 +197,8 @@ straight to [Your first meeting](#your-first-meeting).
    recording…*, type a title, click *Start*. Tell the others you're recording.
 2. **After the call:** click **● 34m** → *Stop*.
 3. **Write it up:** click **○** → *Write up notes…*. The Claude app opens with `scribe`
-   typed in (or Claude Code opens in Terminal, if you don't have the app); press **Enter**.
+   typed in (or Claude Code opens in Terminal, if you don't have the app or chose Terminal in
+   **○ → Settings → *Write up notes in***); press **Enter**.
    The first time, Claude asks [a few setup questions](#what-claude-asks-the-first-time). Then
    it asks about the meeting (who was there, what kind of meeting) and transcribes it.
 4. **Read it:** Claude tells you where the note is. Open it in Obsidian, where your to-dos
@@ -369,6 +371,7 @@ meeting, or a click in **○ → Settings**.
 | Move the meetingrec folder itself | — | `meetingrec move ~/Projects` (see [Moving things](#moving-things)) |
 | Remove meetingrec from this Mac | — | ○ → Settings → *Uninstall meetingrec…* (see [Uninstalling](#uninstalling)) |
 | Stop the daily update check | — | ○ → Settings → untick *Check for updates daily* |
+| Write up notes in Terminal instead of the Claude app | — | ○ → Settings → *Write up notes in* → *Terminal* |
 | Use Homebrew's ffmpeg and whisper.cpp instead | — | `meetingrec config set USE_HOMEBREW on`, then `meetingrec update` |
 | Use a more accurate Whisper model | "re-run with medium.en" ([download it first](.engine/docs/settings.md#whisper-model)) | — |
 
@@ -381,7 +384,7 @@ this: it starts a write-up.
 
 Settings saves to `~/.config/meetingrec/config.sh`. From Terminal, `meetingrec config list`
 shows every setting and `meetingrec config set NOTES_VAULT ~/path` changes one (also
-`TEAM_VAULT`, `OUTPUT_ROOT`, and `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`). Changing a notes
+`TEAM_VAULT`, `OUTPUT_ROOT`, `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`, and `WRITEUP_IN` with `app` or `terminal`). Changing a notes
 folder doesn't move the notes already in the old one; ask Claude to move them.
 
 Pick the vault itself, not its `meeting-notes` folder: notes go in a `meeting-notes` folder
