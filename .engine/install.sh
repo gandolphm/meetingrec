@@ -747,8 +747,10 @@ test_recording() {
     4. Play a YouTube video and talk for about 15 seconds.
     5. Click the ● in the menu bar → Stop.
 
-  Notifications are how meetingrec warns you mid-call when a track isn't recording.
+  Hammerspoon's notifications tell you a recording started or an update finished.
   To check they're on: System Settings → Notifications → Hammerspoon → Allow notifications.
+  Warnings mid-call, like a track that isn't recording, come from Script Editor instead.
+  macOS shows those without asking, so just leave them on.
 
 EOF
   local reply
