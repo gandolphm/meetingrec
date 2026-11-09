@@ -17,10 +17,25 @@ decisions and follow-ups. No meeting bot joins the call.
 
 It works with Claude Code today; support for other agents, like Codex, is planned.
 
+Feel free to email with any [feedback](#feedback), suggestions, or questions at **goblin_outlet@icloud.com**.
+
 *meetingrec is a vibe-coded app.*
 
 > **Always tell people you're recording.** No bot appears in the participant list, so
 > nobody knows unless you say so.
+
+## Contents
+
+- [Install](#install): [Requirements](#requirements) ·
+  [Quick install](#quick-install-recommended) · [Manual install](.engine/docs/manual-install.md) ·
+  [Set up Obsidian](#set-up-obsidian) (recommended)
+- [Your first meeting](#your-first-meeting)
+- [The three parts](#the-three-parts) · [What leaves your Mac](#what-leaves-your-mac)
+- [Usage](#usage): [record](#record-a-virtual-meeting) ·
+  [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
+- [Make it yours](#make-it-yours): where notes go, names, rules, teams, moving things
+- [Updating](#updating) · [Uninstalling](#uninstalling)
+- [More guides](#more-guides) · [Feedback](#feedback) · [Troubleshooting](#troubleshooting)
 
 ---
 
