@@ -503,7 +503,8 @@ local function openPersonal(folder)
   if not exists(file) then
     hs.execute('cp -n "' .. dir .. '/personal.example.md" "' .. file .. '"')
   end
-  hs.execute('open -t "' .. file .. '"')
+  -- The user's default app for .md files; the plain-text editor if there is none.
+  hs.execute('open "' .. file .. '" || open -t "' .. file .. '"')
 end
 
 -- Two windows before anything goes: "Uninstall?" and, if you have notes in the
