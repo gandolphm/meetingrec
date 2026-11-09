@@ -55,6 +55,11 @@ HAMMERSPOON_SHA256="11bb1c90faf5427f37c7bd4fe7eab9774ae43e1d5cb020c5b3088dac3284
 # itself. "off" leaves only ○ → Check for updates…. Also in ○ → Settings.
 # AUTO_UPDATE_CHECK="on"
 
+# Where the menu bar's "Write up notes…" opens Claude Code: "app" for the Claude
+# app, "terminal" for Terminal. If that one can't open, it tries the other. Also
+# in ○ → Settings.
+# WRITEUP_IN="app"
+
 # Use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of the pinned copies
 # install.sh downloads. "on" gets whatever versions Homebrew currently has, and
 # Homebrew asks for your Mac password when it installs itself. To switch, run

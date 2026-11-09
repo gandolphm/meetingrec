@@ -268,6 +268,14 @@ check "...and save on or off" [ "$(mrc config get AUTO_UPDATE_CHECK)" = off ]
 out="$(mrc config list)"
 check "list marks a changed setting custom" has "$out" $'^AUTO_UPDATE_CHECK\toff\tcustom$'
 check "...and an unchanged one default" has "$out" $'^USE_HOMEBREW\toff\tdefault$'
+check "write-ups open in the app by default" [ "$(mrc config get WRITEUP_IN)" = app ]
+out="$(mrc config set WRITEUP_IN on 2>&1)"; rc=$?
+check "WRITEUP_IN refuses anything but app or terminal" [ "$rc" -ne 0 ]
+check "...saying which" has "$out" 'must be app or terminal'
+mrc config set WRITEUP_IN terminal >/dev/null
+check "...and saves terminal" [ "$(mrc config get WRITEUP_IN)" = terminal ]
+mrc config set WRITEUP_IN "" >/dev/null
+check "...and an empty value goes back to the app" [ "$(mrc config get WRITEUP_IN)" = app ]
 
 echo "note-path"
 notes="$HOME/Notes Vault/meeting-notes"

@@ -868,7 +868,7 @@ cmd_update() {
 #   set NAME VALUE   for a folder, "" means "the default", which follows the
 #                    repo if it moves.
 #   list             every setting, one per line: NAME<tab>value<tab>default|custom
-CONFIG_NAMES="NOTES_VAULT TEAM_VAULT OUTPUT_ROOT AUTO_UPDATE_CHECK USE_HOMEBREW"
+CONFIG_NAMES="NOTES_VAULT TEAM_VAULT OUTPUT_ROOT AUTO_UPDATE_CHECK USE_HOMEBREW WRITEUP_IN"
 
 config_default() {
   case "$1" in
@@ -877,6 +877,7 @@ config_default() {
     OUTPUT_ROOT) echo "$REPO_ROOT/scribe/input" ;;
     AUTO_UPDATE_CHECK) echo "on" ;;
     USE_HOMEBREW) echo "off" ;;
+    WRITEUP_IN) echo "app" ;;
     *) die "config: NAME must be one of: $CONFIG_NAMES" ;;
   esac
 }
@@ -927,11 +928,16 @@ cmd_config() {
     set)
       [ $# -eq 3 ] || die "usage: meetingrec config set $name <value>"
       local value="$3"
-      if [ "$name" = AUTO_UPDATE_CHECK ] || [ "$name" = USE_HOMEBREW ]; then
+      local choice1="" choice2=""
+      case "$name" in
+        AUTO_UPDATE_CHECK|USE_HOMEBREW) choice1=on choice2=off ;;
+        WRITEUP_IN) choice1=app choice2=terminal ;;
+      esac
+      if [ -n "$choice1" ]; then
         case "$value" in
-          on|off) ;;
+          "$choice1"|"$choice2") ;;
           "") value="$default" ;;
-          *) die "config: $name must be on or off" ;;
+          *) die "config: $name must be $choice1 or $choice2" ;;
         esac
         config_write "$name" "$name=\"$value\""
         printf '%s → %s\n' "$name" "$value"

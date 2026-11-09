@@ -338,33 +338,42 @@ end
 -- Writing notes
 --
 -- Opens Claude Code in the skill's folder with the request typed in, waiting
--- for Enter: in the Claude app if it's installed, so no Terminal is needed,
--- otherwise in Terminal. Both are a plain `open` of a link, so no macOS
--- permission is involved. The skills work the same however Claude was started.
+-- for Enter. WRITEUP_IN picks where: the Claude app by default, so no Terminal
+-- is needed, or Terminal. If that one can't open, the other is tried. Both are
+-- a plain `open` of a link, so no macOS permission is involved. The skills work
+-- the same however Claude was started.
 -- ---------------------------------------------------------------------------
 
 local function urlEncode(s)
   return (s:gsub("[^%w%-%._~/]", function(c) return string.format("%%%02X", string.byte(c)) end))
 end
 
+local CLAUDE_APP = { name = "Claude app", link = "claude://code/new", folderParam = "folder" }
+local CLAUDE_TERMINAL = { name = "Claude Code in Terminal", link = "claude-cli://open", folderParam = "cwd" }
+
 local function writeUp(folder, request)
   local dir = REPO .. "/" .. folder
-  local query = "?folder=" .. urlEncode(dir) .. "&q=" .. urlEncode(request)
-  local _, opened = hs.execute('open "claude://code/new' .. query .. '"')
-  if opened then
-    log("write-up: Claude app in %s", dir)
-    return
-  end
-  -- No Claude app: Claude Code's own link opens it in Terminal instead.
-  query = "?cwd=" .. urlEncode(dir) .. "&q=" .. urlEncode(request)
-  _, opened = hs.execute('open "claude-cli://open' .. query .. '"')
-  if opened then
-    log("write-up: Claude Code in Terminal in %s", dir)
-    return
-  end
-  log("write-up: nothing handles claude:// or claude-cli:// links")
-  notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
-    folder .. " in Terminal.")
+  -- Asked rather than assumed, so a change made from Terminal counts at once.
+  run({ "config", "get", "WRITEUP_IN" }, function(exitCode, stdOut)
+    local terminalFirst = exitCode == 0 and stdOut:match("^terminal") ~= nil
+    local order = terminalFirst and { CLAUDE_TERMINAL, CLAUDE_APP } or { CLAUDE_APP, CLAUDE_TERMINAL }
+    for _, target in ipairs(order) do
+      local query = "?" .. target.folderParam .. "=" .. urlEncode(dir) .. "&q=" .. urlEncode(request)
+      local _, opened = hs.execute('open "' .. target.link .. query .. '"')
+      if opened then
+        log("write-up: %s in %s", target.name, dir)
+        -- Having no Claude app is normal; asking for Terminal and not getting it isn't.
+        if terminalFirst and target == CLAUDE_APP then
+          notify("MeetingRec", "Couldn't open Terminal, so this opened in the Claude app. " ..
+            "Run claude once in Terminal, then try again.")
+        end
+        return
+      end
+    end
+    log("write-up: nothing handles claude:// or claude-cli:// links")
+    notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
+      folder .. " in Terminal.")
+  end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -557,6 +566,8 @@ end
 local function settingsMenu()
   local auto = settings.AUTO_UPDATE_CHECK
   local autoOn = not auto or auto.value ~= "off"
+  local writeUpIn = settings.WRITEUP_IN
+  local inTerminal = writeUpIn ~= nil and writeUpIn.value == "terminal"
   return {
     { title = "Check for updates daily", checked = autoOn, fn = function()
         local want = autoOn and "off" or "on"
@@ -564,6 +575,10 @@ local function settingsMenu()
           if want == "on" then startAutoCheck() else stopAutoCheck() end
         end)
       end },
+    { title = "Write up notes in", menu = {
+        { title = "Claude app", checked = not inTerminal, fn = function() saveSetting("WRITEUP_IN", "app") end },
+        { title = "Terminal", checked = inTerminal, fn = function() saveSetting("WRITEUP_IN", "terminal") end },
+      } },
     { title = "-" },
     folderMenu("NOTES_VAULT", "Personal notes"),
     folderMenu("TEAM_VAULT", "Team notes"),
