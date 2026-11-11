@@ -246,7 +246,7 @@ install_tools() {
     return
   fi
   mkdir -p "$TOOLS_DIR"
-  install_tool ffmpeg "ffmpeg-$(pin FFMPEG_VERSION)/ffmpeg" "$(pin FFMPEG_SHA256)" ffmpeg
+  install_tool ffmpeg "ffmpeg-$(pin FFMPEG_VERSION)-$(pin FFMPEG_BUILD)/ffmpeg" "$(pin FFMPEG_SHA256)" ffmpeg
   install_tool whisper-cli "whisper-cli-$(pin WHISPER_CPP_VERSION)/whisper-cli" \
     "$(pin WHISPER_CLI_SHA256)" whisper-cpp
 }

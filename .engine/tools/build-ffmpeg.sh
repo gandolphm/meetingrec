@@ -3,7 +3,12 @@
 # build-ffmpeg.sh VERSION OUTDIR — build the small ffmpeg meetingrec needs.
 #
 # Run by .github/workflows/build-ffmpeg.yml, and by hand to try a new version.
-# Writes OUTDIR/ffmpeg and OUTDIR/LICENSE-ffmpeg.txt.
+# Writes OUTDIR/ffmpeg, OUTDIR/LICENSE-ffmpeg.txt and a copy of each patch.
+#
+# FFmpeg's source is changed by the ffmpeg-*.patch files beside this script,
+# and by nothing else. Each one says at its top what it fixes and why. A patch
+# that no longer applies stops the build: read what changed in FFmpeg before
+# touching it, because the fix may have arrived there, or moved.
 #
 # Everything meetingrec asks of ffmpeg is built in: microphone capture
 # (avfoundation), raw and WAV audio, resampling, the silencedetect filter, and
@@ -16,6 +21,7 @@ set -euo pipefail
 version="${1:?usage: build-ffmpeg.sh VERSION OUTDIR}"
 mkdir -p "${2:?usage: build-ffmpeg.sh VERSION OUTDIR}"
 out="$(cd "$2" && pwd)"
+here="$(cd "$(dirname "$0")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -23,6 +29,14 @@ git -c advice.detachedHead=false clone --quiet --depth 1 --branch "n$version" \
   https://github.com/FFmpeg/FFmpeg.git "$work/src" 2>"$work/clone.log" \
   || { cat "$work/clone.log"; exit 1; }
 cd "$work/src"
+
+patches=()
+for patch in "$here"/ffmpeg-*.patch; do
+  [ -e "$patch" ] || continue
+  git apply "$patch" || { echo "$(basename "$patch") doesn't apply to FFmpeg n$version"; exit 1; }
+  cp "$patch" "$out/"
+  patches+=("$(basename "$patch")")
+done
 
 flags=(
   --disable-autodetect          # link nothing that merely happens to be installed
@@ -39,7 +53,14 @@ make -j"$(sysctl -n hw.ncpu)" >"$work/make.log" 2>&1 \
 cp ffmpeg "$out/ffmpeg"
 
 {
-  echo "ffmpeg $version, built unmodified from https://github.com/FFmpeg/FFmpeg/tree/n$version"
+  if [ "${#patches[@]}" -eq 0 ]; then
+    echo "ffmpeg $version, built unmodified from https://github.com/FFmpeg/FFmpeg/tree/n$version"
+  else
+    echo "ffmpeg $version, built from https://github.com/FFmpeg/FFmpeg/tree/n$version"
+    echo "with these changes to its source, each published next to this file and in"
+    echo ".engine/tools/ in https://github.com/gandolphm/meetingrec:"
+    printf '  %s\n' "${patches[@]}"
+  fi
   echo "Configured with: ./configure ${flags[*]}"
   echo "Build script: .engine/tools/build-ffmpeg.sh in https://github.com/gandolphm/meetingrec"
   echo

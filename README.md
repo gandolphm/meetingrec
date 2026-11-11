@@ -150,6 +150,9 @@ Then [set up Obsidian](#set-up-obsidian) (recommended).
   downloads: `curl -fsSL …/install.sh | USE_HOMEBREW=1 bash`. It installs Homebrew if
   needed, which asks for your Mac password, and you get whatever versions Homebrew
   currently has. The choice is remembered for updates; `USE_HOMEBREW=0` switches back.
+  Homebrew's ffmpeg lacks meetingrec's [microphone fix](.engine/docs/install-details.md#the-one-change-to-ffmpeg),
+  so a microphone running at 44.1 or 48 kHz, such as the MacBook's own, loses about a tenth
+  of its audio with it.
 - Already cloned the repo? Run `.engine/install.sh` from inside it. That copy is used instead of
   a fresh clone.
 

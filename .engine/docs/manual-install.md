@@ -107,7 +107,7 @@ Run this **from the repo folder**:
 pin() { sed -n "s/^$1=\"\(.*\)\"/\1/p" .engine/config.example.sh; }
 T=~/.local/share/meetingrec/bin; R=https://github.com/gandolphm/meetingrec/releases/download
 mkdir -p $T
-curl -fL --progress-bar -o $T/ffmpeg "$R/ffmpeg-$(pin FFMPEG_VERSION)/ffmpeg"
+curl -fL --progress-bar -o $T/ffmpeg "$R/ffmpeg-$(pin FFMPEG_VERSION)-$(pin FFMPEG_BUILD)/ffmpeg"
 curl -fL --progress-bar -o $T/whisper-cli "$R/whisper-cli-$(pin WHISPER_CPP_VERSION)/whisper-cli"
 chmod +x $T/ffmpeg $T/whisper-cli
 echo "$(pin FFMPEG_SHA256)  $T/ffmpeg" | shasum -a 256 -c

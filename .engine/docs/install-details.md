@@ -25,6 +25,21 @@ and audiotee all go in `~/.local/share/meetingrec`, where only meetingrec uses t
 never replace other copies you might have, and
 [uninstalling](../../README.md#uninstalling) removes them in one go.
 
+## The one change to ffmpeg
+
+meetingrec's ffmpeg is FFmpeg's own source with one change, about 50 lines in the file that
+reads the microphone:
+[ffmpeg-avfoundation-audio-queue.patch](../tools/ffmpeg-avfoundation-audio-queue.patch).
+Without it, ffmpeg silently loses about a tenth of the audio from a microphone running at
+44.1 or 48 kHz, which is the MacBook's own microphone and sometimes AirPods. The patch file
+says how at its top, and [build-ffmpeg.sh](../tools/build-ffmpeg.sh) is the whole build. Each
+release carries the patch beside the program, and GitHub's record that this repo's Action
+built it: `gh attestation verify ffmpeg --repo gandolphm/meetingrec`.
+
+Homebrew's ffmpeg (`USE_HOMEBREW=1`) doesn't have the change. meetingrec still measures the
+loss with it, warns about it and keeps the transcript's timing right, but the missing audio
+stays missing.
+
 ## What else it changes
 
 It also writes `~/.config/meetingrec/config.sh` and the Hammerspoon config, starts

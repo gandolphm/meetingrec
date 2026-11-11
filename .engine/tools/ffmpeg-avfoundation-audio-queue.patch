@@ -1,0 +1,140 @@
+Queue microphone buffers instead of replacing the one that hasn't been read yet.
+
+Applied by .engine/tools/build-ffmpeg.sh to FFmpeg n9.0.2. The lines above the
+first "diff" are a note; git apply skips them.
+
+FFmpeg's avfoundation input keeps a single audio buffer. The capture callback
+replaces it whether or not it has been read, and ffmpeg asks for it every 10 ms
+or so (it sleeps 10 ms each time there is nothing to read). A microphone at
+48 kHz delivers a 512-frame buffer every 10.7 ms, so about one buffer in nine
+is replaced before it is read: 11% of a 32-minute call recorded through
+AirPods in their 48 kHz mode. A MacBook Air's own microphone at 44.1 kHz
+(11.6 ms a buffer) lost 7% in a 30-second test. Nothing is logged, and the
+timestamps keep pace with the clock. At 24 kHz a buffer lasts 21 ms and
+nothing is lost.
+
+Tested with a 30-second capture from that MacBook Air microphone, idle and
+with every core busy: 92.7% and 93% of the audio without the patch, 100% with
+it both times.
+
+With this patch a buffer that arrives while another is waiting goes into a
+queue, and the reader takes them in order. The queue holds up to 512 buffers
+(over 5 seconds at 48 kHz) so memory stays bounded if the reader stops; past
+that a buffer is dropped, and this time it is logged.
+
+diff --git a/libavdevice/avfoundation.m b/libavdevice/avfoundation.m
+index ebec1ac..41d70b2 100644
+--- a/libavdevice/avfoundation.m
++++ b/libavdevice/avfoundation.m
+@@ -132,6 +132,8 @@
+     AVCaptureAudioDataOutput *audio_output;
+     CMSampleBufferRef         current_frame;
+     CMSampleBufferRef         current_audio_frame;
++    CFMutableArrayRef         audio_queue;         ///< audio buffers waiting behind current_audio_frame
++    int                       audio_frames_dropped;
+ 
+     AVCaptureDevice          *observed_device;
+ #if !TARGET_OS_IPHONE && __MAC_OS_X_VERSION_MIN_REQUIRED >= 1070
+@@ -150,6 +152,27 @@ static void unlock_frames(AVFContext* ctx)
+     pthread_mutex_unlock(&ctx->frame_lock);
+ }
+ 
++/**
++ * Audio buffers that arrive while an earlier one is still waiting to be read
++ * are queued, not dropped. avf_read_packet() is polled (ffmpeg sleeps 10 ms
++ * when it returns EAGAIN), and a 48 kHz device delivers a 512-frame buffer
++ * every 10.7 ms, so with a single slot about one buffer in nine was replaced
++ * before it was read. The limit only bounds memory if the reader stops:
++ * 512 buffers are over 5 seconds of 48 kHz audio.
++ */
++#define AVF_AUDIO_QUEUE_MAX 512
++
++/** Make the oldest queued audio buffer the current one. Call with the frame lock held. */
++static void next_audio_frame(AVFContext* ctx)
++{
++    ctx->current_audio_frame = nil;
++
++    if (ctx->audio_queue && CFArrayGetCount(ctx->audio_queue) > 0) {
++        ctx->current_audio_frame = (CMSampleBufferRef)CFRetain(CFArrayGetValueAtIndex(ctx->audio_queue, 0));
++        CFArrayRemoveValueAtIndex(ctx->audio_queue, 0);
++    }
++}
++
+ /** FrameReceiver class - delegate for AVCaptureSession
+  */
+ @interface AVFFrameReceiver : NSObject
+@@ -271,16 +294,26 @@ - (void)  captureOutput:(AVCaptureOutput *)captureOutput
+   didOutputSampleBuffer:(CMSampleBufferRef)audioFrame
+          fromConnection:(AVCaptureConnection *)connection
+ {
++    int dropped = 0;
++
+     lock_frames(_context);
+ 
+-    if (_context->current_audio_frame != nil) {
+-        CFRelease(_context->current_audio_frame);
++    if (_context->current_audio_frame == nil) {
++        _context->current_audio_frame = (CMSampleBufferRef)CFRetain(audioFrame);
++    } else if (_context->audio_queue &&
++               CFArrayGetCount(_context->audio_queue) < AVF_AUDIO_QUEUE_MAX) {
++        CFArrayAppendValue(_context->audio_queue, audioFrame);
++    } else {
++        dropped = ++_context->audio_frames_dropped;
+     }
+ 
+-    _context->current_audio_frame = (CMSampleBufferRef)CFRetain(audioFrame);
+-
+     unlock_frames(_context);
+ 
++    if (dropped == 1 || (dropped && dropped % 100 == 0)) {
++        av_log(NULL, AV_LOG_WARNING,
++               "avfoundation: audio is not being read fast enough, %d buffers dropped\n", dropped);
++    }
++
+     ++_context->audio_frames_captured;
+ }
+ 
+@@ -305,6 +338,11 @@ static void destroy_context(AVFContext* ctx)
+     av_freep(&ctx->url);
+     av_freep(&ctx->audio_buffer);
+ 
++    if (ctx->audio_queue) {
++        CFRelease(ctx->audio_queue);
++        ctx->audio_queue = NULL;
++    }
++
+     pthread_mutex_destroy(&ctx->frame_lock);
+ 
+     if (ctx->current_frame) {
+@@ -612,6 +650,13 @@ static int add_audio_device(AVFormatContext *s, AVCaptureDevice *audio_device)
+         return 1;
+     }
+ 
++    ctx->audio_queue = CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks);
++
++    if (!ctx->audio_queue) {
++        av_log(s, AV_LOG_ERROR, "Failed to create the audio buffer queue\n");
++        return 1;
++    }
++
+     ctx->avf_audio_delegate = [[AVFAudioReceiver alloc] initWithContext:ctx];
+ 
+     queue = dispatch_queue_create("avf_audio_queue", NULL);
+@@ -754,7 +799,7 @@ static int get_audio_config(AVFormatContext *s)
+     }
+ 
+     CFRelease(ctx->current_audio_frame);
+-    ctx->current_audio_frame = nil;
++    next_audio_frame(ctx);
+ 
+     unlock_frames(ctx);
+ 
+@@ -1250,7 +1295,7 @@ static int avf_read_packet(AVFormatContext *s, AVPacket *pkt)
+             }
+ 
+             CFRelease(ctx->current_audio_frame);
+-            ctx->current_audio_frame = nil;
++            next_audio_frame(ctx);
+         } else {
+             pkt->data = NULL;
+             unlock_frames(ctx);

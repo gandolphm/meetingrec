@@ -60,11 +60,12 @@ EXPECTED_BYTES_PER_SEC=32000
 # plausible wrong format is 22.05 kHz mono s16le at 44100 B/s (+38%), and the
 # common ones are multiples (2x stereo, 6x the 48 kHz float32 default).
 RATE_TOLERANCE_PCT=25
-# Inside that band, a track can still be losing audio. ffmpeg drops microphone
-# buffers when the mic runs at 48 kHz (see capture_progress in stop), and the
-# file then grows at about 89% of the full rate: the right format, with pieces
-# missing. Healthy tracks have read between 100% and 107% here, never low, and
-# a low reading is measured a second time before anyone is told.
+# Inside that band, a track can still be losing audio. An unpatched ffmpeg
+# (Homebrew's) drops microphone buffers when the mic runs at 44.1 or 48 kHz (see
+# capture_progress in stop), and the file then grows at 89% to 93% of the full
+# rate: the right format, with pieces missing. Healthy tracks have read between
+# 100% and 107% here, never low, and a low reading is measured a second time
+# before anyone is told.
 RATE_SHORT_PCT=95
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/meetingrec"
@@ -578,13 +579,19 @@ def capture_progress(log, bytes_per_sec):
     On a healthy track they stay equal. When buffers go missing they part, and
     the gap between them is exactly the audio that was lost up to that point.
 
-    They do go missing. ffmpeg's avfoundation input keeps one audio buffer: a
+    They do go missing. FFmpeg's avfoundation input keeps one audio buffer: a
     new one replaces the last whether or not it was read, and ffmpeg looks every
     10 ms or so. A mic at 24 kHz hands over a buffer every 21 ms and loses
-    nothing. At 48 kHz (the MacBook's own mic, AirPods in their 48 kHz mode) it
-    is every 10.7 ms, and about one buffer in nine is overwritten. Nothing is
-    logged, and time= keeps pace with the wall clock throughout. Measured on a
-    32-minute call: 1720 s of audio for 1944 s captured.
+    nothing. At 48 kHz (AirPods in their 48 kHz mode) it is every 10.7 ms, and
+    about one buffer in nine is overwritten; at 44.1 kHz (a MacBook Air's own
+    mic) every 11.6 ms, and about one in fourteen. Nothing is logged, and time=
+    keeps pace with the wall clock throughout. Measured on a 32-minute call:
+    1720 s of audio for 1944 s captured.
+
+    meetingrec's own ffmpeg is built with a patch that queues the buffers
+    (.engine/tools/ffmpeg-avfoundation-audio-queue.patch), so it should lose
+    nothing. This stays for Homebrew's ffmpeg, which has no such patch, and for
+    whatever else loses audio one day.
 
     Also returns the mic's input sample rate, which is what decides it.
     """

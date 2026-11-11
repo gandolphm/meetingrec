@@ -30,7 +30,15 @@ AUDIOTEE_SHA256="43d4f65c4da39c1d6aa2801e19e0b5bcdf382576aa8df61c6d7acba0b17bd4f
 # publish. install.sh refuses any download whose SHA-256 doesn't match. An empty
 # SHA-256 means no prebuilt copy yet: install.sh uses Homebrew for that tool.
 # Change a version together with its SHA-256, after running the Action for it.
+#
+# FFMPEG_BUILD is meetingrec's own build number of that ffmpeg version, and part
+# of the release's name (ffmpeg-9.0.2-2). Raise it, and run the Action, whenever
+# .engine/tools/build-ffmpeg.sh or a patch beside it changes; set it back to 1
+# for a new FFMPEG_VERSION. Build 1 of 9.0.2 was FFmpeg's source as it is; from
+# build 2 it carries ffmpeg-avfoundation-audio-queue.patch, without which a
+# microphone at 44.1 or 48 kHz loses 7% to 11% of its audio.
 FFMPEG_VERSION="9.0.2"
+FFMPEG_BUILD="2"
 FFMPEG_SHA256="8f1f0460aa33cea88365f238d60cd12d46485486f0d2119e8ab420a4b28c6821"
 WHISPER_CPP_VERSION="v1.9.5"
 WHISPER_CLI_SHA256="6db71de03c6266947dbfcf92fea691624bf968b452c058976a2a091ad34b28db"

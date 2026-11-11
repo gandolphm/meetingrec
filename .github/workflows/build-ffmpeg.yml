@@ -1,9 +1,12 @@
-# Builds ffmpeg at the version pinned in .engine/config.example.sh and publishes it as a
-# release, so install.sh can download it instead of every Mac needing Homebrew.
-# The build itself is .engine/tools/build-ffmpeg.sh, which can also be run by hand.
+# Builds ffmpeg at the version and build number pinned in .engine/config.example.sh and
+# publishes it as a release, so install.sh can download it instead of every Mac needing
+# Homebrew. The build itself is .engine/tools/build-ffmpeg.sh, which can also be run by
+# hand, and which applies the ffmpeg-*.patch files beside it.
 #
-# Run by hand: Actions → Build ffmpeg → Run workflow. Then copy the SHA-256 from
-# the run summary into FFMPEG_SHA256 in .engine/config.example.sh and push.
+# Run by hand: Actions → Build ffmpeg → Run workflow, on the branch that has the new
+# FFMPEG_VERSION or FFMPEG_BUILD. Then copy the SHA-256 from the run summary into
+# FFMPEG_SHA256 in .engine/config.example.sh and push. Do both before that branch reaches
+# main: until the SHA-256 matches, a new install can't download ffmpeg.
 name: Build ffmpeg
 
 on:
@@ -24,9 +27,12 @@ jobs:
         id: pin
         run: |
           version="$(sed -n 's/^FFMPEG_VERSION="\(.*\)"/\1/p' .engine/config.example.sh)"
+          build="$(sed -n 's/^FFMPEG_BUILD="\(.*\)"/\1/p' .engine/config.example.sh)"
           [ -n "$version" ] || { echo "::error::Couldn't read FFMPEG_VERSION from .engine/config.example.sh"; exit 1; }
+          [ -n "$build" ] || { echo "::error::Couldn't read FFMPEG_BUILD from .engine/config.example.sh"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=ffmpeg-$version" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "tag=ffmpeg-$version-$build" >> "$GITHUB_OUTPUT"
 
       # A published release is never replaced: install.sh pins its SHA-256, so a
       # rebuilt file with a different fingerprint would fail every install.
@@ -35,7 +41,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "${{ steps.pin.outputs.tag }}" >/dev/null 2>&1; then
-            echo "::error::Release ${{ steps.pin.outputs.tag }} already exists. Change FFMPEG_VERSION to build a different version."
+            echo "::error::Release ${{ steps.pin.outputs.tag }} already exists. Raise FFMPEG_BUILD to publish a new build of this version, or change FFMPEG_VERSION."
             exit 1
           fi
 
@@ -65,10 +71,12 @@ jobs:
         run: |
           sum="$(shasum -a 256 dist/ffmpeg | cut -d' ' -f1)"
           echo "sum=$sum" >> "$GITHUB_OUTPUT"
-          gh release create "${{ steps.pin.outputs.tag }}" dist/ffmpeg dist/LICENSE-ffmpeg.txt \
+          files=(dist/ffmpeg dist/LICENSE-ffmpeg.txt)
+          for patch in dist/*.patch; do [ -e "$patch" ] && files+=("$patch"); done
+          gh release create "${{ steps.pin.outputs.tag }}" "${files[@]}" \
             --target "$GITHUB_SHA" \
-            --title "ffmpeg ${{ steps.pin.outputs.version }}" \
-            --notes "A small ffmpeg built unmodified from [FFmpeg n${{ steps.pin.outputs.version }}](https://github.com/FFmpeg/FFmpeg/tree/n${{ steps.pin.outputs.version }}) for Apple silicon, macOS 14.2 or later, with only what meetingrec uses and no outside libraries. LGPL 2.1 or later: see LICENSE-ffmpeg.txt for the licence, the source and the exact build settings.
+            --title "ffmpeg ${{ steps.pin.outputs.version }}, build ${{ steps.pin.outputs.build }}" \
+            --notes "A small ffmpeg built from [FFmpeg n${{ steps.pin.outputs.version }}](https://github.com/FFmpeg/FFmpeg/tree/n${{ steps.pin.outputs.version }}) for Apple silicon, macOS 14.2 or later, with only what meetingrec uses and no outside libraries. Its source is changed only by the .patch files attached here, each of which says at its top what it fixes. LGPL 2.1 or later: see LICENSE-ffmpeg.txt for the licence, the source and the exact build settings.
 
           SHA-256 of \`ffmpeg\`: \`$sum\`
 
@@ -77,7 +85,7 @@ jobs:
       - name: Summary
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<SUMMARY
-          ## ffmpeg ${{ steps.pin.outputs.version }} published
+          ## ffmpeg ${{ steps.pin.outputs.version }}, build ${{ steps.pin.outputs.build }} published
 
           Put this line in \`.engine/config.example.sh\`, then commit and push:
 
