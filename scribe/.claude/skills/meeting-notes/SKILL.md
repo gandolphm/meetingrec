@@ -366,6 +366,10 @@ need acting on:
   *across* speakers is then unreliable — a reply may appear before what it answered. Say so in
   the report, and treat the interleaving in `merged.txt` as approximate. Ordering *within* one
   speaker's lines is still sound.
+- `track timing: ... lost Ns of audio while recording, corrected` — the timing needs no
+  action: that track's lines are placed where they were said. The audio itself is gone, in
+  gaps of a hundredth of a second spread across the call, so words on that side may be
+  missing or misheard. `session.json` carries a warning for it when it's over 3%.
 
 **Never run Whisper on a session's tracks yourself.** A per-speaker track is mostly silence,
 because the far end is quiet while you talk, and Whisper handles long silence badly: it
@@ -524,9 +528,10 @@ Add a line only when something affects how much to trust the note:
 - **Speaker bleed** — say duplicated lines were resolved in favour of `[Them]`, and that
   `--mic-only` avoids it when recording on speakers.
 - **`warnings` in `session.json`** — `meetingrec` flags a track that is far shorter than its
-  duration implies, one that is digitally silent, or two tracks that started far apart. Relay
-  it verbatim. Each of these means part of the meeting was never captured, and the first two
-  usually mean a permission problem.
+  duration implies, one that is digitally silent, one that lost part of its audio while
+  recording, or two tracks that started far apart. Relay it verbatim. Each of these means
+  part of the meeting was never captured, and the first two usually mean a permission
+  problem.
 - **`track alignment: UNKNOWN`** — say that ordering between speakers is approximate, so a
   reply may appear before the thing it answered. Ownership tags are still correct; only the
   interleaving is in doubt.

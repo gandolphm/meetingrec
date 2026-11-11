@@ -180,6 +180,43 @@ def write_srt(path, cues):
             f.write(f"{i}\n{srt_time(s)} --> {srt_time(e)}\n{text}\n\n")
 
 
+def track_timelines(session, names):
+    """Each track's map from a place in its file to seconds of capture.
+
+    A track that lost audio while recording is shorter than the time it covers
+    (ffmpeg drops microphone buffers at 48 kHz: about 11% of a call). A line 20
+    minutes into such a file was said 22 or 23 minutes into the call, and the
+    error grows from nothing at the start, so no single shift fixes it.
+    meetingrec measures the map at stop and stores it only for a track that
+    lost audio: `timeline` in session.json, [[audio seconds, seconds captured],
+    ...]. No entry means the file can be read as it is.
+    """
+    try:
+        checks = json.load(open(os.path.join(session, "session.json"))).get("checks") or {}
+    except Exception:
+        return {}
+    found = {}
+    for n in names:
+        c = checks.get(n + ".wav")
+        try:
+            pts = [(float(a), float(t)) for a, t in c["timeline"]]
+        except Exception:
+            continue
+        if len(pts) >= 2 and all(q[0] >= p[0] and q[1] >= p[1] for p, q in zip(pts, pts[1:])):
+            found[n] = (pts, float(c.get("lost_seconds") or pts[-1][1] - pts[-1][0]))
+    return found
+
+
+def to_capture(t, timeline):
+    """Seconds into a track's file -> seconds into its capture."""
+    if not timeline:
+        return t
+    for (a0, t0), (a1, t1) in zip(timeline, timeline[1:]):
+        if t <= a1:
+            return t0 + (t1 - t0) * (t - a0) / (a1 - a0) if a1 > a0 else t1
+    return timeline[-1][1] + (t - timeline[-1][0])
+
+
 def track_offsets(session, names):
     """Seconds each track started after the earliest one.
 
@@ -220,7 +257,7 @@ def track_offsets(session, names):
     return {n: t - base for n, t in first.items()}, "file mtimes"
 
 
-def do_track(session, name, model, prompt, offset=0.0):
+def do_track(session, name, model, prompt, offset=0.0, timeline=None):
     """Return (cues_in_real_time, human_summary)."""
     path = os.path.join(session, f"{name}.wav")
     rate, duration = wav_info(path)
@@ -247,7 +284,8 @@ def do_track(session, name, model, prompt, offset=0.0):
     # Bound against this track's own length before shifting: the offset moves the
     # track onto the shared session timeline, where that bound no longer applies.
     cues = [c for c in cues if c[0] <= duration + 1]
-    cues = [(s + offset, e + offset, t) for s, e, t in cues]
+    cues = [(to_capture(s, timeline) + offset, to_capture(e, timeline) + offset, t)
+            for s, e, t in cues]
     cues.sort(key=lambda c: c[0])
     write_srt(os.path.join(session, f"{name}.srt"), cues)
 
@@ -279,16 +317,20 @@ def main():
     offsets, source = ({t[0]: 0.0 for t in tracks}, "single track")
     if len(tracks) == 2:
         offsets, source = track_offsets(session, [n for n, _ in tracks])
+    timelines = track_timelines(session, [n for n, _ in tracks])
 
     all_cues, notes = [], []
     for name, label in tracks:
         cues, summary = do_track(session, name, args.model, args.prompt,
-                                 offsets.get(name, 0.0))
+                                 offsets.get(name, 0.0), timelines.get(name, (None, 0))[0])
         notes.append(summary)
         all_cues += [(s, label, t) for s, _, t in cues]
 
     for n in notes:
         print(n)
+    for name, (_, lost) in timelines.items():
+        print(f"track timing: {name} lost {lost:.0f}s of audio while recording, "
+              f"corrected")
     if len(tracks) == 2:
         if source == "unavailable":
             print("track alignment: UNKNOWN — merging as if both tracks started "

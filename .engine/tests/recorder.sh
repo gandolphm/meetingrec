@@ -52,11 +52,15 @@ trap cleanup EXIT
 # --- stubs -----------------------------------------------------------------
 
 # ffmpeg: writes a valid 16 kHz mono WAV of a quiet tone at the real rate until
-# SIGINT or SIGTERM, then fixes the header and exits 0, like the real one.
+# SIGINT or SIGTERM, then fixes the header and exits 0, like the real one. It
+# prints the real one's progress lines too. STUB_FFMPEG_KEEP=0.8 keeps only
+# that share of the audio while time= runs on at full speed, which is what the
+# real one does when it drops microphone buffers.
 cat > "$STUBS/ffmpeg" <<'PY'
 #!/usr/bin/env python3
-import math, signal, struct, sys, time
+import math, os, signal, struct, sys, time
 out, rate = sys.argv[-1], 16000
+keep = float(os.environ.get("STUB_FFMPEG_KEEP", "1"))
 if __import__("os").environ.get("STUB_FFMPEG_FAIL"):
     sys.stderr.write("stub ffmpeg: told to fail\n"); sys.exit(1)
 # Like the real one with -nostdin: no -y, an existing output file is an error.
@@ -70,14 +74,24 @@ def header(n):
 f.write(header(0)); f.flush()
 chunk = struct.pack("<1600h", *[int(3000 * math.sin(2 * math.pi * 440 * i / rate))
                                 for i in range(1600)])
-n = 0
+n, began = 0, time.time()
+def progress():
+    t = time.time() - began
+    clock = "%02d:%02d:%05.2f" % (t // 3600, t % 3600 // 60, t % 60)
+    sys.stderr.write("size=%8dKiB time=%s bitrate= 256.0kbits/s speed=   1x elapsed=%s    \r"
+                     % ((44 + n) // 1024, clock, clock[1:]))
+    sys.stderr.flush()
 def stop(*_):
+    progress()
     f.seek(0); f.write(header(n)); f.close(); sys.exit(0)
 # Set explicitly: a background job inherits SIGINT as ignored.
 signal.signal(signal.SIGINT, stop)
 signal.signal(signal.SIGTERM, stop)
+# Paced by the clock, not by counting sleeps: the rate checks measure it.
 while True:
-    f.write(chunk); f.flush(); n += len(chunk); time.sleep(0.1)
+    while n + len(chunk) <= (time.time() - began) * rate * 2 * keep:
+        f.write(chunk); n += len(chunk)
+    f.flush(); progress(); time.sleep(0.1)
 PY
 
 cat > "$STUBS/system_profiler" <<'EOF'
@@ -144,6 +158,98 @@ check "stop on the dead session succeeds" [ "$rc" -eq 0 ]
 check "...in under 3 s" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 3 else 1)"
 check "...records when it ended" has "$(cat "$dir/session.json")" '"ended"'
 check "...and leaves the tool idle" [ "$("$MR" status)" = idle ]
+
+# A recording that has already ended, made by hand: tracks of exactly the given
+# lengths, closed at exactly the given times, with ffmpeg logs that say how long
+# each one was capturing. stop then runs its checks on it. No waiting, and the
+# numbers are exact.
+#   fake_session <dir> <track> <audio s> <captured s> <closed at, epoch s> ...
+fake_session() {
+  python3 - "$@" <<'PY'
+import os, sys, wave
+d, rest = sys.argv[1], sys.argv[2:]
+os.makedirs(d)
+for name, audio, span, closed in zip(rest[0::4], rest[1::4], rest[2::4], rest[3::4]):
+    audio, span, closed = float(audio), float(span), float(closed)
+    wav = os.path.join(d, name + ".wav")
+    with wave.open(wav, "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000)
+        w.writeframes(b"\x10\x20" * int(audio * 16000))
+    with open(os.path.join(d, name + "-ffmpeg.log"), "w") as log:
+        log.write("Input #0, avfoundation, from ':default':\n"
+                  "  Stream #0:0: Audio: pcm_f32le, 48000 Hz, mono, flt, 1536 kb/s\n")
+        t = 0.0
+        while t <= span:
+            # Loses nothing in the first half of the capture, everything it is
+            # going to lose in the second: the merge has to follow that.
+            got = min(t, span / 2) + max(0.0, t - span / 2) * (audio - span / 2) / (span / 2)
+            log.write("size=%8dKiB time=%02d:%02d:%05.2f bitrate= 256.0kbits/s speed=   1x "
+                      "elapsed=0:00:00.00    \r" % (got * 32000 / 1024, t // 3600, t % 3600 // 60, t % 60))
+            t += 0.5
+    os.utime(wav, (closed, closed))
+PY
+  mkdir -p "$(dirname "$STATE_FILE")"
+  printf 'SESSION_DIR=%q\nAUDIOTEE_PID=0\nSYS_FF_PID=0\nMIC_PID=0\nSTARTED_EPOCH=%d\nTRACKS=mic,system\n' \
+    "$1" "$(( $(date +%s) - 100 ))" > "$STATE_FILE"
+}
+field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["checks"][sys.argv[2]].get(sys.argv[3]))' "$@"; }
+
+echo "a track that lost audio is not a track that started late"
+s="$T/sessions/lossy"
+# Both captured for 100 s and the mic closed 1 s after system, so it started 1 s
+# after it. But its file holds only 80 s: 20 s went missing along the way.
+fake_session "$s" mic 80 100 1001 system 100 100 1000
+out="$("$MR" stop 2>&1)"
+check "the mic started 1 s after system, not 21 s" [ "$(field "$s/session.json" mic.wav start_offset_seconds)" = 1.0 ]
+check "...and lost 20 s" [ "$(field "$s/session.json" mic.wav lost_seconds)" = 20.0 ]
+check "stop says how much was lost" has "$out" 'WARNING: mic.wav lost 20% of its audio (20s of 100s)'
+check "...and doesn't call it a late start" bash -c '! grep -q "tracks started" <<< "$1"' _ "$out"
+check "the timeline ends on the totals" \
+  python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))["checks"]["mic.wav"]["timeline"]; sys.exit(0 if t[0]==[0.0,0.0] and t[-1]==[80.0,100.0] else 1)' "$s/session.json"
+check "...and follows the loss: none of it in the first half" \
+  python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))["checks"]["mic.wav"]["timeline"]; sys.exit(0 if any(abs(a-30)<0.1 and abs(c-30)<0.1 for a,c in t) and any(abs(a-56)<0.1 and abs(c-60)<0.1 for a,c in t) else 1)' "$s/session.json"
+check "the track that lost nothing gets no timeline" [ "$(field "$s/session.json" system.wav timeline)" = None ]
+check "the mic's input rate is kept" [ "$(field "$s/session.json" mic.wav input_sample_rate)" = 48000 ]
+check "the lost seconds reach metrics.jsonl" has "$(tail -1 "$XDG_STATE_HOME/meetingrec/metrics.jsonl")" '"lost_seconds": 20.0'
+
+s="$T/sessions/late"
+# The same two files, but the mic was only capturing for 80 s: a real late start.
+fake_session "$s" mic 80 80 1001 system 100 100 1000
+out="$("$MR" stop 2>&1)"
+check "a real late start is still one" [ "$(field "$s/session.json" mic.wav start_offset_seconds)" = 21.0 ]
+check "...and still warned about" has "$out" 'WARNING: tracks started 21.0s apart'
+check "...with nothing lost" bash -c '! grep -q "lost" <<< "$1"' _ "$out"
+
+s="$T/sessions/unfinished"
+# ffmpeg died without rewriting the header: the length field still holds its
+# placeholder, which reads as 37 hours of audio.
+fake_session "$s" mic 100 100 1000 system 100 100 1000
+python3 - "$s/mic.wav" <<'PY'
+import os, struct, sys
+st = os.stat(sys.argv[1])
+with open(sys.argv[1], "r+b") as f:
+    f.seek(40); f.write(struct.pack("<I", 0xFFFFFFFF))
+os.utime(sys.argv[1], (st.st_mtime, st.st_mtime))
+PY
+"$MR" stop >/dev/null 2>&1
+check "an unfinished header doesn't read as 37 hours" [ "$(field "$s/session.json" mic.wav audio_seconds)" = 100.0 ]
+check "...or as a track that started 37 hours late" [ "$(field "$s/session.json" system.wav start_offset_seconds)" = 0.0 ]
+
+echo "a mic that is losing audio is caught while recording"
+: > "$T/notifications.log"
+STUB_FFMPEG_KEEP=0.8 "$MR" start "Lossy live" --mic-only >/dev/null 2>&1
+dir="$(state SESSION_DIR)"
+for _ in $(seq 1 40); do grep -q '^mic ' "$dir/format-check.txt" 2>/dev/null && break; sleep 0.5; done
+check "the startup check says SHORT, not OK" has "$(cat "$dir/format-check.txt" 2>/dev/null)" '^mic SHORT (.* B/s, [78][0-9]% of the expected 32000'
+check "...and notifies" has "$(cat "$T/notifications.log")" 'mic track is losing audio'
+out="$("$MR" stop 2>&1)"
+check "stop reports the loss from the real progress lines" has "$out" 'WARNING: mic.wav lost [12][0-9]% of its audio'
+"$MR" start "Healthy live" --mic-only >/dev/null 2>&1
+dir="$(state SESSION_DIR)"
+for _ in $(seq 1 20); do grep -q '^mic ' "$dir/format-check.txt" 2>/dev/null && break; sleep 0.5; done
+check "a healthy mic still reads OK" has "$(cat "$dir/format-check.txt" 2>/dev/null)" '^mic OK '
+out="$("$MR" stop 2>&1)"
+check "...and stop has nothing to say about it" bash -c '! grep -q "WARNING" <<< "$1"' _ "$out"
 
 echo "two starts in the same minute with the same title"
 "$MR" start "Dup" --mic-only >/dev/null 2>&1; "$MR" stop >/dev/null 2>&1

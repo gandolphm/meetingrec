@@ -220,6 +220,48 @@ class TrackOffsets(unittest.TestCase):
                          ({"mic": 0.0, "system": 0.0}, "unavailable"))
 
 
+class Timelines(unittest.TestCase):
+    """A track that lost audio while recording: where a line sits in the file is
+    earlier than when it was said, by more and more as the call goes on."""
+
+    # Lost nothing for 30 s, then 20% of everything after that.
+    TIMELINE = [[0.0, 0.0], [30.0, 30.0], [70.0, 80.0]]
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp)
+
+    def session(self, checks):
+        with open(os.path.join(self.tmp, "session.json"), "w") as f:
+            json.dump({"checks": checks}, f)
+        return ts.track_timelines(self.tmp, ["mic", "system"])
+
+    def test_no_timeline_is_the_file_as_it_is(self):
+        self.assertEqual(ts.to_capture(12.5, None), 12.5)
+
+    def test_follows_the_loss_where_it_happened(self):
+        self.assertAlmostEqual(ts.to_capture(15.0, self.TIMELINE), 15.0)
+        self.assertAlmostEqual(ts.to_capture(30.0, self.TIMELINE), 30.0)
+        self.assertAlmostEqual(ts.to_capture(50.0, self.TIMELINE), 55.0)
+        self.assertAlmostEqual(ts.to_capture(70.0, self.TIMELINE), 80.0)
+
+    def test_past_the_end_keeps_the_last_correction(self):
+        self.assertAlmostEqual(ts.to_capture(71.0, self.TIMELINE), 81.0)
+
+    def test_read_from_session_json_only_for_the_track_that_has_one(self):
+        found = self.session({"mic.wav": {"lost_seconds": 10.0, "timeline": self.TIMELINE},
+                              "system.wav": {"audio_seconds": 80.0}})
+        self.assertEqual(list(found), ["mic"])
+        self.assertEqual(found["mic"][1], 10.0)
+        self.assertAlmostEqual(ts.to_capture(50.0, found["mic"][0]), 55.0)
+
+    def test_a_timeline_that_runs_backwards_is_ignored(self):
+        self.assertEqual(self.session({"mic.wav": {"timeline": [[0, 0], [30, 40], [20, 50]]}}), {})
+
+    def test_no_session_json_is_no_timelines(self):
+        self.assertEqual(ts.track_timelines(self.tmp, ["mic", "system"]), {})
+
+
 def stub_bin(home):
     d = os.path.join(home, ".local", "share", "meetingrec", "bin")
     os.makedirs(d, exist_ok=True)
@@ -266,9 +308,12 @@ class WholeSession(unittest.TestCase):
         write(os.path.join(self.session, "system.wav.marks"),
             silencedetect_output(("start", 0.0), ("end", 3.0), ("start", 4.0)))
 
-    def run_session(self, system_offset):
+    def run_session(self, system_offset, mic_timeline=None):
+        mic = {"start_offset_seconds": 0.0}
+        if mic_timeline:
+            mic.update(timeline=mic_timeline, lost_seconds=mic_timeline[-1][1] - mic_timeline[-1][0])
         with open(os.path.join(self.session, "session.json"), "w") as f:
-            json.dump({"checks": {"mic.wav": {"start_offset_seconds": 0.0},
+            json.dump({"checks": {"mic.wav": mic,
                                   "system.wav": {"start_offset_seconds": system_offset}}}, f)
         env = dict(os.environ, HOME=self.home)
         p = subprocess.run([sys.executable, os.path.join(self.lib, "transcribe_session.py"),
@@ -283,6 +328,19 @@ class WholeSession(unittest.TestCase):
         self.assertEqual(merged, ["[00:00:04] [Me]   hello from .mic.speech",
                                   "[00:00:06] [Them] hello from .system.speech"])
         self.assertIn("track alignment: system started 4.0s late (from session.json)", out)
+
+    def test_lost_audio_moves_a_line_to_when_it_was_said(self):
+        # The mic's speech is 4.75 s into its file, but the track lost half of
+        # its first 10 s of audio, so it was said at 9.5 s: after system's
+        # 6.75 s, where a plain shift would have left it before.
+        out, merged = self.run_session(system_offset=4.0,
+                                       mic_timeline=[[0.0, 0.0], [5.0, 10.0], [20.0, 25.0]])
+        self.assertEqual(merged, ["[00:00:06] [Them] hello from .system.speech",
+                                  "[00:00:09] [Me]   hello from .mic.speech"])
+        self.assertIn("track timing: mic lost 5s of audio while recording, corrected", out)
+        # The cue ends 5.75 s into the file, past the lossy stretch: 10 + 0.75.
+        self.assertEqual(ts.parse_srt(os.path.join(self.session, "mic.srt")),
+                         [(9.5, 10.75, "hello from .mic.speech")])
 
     def test_without_an_offset_the_order_is_as_recorded(self):
         _, merged = self.run_session(system_offset=0.0)

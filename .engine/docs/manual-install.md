@@ -224,7 +224,8 @@ stopped after 0m18s
   format-check: mic OK (32000 B/s)
 ```
 The `B/s` numbers can be a little off 32000. The `format-check` lines can be in a different
-order.
+order. `mic SHORT` instead of `mic OK` means the microphone track is losing part of its
+audio: the recording is still usable, and `stop` says how much went missing.
 
 If it prints a line starting with **WARNING** saying a track is silent, a permission is
 missing. Fix it in **System Settings → Privacy & Security**:

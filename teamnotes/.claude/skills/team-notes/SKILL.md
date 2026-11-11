@@ -370,6 +370,9 @@ the report.
 - `track alignment: UNKNOWN` — tracks were merged as if they started together, so ordering
   *across* speakers is approximate. Say so in the report.
 
+`track timing: ... lost Ns of audio while recording, corrected` needs no action: that track's
+lines are placed where they were said, though words on that side may be missing.
+
 (Never run Whisper on a session's tracks yourself: `transcribe` strips silence before
 Whisper sees each track, which is what stops Whisper hallucinating repeated sentences into a
 quiet track and drifting its timestamps — both measured problems.)

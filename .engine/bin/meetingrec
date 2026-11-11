@@ -60,6 +60,12 @@ EXPECTED_BYTES_PER_SEC=32000
 # plausible wrong format is 22.05 kHz mono s16le at 44100 B/s (+38%), and the
 # common ones are multiples (2x stereo, 6x the 48 kHz float32 default).
 RATE_TOLERANCE_PCT=25
+# Inside that band, a track can still be losing audio. ffmpeg drops microphone
+# buffers when the mic runs at 48 kHz (see capture_progress in stop), and the
+# file then grows at about 89% of the full rate: the right format, with pieces
+# missing. Healthy tracks have read between 100% and 107% here, never low, and
+# a low reading is measured a second time before anyone is told.
+RATE_SHORT_PCT=95
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/meetingrec"
 STATE_FILE="$STATE_DIR/current"
@@ -100,9 +106,10 @@ slugify() {
 # --------------------------------------------------------------------------
 byte_rate_check() {
   local dir="$1" file="$2" label="$3"
-  local lo hi s1 s2 s3 rate i size
+  local lo hi short s1 s2 s3 s4 rate i size
   lo=$(( EXPECTED_BYTES_PER_SEC * (100 - RATE_TOLERANCE_PCT) / 100 ))
   hi=$(( EXPECTED_BYTES_PER_SEC * (100 + RATE_TOLERANCE_PCT) / 100 ))
+  short=$(( EXPECTED_BYTES_PER_SEC * RATE_SHORT_PCT / 100 ))
 
   # Wait for audio to actually start flowing before measuring anything.
   #
@@ -159,6 +166,21 @@ byte_rate_check() {
       "$label" "$rate" "$EXPECTED_BYTES_PER_SEC" >> "$dir/format-check.txt"
     notify "MeetingRec — wrong audio format" \
       "$label track is $rate B/s, expected $EXPECTED_BYTES_PER_SEC. Still recording; raw data is recoverable."
+  elif [ "$rate" -lt "$short" ]; then
+    # The right format, arriving slowly. Three seconds is a jittery window, so
+    # ten more decide it: a false alarm at the start of a call is expensive.
+    sleep 10
+    s4=$(stat -f%z "$dir/$file" 2>/dev/null || echo 0)
+    rate=$(( (s4 - s3) / 10 ))
+    if [ "$rate" -lt "$short" ]; then
+      printf '%s SHORT (%s B/s, %s%% of the expected %s: audio is being lost)\n' \
+        "$label" "$rate" "$(( rate * 100 / EXPECTED_BYTES_PER_SEC ))" \
+        "$EXPECTED_BYTES_PER_SEC" >> "$dir/format-check.txt"
+      notify "MeetingRec — $label track is losing audio" \
+        "Only $(( rate * 100 / EXPECTED_BYTES_PER_SEC ))% of the $label audio is reaching the recording. Still recording; words on that side may be missing."
+    else
+      printf '%s OK (%s B/s)\n' "$label" "$rate" >> "$dir/format-check.txt"
+    fi
   else
     printf '%s OK (%s B/s)\n' "$label" "$rate" >> "$dir/format-check.txt"
   fi
@@ -544,6 +566,59 @@ def clock_error_ppm(log):
     return sum((x - mx) * (y - my) for x, y in pts) / den * 1e6
 
 
+_SIZE = re.compile(r"size=\s*(\d+)KiB\s+time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
+_INPUT_HZ = re.compile(r"Input #0.*?Stream #0:0.*?Audio: [^,\n]+, (\d+) Hz", re.S)
+
+
+def capture_progress(log, bytes_per_sec):
+    """ffmpeg's progress lines as [(audio seconds written, seconds captured)].
+
+    The two columns answer different questions. size= is what reached the file.
+    time= is the capture clock: the timestamp the device put on the last buffer.
+    On a healthy track they stay equal. When buffers go missing they part, and
+    the gap between them is exactly the audio that was lost up to that point.
+
+    They do go missing. ffmpeg's avfoundation input keeps one audio buffer: a
+    new one replaces the last whether or not it was read, and ffmpeg looks every
+    10 ms or so. A mic at 24 kHz hands over a buffer every 21 ms and loses
+    nothing. At 48 kHz (the MacBook's own mic, AirPods in their 48 kHz mode) it
+    is every 10.7 ms, and about one buffer in nine is overwritten. Nothing is
+    logged, and time= keeps pace with the wall clock throughout. Measured on a
+    32-minute call: 1720 s of audio for 1944 s captured.
+
+    Also returns the mic's input sample rate, which is what decides it.
+    """
+    try:
+        raw = open(log, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return [], None
+    pts = []
+    for m in _SIZE.finditer(raw.replace("\r", "\n")):
+        t = int(m.group(2)) * 3600 + int(m.group(3)) * 60 + float(m.group(4))
+        pts.append((int(m.group(1)) * 1024.0 / bytes_per_sec, t))
+    hz = _INPUT_HZ.search(raw)
+    return pts, (int(hz.group(1)) if hz else None)
+
+
+def timeline(pts, audio_secs, span, step=30.0):
+    """A thinned [[audio seconds, seconds captured], ...] for the merge.
+
+    Where a line sits in the file says when it was said only if nothing was
+    lost before it. This is the map from one to the other: a point every half
+    minute, which follows the loss even when it is uneven (it depends on how
+    busy the Mac is), and ends on the exact totals.
+    """
+    out = [[0.0, 0.0]]
+    for a, t in pts:
+        a, t = min(a, audio_secs), min(t, span)
+        if t - out[-1][1] >= step and a >= out[-1][0]:
+            out.append([round(a, 2), round(t, 2)])
+    if span - out[-1][1] < step / 2 and len(out) > 1:
+        out.pop()
+    out.append([round(audio_secs, 3), round(span, 3)])
+    return out
+
+
 def peak_dbfs(path):
     """Loudest sample in the file, in dBFS. None if unreadable.
 
@@ -575,7 +650,6 @@ def peak_dbfs(path):
     if peak <= 0:
         return -math.inf
     return 20 * math.log10(peak / 32768.0)
-expect = int(os.environ["MR_EXPECT"])
 p = os.path.join(d, "session.json")
 try:
     doc = json.load(open(p))
@@ -599,14 +673,25 @@ if os.path.exists(cf):
 # replied to. So it is measured here, while the evidence still exists, rather
 # than guessed at later.
 #
-# Each track's first sample is (when ffmpeg finalized the file) minus (how much
-# audio it holds). The finalize mtime is exact: SIGINT makes ffmpeg seek back
-# and rewrite the RIFF header, so mtime is the moment capture ended. Frame count
-# comes from the header rather than from file size, because ffmpeg writes 78
-# bytes of header and chunks, not the canonical 44.
+# Each track's first sample is (when ffmpeg finalized the file) minus (how long
+# it had been capturing). The finalize mtime is exact: SIGINT makes ffmpeg seek
+# back and rewrite the RIFF header, so mtime is the moment capture ended. Frame
+# count comes from the header rather than from file size, because ffmpeg writes
+# 78 bytes of header and chunks, not the canonical 44. It is capped by the file
+# size all the same: an ffmpeg that died before rewriting the header leaves a
+# placeholder that reads as 37 hours of audio.
+#
+# How long it had been capturing is NOT how much audio the file holds. A track
+# that lost audio along the way is shorter than its capture, and taking the
+# audio length made every lost second look like a second of late start: a mic
+# track that lost 11% of a 32-minute call was reported as starting 225 s late,
+# and the merge then moved all of its lines by 225 s. So the capture length
+# comes from ffmpeg's capture clock (see capture_progress), and what is missing
+# from the file is recorded as lost audio, with a timeline the merge can follow.
 #
 # Note this measures the offset between the tracks, not either one's offset from
 # when you clicked record — that is all the merge needs.
+expect = int(os.environ["MR_EXPECT"])
 first_sample = {}
 for name in ("mic.wav", "system.wav"):
     fp = os.path.join(d, name)
@@ -614,11 +699,17 @@ for name in ("mic.wav", "system.wav"):
         continue
     try:
         with wave.open(fp, "rb") as w:
-            audio_secs = w.getnframes() / float(w.getframerate())
-        first_sample[name] = (os.path.getmtime(fp) - audio_secs, audio_secs)
+            frame = w.getsampwidth() * w.getnchannels()
+            frames = min(w.getnframes(), max(0, os.path.getsize(fp) - 44) // frame)
+            audio_secs = frames / float(w.getframerate())
     except Exception:
-        pass  # unreadable WAV is the silence guard's problem, not this one
-base = min((t for t, _ in first_sample.values()), default=0.0)
+        continue  # unreadable WAV is the silence guard's problem, not this one
+    pts, input_hz = capture_progress(os.path.join(d, name[:-4] + "-ffmpeg.log"), expect)
+    # Never shorter than the audio: an ffmpeg that was killed leaves a last
+    # progress line up to half a second old.
+    span = max(audio_secs, pts[-1][1] if pts else 0.0)
+    first_sample[name] = (os.path.getmtime(fp) - span, audio_secs, span, pts, input_hz)
+base = min((v[0] for v in first_sample.values()), default=0.0)
 
 warnings = []
 for name in ("mic.wav", "system.wav"):
@@ -629,9 +720,24 @@ for name in ("mic.wav", "system.wav"):
     checks[name] = {"bytes": size,
                     "bytes_per_sec": round(size / dur) if dur else None}
     if name in first_sample:
-        t0, audio_secs = first_sample[name]
+        t0, audio_secs, span, pts, input_hz = first_sample[name]
         checks[name]["audio_seconds"] = round(audio_secs, 3)
         checks[name]["start_offset_seconds"] = round(t0 - base, 3)
+        if input_hz and name == "mic.wav":   # the system track's is our own fifo
+            checks[name]["input_sample_rate"] = input_hz
+        # Under a second is not worth correcting for: the progress lines are
+        # only that precise.
+        lost = span - audio_secs
+        if lost >= 1.0:
+            checks[name]["lost_seconds"] = round(lost, 3)
+            checks[name]["timeline"] = timeline(pts, audio_secs, span)
+        if lost >= 2.0 and lost > 0.03 * span:
+            side = "your side" if name == "mic.wav" else "the other side"
+            warnings.append(
+                f"{name} lost {100 * lost / span:.0f}% of its audio ({lost:.0f}s of "
+                f"{span:.0f}s), in small gaps spread across the call. Its lines "
+                f"are still placed at the right time, but words on {side} may be "
+                f"missing or misheard.")
     ppm = clock_error_ppm(os.path.join(d, name[:-4] + "-ffmpeg.log"))
     if ppm is not None:
         checks[name]["clock_error_ppm"] = round(ppm, 1)
@@ -656,7 +762,8 @@ for name in ("mic.wav", "system.wav"):
 doc["checks"] = checks
 
 # A large skew is not itself an error — the merge corrects for it — but it means
-# seconds of one side went uncaptured, so it is worth seeing.
+# seconds of one side went uncaptured, so it is worth seeing. Audio lost along
+# the way is not skew, and is reported above.
 skew = max((c.get("start_offset_seconds", 0) for c in checks.values()
             if isinstance(c, dict)), default=0)
 if skew > 8:
@@ -688,7 +795,8 @@ try:
             if isinstance(c, dict):
                 row[name] = {k: c.get(k) for k in
                              ("clock_error_ppm", "start_offset_seconds",
-                              "peak_dbfs", "audio_seconds")}
+                              "peak_dbfs", "audio_seconds", "lost_seconds",
+                              "input_sample_rate")}
         if warnings:
             row["warnings"] = warnings
         with open(os.path.join(state, "metrics.jsonl"), "a") as f:

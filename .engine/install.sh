@@ -800,6 +800,16 @@ EOF
     note "took a while to start, and transcription lines the two up. If it keeps"
     note "happening on real calls, connect headphones before you start recording."
   fi
+  # A track that lost some of its audio along the way did record, so that isn't
+  # a permission problem either.
+  local lost
+  lost="$(printf '%s\n' "$warnings" | grep -E '^(mic|system)\.wav lost ')"
+  warnings="$(printf '%s\n' "$warnings" | grep -vE '^(mic|system)\.wav lost ')"
+  if [ -n "$lost" ]; then
+    printf '%s\n' "$lost" | while IFS= read -r line; do note "${line%%,*}."; done
+    note "That's not a permission problem: both tracks recorded. The transcript"
+    note "keeps its timing, but some words on that side may be missing."
+  fi
   if [ -n "$warnings" ]; then
     printf '%s\n' "$warnings" | sed "s/^/  ${R}✗${N} /"
     cat <<EOF
