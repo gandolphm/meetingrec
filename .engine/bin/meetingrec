@@ -1432,8 +1432,10 @@ cmd_uninstall() {
     # Its permissions, so System Settings doesn't list an app that's gone.
     tccutil reset All org.hammerspoon.Hammerspoon >/dev/null 2>&1
     # Its preferences: the hidden icon set at install, and the menu's
-    # hs.settings, which live in the same place.
+    # hs.settings, which live in the same place. defaults delete empties the
+    # file but leaves it, so remove the empty file too.
     defaults delete org.hammerspoon.Hammerspoon >/dev/null 2>&1
+    rm -f "$HOME/Library/Preferences/org.hammerspoon.Hammerspoon.plist"
     # Hammerspoon makes an empty Spoons folder on its own; nothing else is left.
     rmdir "$hs/Spoons" "$hs" 2>/dev/null
     echo "Removed Hammerspoon."
