@@ -117,11 +117,13 @@ Privacy & Security** and:
 - **Screen & System Audio Recording** → in the *System Audio Recording Only* list, add and
   turn on Hammerspoon.
 
-Quit Hammerspoon (click its icon in the menu bar → *Quit Hammerspoon*, or run
-`killall Hammerspoon` in Terminal if you've hidden its icon), then run the install command
+Quit Hammerspoon (run `killall Hammerspoon` in Terminal, or, if you had Hammerspoon before,
+click its hammer icon in the menu bar → *Quit Hammerspoon*), then run the install command
 again to repeat the test.
 
-*Optional:* [hide Hammerspoon's own menu-bar icon](.engine/docs/install-details.md#hide-hammerspoons-own-icon).
+If the installer added Hammerspoon, its own hammer icon is hidden: meetingrec only needs the
+**○**. To open Hammerspoon itself, press **Cmd+Space**, type *Hammerspoon* and press Return.
+See [Hammerspoon's own icon](.engine/docs/install-details.md#hammerspoons-own-icon).
 
 **Then sign in to Claude Code.** Open a **new** Terminal window, so it picks up the new
 PATH, and run:
@@ -501,7 +503,7 @@ Issues are public, so never paste a transcript, note text, or anyone's name into
 | `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |
-| ○ button missing or frozen | ○ → *Reload config*, or the Hammerspoon icon → *Reload Config*. If that fails, run `killall Hammerspoon` and open Hammerspoon from Applications again. Check `~/.hammerspoon/meetingrec.log`. |
+| ○ button missing or frozen | ○ → *Reload config*. If the ○ is gone or that fails, run `killall Hammerspoon`, then open Hammerspoon again: press **Cmd+Space**, type *Hammerspoon* and press Return. Check `~/.hammerspoon/meetingrec.log`. |
 | `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Run `claude` in the repo folder and ask it to help keep your edit, then update again. |
 | Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault ([Set up Obsidian](#set-up-obsidian)). |
 | `claude: command not found` | Open a new Terminal window. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and add that line to `~/.zprofile`. |

@@ -58,10 +58,15 @@ less install.sh      # press q to quit
 bash install.sh
 ```
 
-## Hide Hammerspoon's own icon
+## Hammerspoon's own icon
 
 Hammerspoon puts a hammer icon in the menu bar next to meetingrec's **○**, and meetingrec
-doesn't need it. Click the hammer → *Preferences…* → untick **Show menu icon**. The **○**
-stays, and ○ → *Reload config* still works. To get the hammer back, open Hammerspoon from
-Applications: its window opens, and *Hammerspoon → Preferences…* is in the menu bar at the
-top of the screen.
+doesn't need it. When the installer adds Hammerspoon, it hides the hammer before Hammerspoon
+first opens. If you had Hammerspoon before, or have a Hammerspoon config of your own, the
+installer leaves it alone, and updates never change it.
+
+To get the hammer back, open Hammerspoon again: press **Cmd+Space**, type *Hammerspoon* and
+press Return. Its window opens, and *Hammerspoon → Preferences…* is in the menu bar at the
+top of the screen: tick **Show menu icon**. To hide it yourself, click the hammer →
+*Preferences…* → untick **Show menu icon**. Either way the **○** stays, and ○ → *Reload
+config* still works.

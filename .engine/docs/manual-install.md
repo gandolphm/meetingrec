@@ -251,6 +251,13 @@ the terminal commands work too, but it's much easier mid-meeting.
    [Hammerspoon's releases](https://github.com/Hammerspoon/hammerspoon/releases), open it,
    and drag **Hammerspoon** into Applications. (Or with Homebrew:
    `brew install --cask hammerspoon`.)
+   If you just installed it for meetingrec, hide its own hammer icon before opening it, as
+   the quick install does (meetingrec only needs the **○**):
+   ```bash
+   defaults write org.hammerspoon.Hammerspoon MJShowMenuIconKey -bool false
+   ```
+   Skip this if you already use Hammerspoon. To open it later, press **Cmd+Space**, type
+   *Hammerspoon* and press Return.
 2. **Install the config.** Run this **from the repo folder**. It copies the config and
    fills in where you cloned the repo:
    ```bash
@@ -275,7 +282,7 @@ the terminal commands work too, but it's much easier mid-meeting.
 3. **Open Hammerspoon** from Applications. It asks for **Accessibility** access. You can
    **decline**: this config doesn't use it. A **○** appears in the menu bar. The config
    also turns on *Launch Hammerspoon at login*, so it comes back after a restart.
-   If Hammerspoon was already running, click its menu-bar icon → *Reload Config*.
+   If Hammerspoon was already running, click its hammer icon → *Reload Config*.
 4. **Grant Hammerspoon its own permissions.** macOS gives permissions to the app that
    launches the recording, so Terminal's permissions don't carry over. First turn on
    system audio by hand, because macOS never shows a prompt for it with Hammerspoon: in

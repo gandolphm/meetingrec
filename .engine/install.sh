@@ -251,6 +251,17 @@ install_tools() {
     "$(pin WHISPER_CLI_SHA256)" whisper-cpp
 }
 
+# Hide Hammerspoon's own hammer icon; meetingrec's ○ is the only one it needs.
+# Only right after installing Hammerspoon, before its first start: someone who
+# had Hammerspoon already, or still has a config of their own, keeps the
+# hammer. Updates find Hammerspoon installed and never get here, so a hammer
+# turned back on stays on. Uninstall deletes the setting with the app.
+hide_hammerspoon_icon() {
+  local init="$HOME/.hammerspoon/init.lua"
+  [ -f "$init" ] && ! grep -q '^-- MeetingRec menu bar' "$init" && return
+  defaults write org.hammerspoon.Hammerspoon MJShowMenuIconKey -bool false
+}
+
 install_hammerspoon_app() {
   [ -n "${NO_HAMMERSPOON:-}" ] && return
   step "Hammerspoon (menu-bar button)"
@@ -265,6 +276,7 @@ install_hammerspoon_app() {
     need_brew
     "$BREW" install --quiet --cask hammerspoon || die "brew install --cask hammerspoon failed."
     record hammerspoon-app brew
+    hide_hammerspoon_icon
     ok "installed with Homebrew"
     return
   fi
@@ -281,6 +293,7 @@ install_hammerspoon_app() {
   ditto -x -k "$tmp/Hammerspoon.zip" "$dest" || { rm -rf "$tmp"; die "Couldn't unpack Hammerspoon into $dest."; }
   rm -rf "$tmp"
   record hammerspoon-app "$dest/Hammerspoon.app"
+  hide_hammerspoon_icon
   ok "installed in $dest"
 }
 

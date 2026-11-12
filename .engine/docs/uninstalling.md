@@ -29,8 +29,9 @@ added it).
   `~/.local/share/meetingrec` (model, ffmpeg, whisper-cli, audiotee, update backups), your
   settings in `~/.config/meetingrec`, the recording measurements in
   `~/.local/state/meetingrec`, the three commands, and the menu-bar config.
-- **Hammerspoon**, only if the installer added it and the menu bar was all it ran. If you
-  had Hammerspoon before, it stays, along with your own config.
+- **Hammerspoon**, only if the installer added it and the menu bar was all it ran, along
+  with its preferences (such as the hidden hammer icon). If you had Hammerspoon before, it
+  stays, along with your own config and preferences.
 - **Claude Code**, only if the installer added it and you say yes. Its settings, sign-in
   and conversation history in `~/.claude` and `~/.claude.json` stay; delete them yourself
   if you don't need them. If you had Claude Code or the Claude app before, or installed it
