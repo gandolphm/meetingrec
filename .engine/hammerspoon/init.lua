@@ -1,7 +1,8 @@
 -- MeetingRec menu bar.
 --
 -- Deliberately uses only hs.menubar, hs.task, hs.timer, hs.dialog, hs.notify,
--- hs.settings, hs.focus and hs.autoLaunch. None of those need the Accessibility permission —
+-- hs.settings, hs.focus, hs.autoLaunch and hs.caffeinate.watcher. None of those need the
+-- Accessibility permission —
 -- that one covers hs.window, hs.eventtap and hs.uielement (window management,
 -- input synthesis, reading other apps' UI), which this build never touches. Accessibility is the
 -- broadest grant macOS offers, so it stays declined. If you ever add an API
@@ -89,6 +90,9 @@ local tickTimer = nil
 -- True while the menu is closing a recording that died on its own, so a Start
 -- in that second can't have its new recording stopped by mistake.
 local finishing = false
+-- True while a Stop from the menu is running, so going to sleep in that moment
+-- doesn't start a second one beside it.
+local stopping = false
 -- Defined with the other CLI calls below; the tick needs it.
 local checkAlive
 
@@ -151,9 +155,10 @@ local function run(args, onDone)
   if not task then
     log("ERROR: hs.task.new failed for %s", MEETINGREC)
     notify("MeetingRec", "Could not launch " .. MEETINGREC)
-    return
+    return false
   end
-  task:start()
+  -- Whether it started: false means onDone will never be called.
+  return task:start() and true or false
 end
 
 -- Every tick while recording: if the recorder quit on its own (a crash, a Force
@@ -219,7 +224,8 @@ end
 local resync
 
 local function doStop()
-  run({ "stop" }, function(exitCode, stdOut, stdErr)
+  stopping = run({ "stop" }, function(exitCode, stdOut, stdErr)
+    stopping = false
     isRecording = false
     startTime = nil
     stopTicking()
@@ -259,6 +265,71 @@ resync = function()
     end
   end)
 end
+
+-- ---------------------------------------------------------------------------
+-- Sleep
+--
+-- A Mac that sleeps freezes the recorder without stopping it. The recorder then
+-- runs again every time the Mac wakes itself for background work, and from when
+-- the lid opens until someone notices the ●. On 2026-11-15 a lid closed after a
+-- half-hour call left a recording 3 h 47 min long: 57 of those wakes, about 35
+-- minutes of a closed laptop.
+--
+-- So the recording is stopped when the Mac is about to sleep. Idle sleep doesn't
+-- happen while audio is being captured, which leaves a closed lid, Apple menu →
+-- Sleep and an empty battery: none of them a call still going on.
+--
+-- The stop runs inside the handler (hs.execute), not as a task. macOS holds
+-- sleep off, for up to 30 seconds, only until the handler returns, and a stop
+-- cut in two by the sleep would close the tracks minutes apart, when each
+-- track's timing is read from the moment its file was closed. The CLI is asked
+-- whether it's recording, so one started from Terminal is stopped too.
+-- ---------------------------------------------------------------------------
+
+-- Shown on wake: a notification sent on the way to sleep can be missed.
+local sleepNote = nil
+
+local function stopForSleep()
+  if stopping or finishing then return end
+  local status = hs.execute('"' .. MEETINGREC .. '" status')
+  if not (status and status:match("^recording ")) then return end
+  log("sleep: stopping the recording")
+  local out, ok = hs.execute('"' .. MEETINGREC .. '" stop 2>&1')
+  out = out or ""
+  if not ok then
+    log("sleep: stop failed: %s", out)
+    sleepNote = { failed = true, title = "MeetingRec — stop failed",
+                  text = out:match("meetingrec: ([^\n]+)") or out }
+    return
+  end
+  log("sleep: stopped")
+  isRecording = false
+  startTime = nil
+  stopTicking()
+  local after = out:match("stopped after ([^\n]+)")
+  sleepNote = { title = "MeetingRec — stopped when your Mac went to sleep",
+                text = out:match("WARNING: ([^\n]+)")
+                  or ("The recording was stopped" .. (after and (" after " .. after) or "") .. ".") }
+end
+
+local function afterWake()
+  if not sleepNote then return end
+  local note = sleepNote
+  sleepNote = nil
+  notify(note.title, note.text)
+  -- A failed stop may have left ffmpeg running: show what the CLI says.
+  if note.failed then resync() end
+end
+
+-- Global, like the menu, so it can't be garbage-collected.
+_G.meetingrecSleepWatcher = hs.caffeinate.watcher.new(guard("sleep watcher", function(event)
+  if event == hs.caffeinate.watcher.systemWillSleep then
+    stopForSleep()
+  elseif event == hs.caffeinate.watcher.systemDidWake then
+    afterWake()
+  end
+end))
+_G.meetingrecSleepWatcher:start()
 
 -- ---------------------------------------------------------------------------
 -- Updates

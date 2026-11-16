@@ -283,6 +283,10 @@ unless you turn that off. These connections only download; nothing you record is
 **From the menu bar:** click **○** → *Start recording…*, and type a title if you like. The
 button shows **● 12m** while recording. Click it → *Stop* when the call ends.
 
+If your Mac goes to sleep while it's recording (you close the lid without clicking *Stop*,
+say), the recording stops by itself, and a notification says so when you're back. That's the
+menu bar's doing, so it needs Hammerspoon running.
+
 **From the terminal**, in any folder (if you did the manual install without step 7, use `~/meetingrec/.engine/bin/meetingrec`):
 ```bash
 meetingrec start "Acme check-in"   # title is optional
