@@ -17,10 +17,11 @@ scribe/                         (Obsidian vault root — open this folder as a v
 │   ├── shared.md               # names + rules shared across a fork of this repo (tracked; empty here)
 │   ├── personal.example.md     # template for personal.md (tracked; don't edit)
 │   └── personal.md             # yours: the "Me" row, your names and rules (git-ignored, made on first run)
-└── .claude/
-    └── skills/meeting-notes/
-        ├── SKILL.md                     # full workflow spec
-        └── assets/                      # starters: Tasks.md and index.base, copied to the vault root if missing
+├── .agents/
+│   └── skills/meeting-notes/
+│       ├── SKILL.md                     # full workflow spec
+│       └── assets/                      # starters: Tasks.md and index.base, copied to the vault root if missing
+└── .claude/skills/meeting-notes          # a link to the folder above: Claude Code looks for skills here
 ```
 
 The routine steps run through the `meetingrec` command (`../.engine/bin/meetingrec`), so they

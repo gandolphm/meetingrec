@@ -241,13 +241,13 @@ meetingrec/
 │   ├── transcripts/            #   transcripts you chose to keep, personal and team
 │   ├── Tasks.md                #   to-do dashboard (yours to edit; made at install)
 │   ├── settings/               #   your personal.md (names, rules) lives here
-│   └── .claude/skills/meeting-notes/  # the instructions Claude follows
+│   └── .agents/skills/meeting-notes/  # the instructions the agent follows (.claude/skills links here)
 └── teamnotes/                  # notes folder #2 (an Obsidian vault) — team notes
     ├── input/  meeting-notes/  share/
     ├── Action Items.md         #   everyone's open items, by owner (yours to edit)
     ├── settings/               #   your personal.md for team notes, and
     │   └── profiles/           #   one file per team: roster, sections, rules
-    └── .claude/skills/team-notes/
+    └── .agents/skills/team-notes/
 ```
 
 Recordings, transcripts and notes are git-ignored, so nothing you record gets committed. So

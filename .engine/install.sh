@@ -582,9 +582,9 @@ install_personal_files() {
     while IFS='|' read -r src dst; do
       [ -e "$REPO/$dst" ] || cp "$REPO/$src" "$REPO/$dst" || die "Couldn't create $REPO/$dst."
     done <<'EOF'
-scribe/.claude/skills/meeting-notes/assets/Tasks.md|scribe/Tasks.md
-teamnotes/.claude/skills/team-notes/assets/Action Items.md|teamnotes/Action Items.md
-teamnotes/.claude/skills/team-notes/assets/index.base|teamnotes/index.base
+scribe/.agents/skills/meeting-notes/assets/Tasks.md|scribe/Tasks.md
+teamnotes/.agents/skills/team-notes/assets/Action Items.md|teamnotes/Action Items.md
+teamnotes/.agents/skills/team-notes/assets/index.base|teamnotes/index.base
 EOF
     record starter-files
   fi

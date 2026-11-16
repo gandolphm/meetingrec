@@ -83,9 +83,9 @@ Then copy in the to-do dashboard, the team's Action Items page and the team's no
 They're yours to edit, so git doesn't ship them in place: the starters live with the skills.
 `cp -n` never replaces a copy you already have.
 ```bash
-cp -n scribe/.claude/skills/meeting-notes/assets/Tasks.md scribe/
-cp -n "teamnotes/.claude/skills/team-notes/assets/Action Items.md" teamnotes/
-cp -n teamnotes/.claude/skills/team-notes/assets/index.base teamnotes/
+cp -n scribe/.agents/skills/meeting-notes/assets/Tasks.md scribe/
+cp -n "teamnotes/.agents/skills/team-notes/assets/Action Items.md" teamnotes/
+cp -n teamnotes/.agents/skills/team-notes/assets/index.base teamnotes/
 ```
 Expected: no output.
 

@@ -37,8 +37,17 @@ Every path comes from Step 0, so the repo can be cloned anywhere.
 
 **Key architectural fact:** transcription is an *external dependency*, not something this
 model does natively. The `meetingrec` command runs a local Whisper binary. It must run in an
-environment with shell access and Whisper installed — i.e. **Claude Code on the user's
-machine**, not the web sandbox.
+environment with shell access and Whisper installed — i.e. **a coding agent running on the
+user's Mac, such as Claude Code**, not a web sandbox.
+
+**Any coding agent can run this skill. One thing depends on the agent: the question
+tool.** Where a step says to ask *with the question tool*, use your agent's tool for asking
+the user multiple-choice questions. **In Claude Code that is `AskUserQuestion`: always use
+it.** If your agent has no such tool, or it isn't available in this session, ask in chat
+instead, as a short numbered list: the same questions and options, everything the step puts
+in one call in one message, then wait for the answer. Where an option's text says to type
+something "in Other", that means the tool's free-text answer; reword it if yours is called
+something else.
 
 ---
 
@@ -46,11 +55,16 @@ machine**, not the web sandbox.
 
 ### Step 0 — Prepare
 
-Run this before anything else, and do not `cd`:
+Run this before anything else, exactly as written, and do not `cd`:
 
 ```bash
-"$(cd "${CLAUDE_SKILL_DIR}/../../../.." && pwd)/.engine/bin/meetingrec" prepare scribe
+for m in "${CLAUDE_SKILL_DIR}/../../../../.engine/bin/meetingrec" ../.engine/bin/meetingrec .engine/bin/meetingrec "$HOME/.local/bin/meetingrec"; do [ -x "$m" ] && break; done; "$m" prepare scribe
 ```
+
+The loop finds the `meetingrec` command: beside this skill (the first path, which only
+Claude Code fills in; in any other agent it points nowhere, and the loop moves on), then
+above the folder the session started in, then where the installer linked it. If none of
+them exists, stop and say that meetingrec isn't installed on this Mac.
 
 `meetingrec` does the routine steps of this skill, so they go the same way every run. This
 first command prints the folders as `NAME=value` lines:
@@ -91,7 +105,7 @@ It also creates the notes folder and, on a first run, the user's `personal.md`.
 ### Step 0.05 — Ask where the notes go (first run, or when the user asks)
 
 Do this when Step 0 printed `VAULT_SAVED=no` or `MISSING VAULT`, or whenever the user
-asks to keep their notes somewhere else. Ask with `AskUserQuestion`, once:
+asks to keep their notes somewhere else. Ask with the question tool, once:
 
 - Question: "Where should your meeting notes go?"
 - Option 1, **"In meetingrec's scribe folder (Recommended)"**: "The scribe folder is
@@ -119,7 +133,7 @@ can't see them:
 "$MEETINGREC" vault-root "<their folder>"   # prints the folder to use instead, or nothing
 ```
 
-If it prints a folder, ask with `AskUserQuestion` whether to use that one instead
+If it prints a folder, ask with the question tool whether to use that one instead
 (Recommended) or keep theirs, and save whichever they pick.
 
 If `config set` says the folder doesn't exist, check the path with the user (a typo is the
@@ -127,9 +141,9 @@ usual cause) and offer to create it; only `mkdir -p` it after a yes. If it says 
 already the team-notes vault, explain that personal and team notes need separate folders and
 ask again. Other errors: relay them and ask again.
 
-For a folder of their own, mention that Claude Code asks permission the first time it
-writes outside the meetingrec folder, so the prompt isn't a surprise. Whether the folder is
-set up as a vault is checked in Step 0.15, on every run.
+For a folder of their own, mention that the agent may ask permission the first time it
+writes outside the meetingrec folder (Claude Code does), so the prompt isn't a surprise.
+Whether the folder is set up as a vault is checked in Step 0.15, on every run.
 
 When the folder **changed** from one that already holds notes, the old notes stay where they
 are. Count them (`find "<old vault>/meeting-notes" -name '*.md' | wc -l`) and, if there are
@@ -268,10 +282,12 @@ Do not treat a silent track as a reason to abandon the note: if the *other* trac
 what was lost and carry on with the single track, tagging nothing.
 
 Then ask for the handful of things that improve both the transcript and the frontmatter.
-**Ask with `AskUserQuestion`, not as a written list.** It takes up to four questions per
-call, each with two to four options, and always adds a free-text answer, so these seven fit
-in two calls: title, date, type and context first, then attendees, company and agenda. Fill
-the options with real guesses, so most answers are one click and anything else can be typed.
+**Ask with the question tool, not as a written list.** Claude Code's `AskUserQuestion`
+takes up to four questions per call, each with two to four options, and always adds a
+free-text answer, so these seven fit in two calls: title, date, type and context first, then
+attendees, company and agenda. With another agent's tool, keep that order and use as many
+calls as its limits need. Fill the options with real guesses, so most answers are one click
+and anything else can be typed.
 
 **Every question needs at least two options.** A question with one option makes the tool
 reject the whole call, and the user sees none of it. When a field below has only one real
@@ -477,7 +493,7 @@ in it is worth acting on, confirm it reads correctly against the transcript *bef
 step. When in doubt, leave the input in place and tell the user; a stale directory in
 `$INBOX` costs nothing, and a deleted recording cannot be recovered.
 
-**Ask what happens to the transcript**, every run, with `AskUserQuestion`:
+**Ask what happens to the transcript**, every run, with the question tool:
 
 - Question: "The note is saved. What should happen to the transcript?"
 - Option 1, **"Delete it"**: "The recording and its transcript are removed. The note is the
@@ -761,5 +777,6 @@ Notes on the template:
 - **Non-English meeting:** Whisper can transcribe many languages; produce the notes in the
   language the user is writing in (default English) and note the source language.
 - **Wrong environment:** if there's no shell or no Whisper (e.g. the web sandbox), don't
-  fake a transcript — explain that this skill needs Claude Code with Whisper installed, and
-  offer to proceed if the user pastes a transcript instead.
+  fake a transcript — explain that this skill needs a coding agent on the Mac where
+  meetingrec is installed (Claude Code, for one), and offer to proceed if the user pastes a
+  transcript instead.

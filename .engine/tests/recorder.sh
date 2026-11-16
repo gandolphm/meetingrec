@@ -34,6 +34,9 @@ cp -R "$SRC/.engine" "$REPO/.engine"
 for kind in scribe teamnotes; do
   mkdir -p "$REPO/$kind/settings/profiles"
   cp "$SRC/$kind/settings/"*.example.md "$SRC/$kind/settings/shared.md" "$REPO/$kind/settings/"
+  # The skills live in .agents/skills; .claude/skills holds a link to each, which
+  # cp -R copies as a link.
+  cp -R "$SRC/$kind/.agents" "$REPO/$kind/.agents"
   cp -R "$SRC/$kind/.claude" "$REPO/$kind/.claude"
 done
 cp "$SRC/teamnotes/settings/profiles/"*.example.md "$SRC/teamnotes/settings/profiles/other.md" \
@@ -326,21 +329,41 @@ vault="$T/My Vault"
 mkdir -p "$vault"
 "$MR" config set NOTES_VAULT "$vault" >/dev/null
 out="$("$MR" prepare scribe 2>&1)"
-check "prepare prints STARTERS" has "$out" '^STARTERS=.*/scribe/.claude/skills/meeting-notes/assets$'
-check "...where the starter Tasks.md is" exist "$REPO/scribe/.claude/skills/meeting-notes/assets/Tasks.md"
+check "prepare prints STARTERS" has "$out" '^STARTERS=.*/scribe/.agents/skills/meeting-notes/assets$'
+check "...where the starter Tasks.md is" exist "$REPO/scribe/.agents/skills/meeting-notes/assets/Tasks.md"
 check "a vault without Tasks.md says NO DASHBOARD" has "$out" '^NO DASHBOARD$'
 check "...and gets the starter notes table" \
-  cmp -s "$vault/index.base" "$REPO/scribe/.claude/skills/meeting-notes/assets/index.base"
+  cmp -s "$vault/index.base" "$REPO/scribe/.agents/skills/meeting-notes/assets/index.base"
 team="$T/Team Vault"
 mkdir -p "$team"
 "$MR" config set TEAM_VAULT "$team" >/dev/null
 out="$("$MR" prepare teamnotes 2>&1)"
 check "team prepare prints its own STARTERS" \
-  has "$out" '^STARTERS=.*/teamnotes/.claude/skills/team-notes/assets$'
+  has "$out" '^STARTERS=.*/teamnotes/.agents/skills/team-notes/assets$'
 check "...where the starter Action Items.md is" \
-  exist "$REPO/teamnotes/.claude/skills/team-notes/assets/Action Items.md"
+  exist "$REPO/teamnotes/.agents/skills/team-notes/assets/Action Items.md"
 check "...and the team vault gets the team's notes table" \
-  cmp -s "$team/index.base" "$REPO/teamnotes/.claude/skills/team-notes/assets/index.base"
+  cmp -s "$team/index.base" "$REPO/teamnotes/.agents/skills/team-notes/assets/index.base"
+# The default vault holds the skill, and with it the starter Base: that one
+# mustn't count as the vault's own, or a default vault never gets a notes table.
+: > "$T/config-own.sh"
+MEETINGREC_CONFIG="$T/config-own.sh" "$MR" config set NOTES_VAULT "" >/dev/null
+out="$(MEETINGREC_CONFIG="$T/config-own.sh" "$MR" prepare scribe 2>&1)"
+check "the default vault gets a notes table too" has "$out" '^MADE BASE .*/scribe/index.base$'
+rm -f "$REPO/scribe/index.base"
+
+echo "the skills, for every agent"
+# One copy in .agents/skills, which Codex, OpenCode and others read; Claude Code
+# reads .claude/skills, which links to it.
+for pair in scribe/meeting-notes teamnotes/team-notes; do
+  kind="${pair%%/*}" skill="${pair#*/}"
+  check "$skill is a real folder in .agents/skills" \
+    [ -f "$SRC/$kind/.agents/skills/$skill/SKILL.md" ]
+  check "...and .claude/skills links to it" \
+    [ "$(readlink "$SRC/$kind/.claude/skills/$skill")" = "../../.agents/skills/$skill" ]
+  check "...so both paths give the same file" \
+    cmp -s "$SRC/$kind/.claude/skills/$skill/SKILL.md" "$SRC/$kind/.agents/skills/$skill/SKILL.md"
+done
 
 # The rest run against a config of their own, starting empty.
 CFG="$T/config-cfg.sh"

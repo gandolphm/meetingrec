@@ -8,7 +8,8 @@ in `../scribe/` is a transcript you chose to keep, in `../scribe/transcripts/`.
 
 ```
 teamnotes/                      (Obsidian vault root, working dir for the skill)
-├── CLAUDE.md                   # voice rules, profile index
+├── AGENTS.md                   # voice rules, profile index: every agent reads it at the start
+├── CLAUDE.md                   # one line that imports AGENTS.md, for Claude Code
 ├── PIPELINE.md                 # this file
 ├── index.base                  # Obsidian Base — All Meetings, By Team, By Type (yours; git-ignored, made at install)
 ├── Action Items.md             # Tasks-plugin page — every open item, grouped by owner heading (yours; git-ignored)
@@ -23,10 +24,11 @@ teamnotes/                      (Obsidian vault root, working dir for the skill)
 │       ├── team.example.md     # template for your team's profile (tracked; don't edit)
 │       ├── team.md             # your team: roster, extra sections, prefix, tag (git-ignored, set up on first use)
 │       └── other.md            # anything else, asked at runtime
-└── .claude/
-    └── skills/team-notes/
-        ├── SKILL.md                     # full workflow spec (profile-independent)
-        └── assets/                      # starters: Action Items.md and index.base, copied to the vault root if missing
+├── .agents/
+│   └── skills/team-notes/
+│       ├── SKILL.md                     # full workflow spec (profile-independent)
+│       └── assets/                      # starters: Action Items.md and index.base, copied to the vault root if missing
+└── .claude/skills/team-notes          # a link to the folder above: Claude Code looks for skills here
 ```
 
 The routine steps run through the `meetingrec` command (`../.engine/bin/meetingrec`), so they
