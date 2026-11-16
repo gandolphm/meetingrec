@@ -302,7 +302,9 @@ local function stopForSleep()
                   text = out:match("meetingrec: ([^\n]+)") or out }
     return
   end
-  log("sleep: stopped")
+  -- With what stop printed: a recorder that had to be force-quit says so in a
+  -- line the notification doesn't show.
+  log("sleep: stopped: %s", (out:gsub("%s+$", "")))
   isRecording = false
   startTime = nil
   stopTicking()
