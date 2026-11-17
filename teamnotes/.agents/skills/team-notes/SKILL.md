@@ -58,11 +58,14 @@ add an "Other" option. It returns at once and the user's answers arrive as a new
 after the call, end your turn and go on only when they arrive. If Codex offers only
 `request_user_input`, use that: one to three questions per call, each with two or three
 options, so split a longer step over several calls and keep each question's likeliest
-options. If your agent has no such tool, or it isn't available in this session, ask in chat
-instead, as a short numbered list: the same questions and options, everything the step puts
-in one call in one message, then wait for the answer. Where an option's text says to type
-something "in Other", that means the tool's free-text answer; reword it if yours is called
-something else.
+options. **In Antigravity it is `ask_question`: use it whenever it's offered.** It takes
+several questions per call, and adds the numbers and an "Other" free-text answer by itself,
+so give the options unnumbered and without an "Other". Make each question single-select;
+the tool waits for the answers by itself. If your agent has no such tool, or it isn't
+available in this session, ask in chat instead, as a short numbered list: the same
+questions and options, everything the step puts in one call in one message, then wait for
+the answer. Where an option's text says to type something "in Other", that means the
+tool's free-text answer; reword it if yours is called something else.
 
 ---
 
