@@ -13,6 +13,7 @@
 #   meetingrec vault-root <folder>   (for the installer, skills and menu bar)
 #   meetingrec antigravity-project <folder>   (for the menu bar)
 #   meetingrec agents                (for the installer and menu bar)
+#   meetingrec local-model           (for the installer)
 #   meetingrec prepare | session-info | transcribe | note-path | share-copy | clear-input
 #                                    (the routine steps of writing notes, for the skills;
 #                                    see "Writing notes" below)
@@ -1595,6 +1596,40 @@ cmd_agents() {
 }
 
 # --------------------------------------------------------------------------
+# local-model
+# --------------------------------------------------------------------------
+# One open model downloaded to run on this Mac, if there is any:
+#
+#   <tool><tab><model>       e.g. Ollama<tab>gpt-oss:20b
+#
+# Exits 1 when there's none. Read from Ollama's and LM Studio's model folders,
+# so neither has to be running. Only the first one found: the installer just
+# says one is there. meetingrec doesn't write notes with local models yet.
+#
+#   meetingrec local-model
+cmd_local_model() {
+  [ $# -eq 0 ] || die "usage: meetingrec local-model"
+  local f rel
+  # Ollama: manifests/<registry>/<namespace>/<name>/<tag>, "library" being its own.
+  f="$(find "${OLLAMA_MODELS:-$HOME/.ollama/models}/manifests" -type f ! -name '.*' 2>/dev/null \
+    | sort | head -n 1)"
+  if [ -n "$f" ]; then
+    rel="${f#*/manifests/}" rel="${rel#*/}" rel="${rel#library/}"
+    printf 'Ollama\t%s:%s\n' "${rel%/*}" "${rel##*/}"
+    return 0
+  fi
+  # LM Studio: models/<publisher>/<model>/, holding GGUF or MLX weights.
+  f="$(find "$HOME/.lmstudio/models" "$HOME/.cache/lm-studio/models" -mindepth 3 -maxdepth 4 \
+    -type f \( -name '*.gguf' -o -name '*.safetensors' \) 2>/dev/null | sort | head -n 1)"
+  if [ -n "$f" ]; then
+    rel="${f#*/models/}"
+    printf 'LM Studio\t%s\n' "$(printf '%s' "$rel" | cut -d/ -f1-2)"
+    return 0
+  fi
+  return 1
+}
+
+# --------------------------------------------------------------------------
 # antigravity-project
 # --------------------------------------------------------------------------
 # Prints the ID of the Antigravity project that holds <folder>, for the menu
@@ -2032,6 +2067,7 @@ case "${1:-}" in
   vault-root) shift; cmd_vault_root "$@" ;;
   antigravity-project) shift; cmd_antigravity_project "$@" ;;
   agents) shift; cmd_agents "$@" ;;
+  local-model) shift; cmd_local_model "$@" ;;
   prepare)      shift; cmd_prepare "$@" ;;
   session-info) shift; cmd_session_info "$@" ;;
   transcribe)   shift; cmd_transcribe "$@" ;;

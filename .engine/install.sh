@@ -590,16 +590,19 @@ EOF
   fi
 }
 
-# The coding agent that writes up notes, saved as NOTES_AGENT. Asked only on a
-# first install, and only when this Mac has another agent meetingrec knows
-# (Codex, Antigravity): with none, it's Claude Code, as it always was. The
-# default is Claude Code when it's installed, otherwise the first agent found,
-# so nobody is pushed to install one they don't use. Never during an update,
-# never when NOTES_AGENT is already saved, and never without a keyboard.
-AGENT=claude AGENT_KIND=claude AGENT_NAME="Claude Code" AGENT_CMD="" AGENT_APP=""
+# The coding agent that writes up notes, saved as NOTES_AGENT. On a first
+# install, from the agents this Mac already has (Claude Code, Codex,
+# Antigravity; the command or the app):
+#   one     it's used, and the installer says so: no question;
+#   several the user picks one of them; Claude Code is the default when it's
+#           among them, otherwise the first found. No keyboard: the default;
+#   none    install_claude offers to add Claude Code, the one it can install.
+# An agent that's already here is never joined by an offer to install Claude
+# Code. An update, or a NOTES_AGENT already saved, keeps the saved choice.
+AGENT=claude AGENT_KIND=claude AGENT_NAME="Claude Code" AGENT_CMD="" AGENT_APP="" AGENTS_FOUND=0
 choose_agent() {
-  local mr="$REPO/.engine/bin/meetingrec" saved cmd name path app i reply where
-  local cmds=() names=() paths=() apps=() shown=() n=0 default="" others=0
+  local mr="$REPO/.engine/bin/meetingrec" saved cmd name path app i reply where n=0 default=1 chose=""
+  local cmds=() names=() paths=() apps=() found=()
   # env -u: a NOTES_AGENT variable in this shell isn't the saved setting.
   saved="$(env -u NOTES_AGENT "$mr" config get NOTES_AGENT 2>/dev/null)"
   AGENT="${saved:-claude}"
@@ -607,36 +610,43 @@ choose_agent() {
   # into the next one (a tab is whitespace to it).
   while IFS='|' read -r cmd name path app; do
     cmds+=("$cmd") names+=("$name") paths+=("$path") apps+=("$app")
-    [ "$cmd" != claude ] && [ -n "$path$app" ] && others=$((others + 1))
+    [ -n "$path$app" ] && found+=("$((${#cmds[@]} - 1))")
   done < <("$mr" agents | tr '\t' '|')
+  AGENTS_FOUND="${#found[@]}"
 
-  if [ -z "$UPDATE" ] && [ "$others" -gt 0 ] && [ -t 0 ] \
+  if [ -z "$UPDATE" ] && [ "$AGENTS_FOUND" -gt 0 ] \
       && ! grep -q '^NOTES_AGENT=' "$HOME/.config/meetingrec/config.sh" 2>/dev/null; then
     step "Coding agent"
-    echo "  Which coding agent should write up your notes?"
-    for i in "${!cmds[@]}"; do
-      # Claude Code is always offered, since this installer can add it.
-      [ "${cmds[$i]}" = claude ] || [ -n "${paths[$i]}${apps[$i]}" ] || continue
-      n=$((n + 1)) shown+=("$i")
-      if [ -n "${paths[$i]}" ] && [ -n "${apps[$i]}" ]; then where="the ${cmds[$i]} command and the app"
-      elif [ -n "${paths[$i]}" ]; then where="the ${cmds[$i]} command"
-      elif [ -n "${apps[$i]}" ]; then where="the app; scribe in Terminal needs the ${cmds[$i]} command too"
-      else where="not installed yet; this installer can add it"; fi
-      printf '    %d. %s (%s)\n' "$n" "${names[$i]}" "$where"
-      # The default: Claude Code when it's installed, otherwise the first one found.
-      if [ -n "${paths[$i]}${apps[$i]}" ] && { [ -z "$default" ] || [ "${cmds[$i]}" = claude ]; }; then
-        default="$n"
+    chose=1
+    if [ "$AGENTS_FOUND" -eq 1 ]; then
+      AGENT="${cmds[${found[0]}]}"
+    else
+      for i in "${found[@]}"; do
+        n=$((n + 1))
+        [ "${cmds[$i]}" = claude ] && default="$n"
+      done
+      if [ -t 0 ]; then
+        echo "  This Mac has more than one coding agent. Which one should write up your notes?"
+        n=0
+        for i in "${found[@]}"; do
+          n=$((n + 1))
+          if [ -n "${paths[$i]}" ] && [ -n "${apps[$i]}" ]; then where="the ${cmds[$i]} command and the app"
+          elif [ -n "${paths[$i]}" ]; then where="the ${cmds[$i]} command"
+          else where="the app; scribe in Terminal needs the ${cmds[$i]} command too"; fi
+          printf '    %d. %s (%s)\n' "$n" "${names[$i]}" "$where"
+        done
+        while :; do
+          read -r -p "  Number [$default]: " reply
+          reply="${reply:-$default}"
+          case "$reply" in ""|*[!0-9]*) reply=0 ;; esac
+          [ "$reply" -ge 1 ] && [ "$reply" -le "$n" ] && break
+          note "type a number from 1 to $n"
+        done
+      else
+        reply="$default"
       fi
-    done
-    echo "  To change it later: ○ → Settings → Agent."
-    while :; do
-      read -r -p "  Number [$default]: " reply
-      reply="${reply:-$default}"
-      case "$reply" in ""|*[!0-9]*) reply=0 ;; esac
-      [ "$reply" -ge 1 ] && [ "$reply" -le "$n" ] && break
-      note "type a number from 1 to $n"
-    done
-    AGENT="${cmds[${shown[$((reply - 1))]}]}"
+      AGENT="${cmds[${found[$((reply - 1))]}]}"
+    fi
     "$mr" config set NOTES_AGENT "$AGENT" >/dev/null || die "Couldn't save NOTES_AGENT to your config."
   fi
 
@@ -646,15 +656,23 @@ choose_agent() {
     [ "${cmds[$i]}" = "$AGENT_KIND" ] || continue
     AGENT_NAME="${names[$i]}" AGENT_CMD="${paths[$i]}" AGENT_APP="${apps[$i]}"
   done
-  # Claude Code has a step of its own (install_claude).
-  [ "$AGENT_KIND" = claude ] && return
-  [ -n "$reply" ] || step "Coding agent"
-  if [ -n "$AGENT_CMD$AGENT_APP" ]; then
+  # None at all on a first install: install_claude has the step.
+  [ -z "$UPDATE" ] && [ "$AGENTS_FOUND" -eq 0 ] && [ "$AGENT_KIND" = claude ] && return
+  [ -n "$chose" ] || step "Coding agent"
+  if [ -n "$chose" ]; then
+    if [ "$AGENTS_FOUND" -eq 1 ]; then
+      ok "found $AGENT_NAME. meetingrec will use it to write up your notes."
+    else
+      ok "$AGENT_NAME will write up your notes. To change it: ○ → Settings → Agent."
+    fi
+  elif [ -n "$AGENT_CMD$AGENT_APP" ] || command -v "${AGENT%% *}" >/dev/null 2>&1; then
     ok "notes are written by $AGENT_NAME"
-  elif command -v "${AGENT%% *}" >/dev/null 2>&1; then
-    ok "notes are written by $AGENT_NAME"
+  elif [ "$AGENT_KIND" = claude ]; then
+    # Claude Code updates itself; an update shouldn't install it behind someone's back.
+    note "notes are set to be written by Claude Code, which isn't on this Mac. To install it:"
+    note "curl -fsSL https://claude.ai/install.sh | bash, or pick another: ○ → Settings → Agent."
   else
-    note "notes are set to be written by $AGENT, which isn't on this Mac. Install it, or"
+    note "notes are set to be written by $AGENT_NAME, which isn't on this Mac. Install it, or"
     note "pick another: ○ → Settings → Agent."
   fi
 }
@@ -664,29 +682,34 @@ choose_agent() {
 has_claude_cli() { command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; }
 claude_app() { ls -d /Applications/Claude.app "$HOME/Applications/Claude.app" 2>/dev/null | head -n 1; }
 
+# How to get each agent, for when this Mac has none. Codex's from OpenAI's
+# README; Antigravity's install script is only in third-party guides, so its page.
+GET_AGENTS="Claude Code: the Claude app (https://claude.ai/download), or
+  curl -fsSL https://claude.ai/install.sh | bash
+Codex: the ChatGPT app, or npm install -g @openai/codex
+Antigravity: https://antigravity.google/docs/getting-started"
+
 install_claude() {
   # Only when Claude Code writes the notes: with another agent chosen, it isn't
   # needed, so it's neither checked nor offered.
   [ "$AGENT_KIND" = claude ] || return 0
-  step "Claude Code"
   local app yn
   app="$(claude_app)"
-  if has_claude_cli; then
-    ok "already installed"
-  elif [ -n "$app" ]; then
-    ok "the Claude app is installed (${app/#$HOME/~}). Write up notes… in the menu bar opens it"
+  if [ -n "$app" ] && ! has_claude_cli; then
+    # Under choose_agent's "Coding agent" step.
     note "the scribe and teamnotes commands need the claude command too. To add it: curl -fsSL https://claude.ai/install.sh | bash"
-  elif [ -n "$UPDATE" ]; then
-    # Claude Code updates itself; an update shouldn't install it behind someone's back.
-    note "not installed. To install it: curl -fsSL https://claude.ai/install.sh | bash"
-  else
-    echo "  meetingrec writes up notes with Claude Code, and this Mac doesn't have it yet"
-    echo "  (neither the claude command nor the Claude app)."
+  elif [ -z "$UPDATE" ] && [ "$AGENTS_FOUND" -eq 0 ]; then
+    # No agent at all: the one offer, Claude Code being the one this installer
+    # can add.
+    step "Coding agent"
+    echo "  meetingrec writes up your notes with a coding agent: Claude Code, Codex,"
+    echo "  Antigravity, etc. This Mac has none yet. This installer can add Claude Code."
     read -r -p "  Install Claude Code now? [Y/n] " yn
     case "$yn" in
       [nN]*)
-        note "skipped. Before your first write-up, install the Claude app (https://claude.ai/download)"
-        note "or Claude Code: curl -fsSL https://claude.ai/install.sh | bash" ;;
+        note "skipped. Before your first write-up, install one of them:"
+        printf '%s\n' "$GET_AGENTS" | sed 's/^/    /'
+        note "For Codex or Antigravity, then pick it: ○ → Settings → Agent." ;;
       *)
         curl -fsSL https://claude.ai/install.sh | bash || die "Claude Code didn't install."
         # Only what this installer added is offered for removal by `meetingrec uninstall`.
@@ -697,6 +720,17 @@ install_claude() {
   if [ -x "$HOME/.local/bin/claude" ] && ! in_shell_startup ".local/bin"; then
     add_line "$HOME/.zprofile" 'export PATH="$HOME/.local/bin:$PATH"'
   fi
+}
+
+# Whether this Mac has an open model downloaded (Ollama or LM Studio), said
+# beside the agents. Only reported: meetingrec doesn't write notes with one yet.
+report_local_model() {
+  [ -n "$UPDATE" ] && return 0
+  local found
+  found="$("$REPO/.engine/bin/meetingrec" local-model 2>/dev/null)" || return 0
+  step "Local model"
+  ok "found ${found#*$'\t'} (${found%%$'\t'*}). meetingrec doesn't automatically write up notes"
+  echo "    with local models through the menu bar yet."
 }
 
 install_commands() {
@@ -933,8 +967,9 @@ finish() {
       elif [ -n "$(claude_app)" ]; then
         sign_in="Open the ${B}Claude${N} app and sign in, if you haven't yet."
       else
-        sign_in="Install Claude Code before your first write-up: the Claude app
-     (https://claude.ai/download), or in Terminal: curl -fsSL https://claude.ai/install.sh | bash"
+        sign_in="Install a coding agent before your first write-up:
+$(printf '%s\n' "$GET_AGENTS" | sed 's/^/       /')
+     For Codex or Antigravity, then pick it: ○ → Settings → Agent."
       fi ;;
     codex)
       if [ -n "$AGENT_CMD" ]; then
@@ -950,6 +985,9 @@ finish() {
     *)
       sign_in="Check that ${B}${AGENT%% *}${N} starts in a ${B}new${N} Terminal window, and sign in to it." ;;
   esac
+  # With no agent installed yet, there's no name to give.
+  local who="$AGENT_NAME"
+  [ "$AGENT_KIND" = claude ] && ! has_claude_cli && [ -z "$(claude_app)" ] && who="your coding agent"
   cat <<EOF
 
 ${G}${B}Done.${N} meetingrec is installed in ${B}$REPO${N}
@@ -958,7 +996,7 @@ What's left (see the README for details):
   1. $sign_in
   2. Set up Obsidian ("Set up Obsidian" in the README).
 
-The first time you write up a meeting, $AGENT_NAME asks your name, where your notes
+The first time you write up a meeting, $who asks your name, where your notes
 should go (meetingrec's folder, or an Obsidian vault you already use) and, for
 team notes, your team's roster. It saves the answers for next time.
 
@@ -987,6 +1025,7 @@ main() {
   install_personal_files
   choose_agent
   install_claude
+  report_local_model
   install_commands
   install_hammerspoon_config
   if [ -n "$UPDATE" ]; then

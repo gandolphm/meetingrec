@@ -579,6 +579,33 @@ check "a file that can't run isn't a command" has "$out" $'^agy\tAntigravity\t\t
 out="$(MEETINGREC_AGENT_DIRS="" MEETINGREC_APP_DIRS="" mrc agents x 2>&1)"; rc=$?
 check "agents takes no arguments" [ "$rc" -ne 0 ]
 
+# One local model, for the installer to mention. Read from the model folders,
+# so the tests' HOME decides; OLLAMA_MODELS is cleared so the Mac's doesn't count.
+echo "local-model"
+lm() { env -u OLLAMA_MODELS MEETINGREC_CONFIG="$CFG" "$MR" local-model; }
+out="$(lm)"; rc=$?
+check "no model folders: none found" [ "$rc" -eq 1 -a -z "$out" ]
+mkdir -p "$HOME/.ollama/models/manifests/registry.ollama.ai/library/gpt-oss"
+check "...nor with an empty Ollama folder" bash -c '! "$@"' _ env -u OLLAMA_MODELS "$MR" local-model
+: > "$HOME/.ollama/models/manifests/registry.ollama.ai/library/gpt-oss/latest"
+: > "$HOME/.ollama/models/manifests/registry.ollama.ai/library/gpt-oss/20b"
+check "an Ollama model is found, as name:tag" [ "$(lm)" = "$(printf 'Ollama\tgpt-oss:20b')" ]
+mkdir -p "$HOME/.ollama/models/manifests/hf.co/someone/tiny-model"
+rm -rf "$HOME/.ollama/models/manifests/registry.ollama.ai"
+: > "$HOME/.ollama/models/manifests/hf.co/someone/tiny-model/Q4"
+check "...one from elsewhere keeps its namespace" [ "$(lm)" = "$(printf 'Ollama\tsomeone/tiny-model:Q4')" ]
+mkdir -p "$T/ollama-elsewhere/manifests/registry.ollama.ai/library/qwen3"
+: > "$T/ollama-elsewhere/manifests/registry.ollama.ai/library/qwen3/8b"
+check "...and OLLAMA_MODELS moves Ollama's folder" \
+  [ "$(OLLAMA_MODELS="$T/ollama-elsewhere" "$MR" local-model)" = "$(printf 'Ollama\tqwen3:8b')" ]
+rm -rf "$HOME/.ollama"
+mkdir -p "$HOME/.lmstudio/models/lmstudio-community/empty" "$HOME/.lmstudio/models/mlx-community/Some-Model-4bit"
+check "LM Studio folders with no weights don't count" bash -c '! "$@"' _ env -u OLLAMA_MODELS "$MR" local-model
+: > "$HOME/.lmstudio/models/mlx-community/Some-Model-4bit/model.safetensors"
+check "an LM Studio model is found, as publisher/model" \
+  [ "$(lm)" = "$(printf 'LM Studio\tmlx-community/Some-Model-4bit')" ]
+rm -rf "$HOME/.lmstudio"
+
 echo "note-path"
 notes="$HOME/Notes Vault/meeting-notes"
 mkdir -p "$notes" "$HOME/Team Notes/meeting-notes" "$HOME/Team Notes/share"
