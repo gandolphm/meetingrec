@@ -523,8 +523,10 @@ check "...but no folder that doesn't exist" \
 mrc config set NOTES_AGENT "$AGENTS/my-agent" >/dev/null
 check "...and no other agent gets --add-dir" [ "$(launch teamnotes | grep -c -- --add-dir)" = 0 ]
 mrc config set NOTES_AGENT agy >/dev/null
-check "Antigravity gets the request after -i" \
-  [ "$(launch scribe)" = "$(lines "$real_repo/scribe" -i "scribe")" ]
+check "Antigravity gets the request after -i, and the folders outside like Codex" \
+  [ "$(launch scribe)" = "$(lines "$real_repo/scribe" --add-dir "$nv" -i "scribe")" ]
+check "...in teamnotes too" \
+  [ "$(launch teamnotes)" = "$(lines "$real_repo/teamnotes" --add-dir "$tv" --add-dir "$real_repo/scribe/transcripts" -i "team notes")" ]
 mrc config set NOTES_AGENT "$AGENTS/my-agent --prompt" >/dev/null
 check "any other command gets its options, then the request" \
   [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" --prompt "scribe")" ]
@@ -545,7 +547,7 @@ check "...and a missing Antigravity with where to get it" has "$out" 'antigravit
 mkdir -p "$HOME/.local/bin"
 cp "$AGENTS/agy" "$HOME/.local/bin/agy"
 check "Antigravity in ~/.local/bin, where its installer puts it, is found without PATH" \
-  [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" -i "scribe")" ]
+  [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" --add-dir "$nv" -i "scribe")" ]
 rm "$HOME/.local/bin/agy"
 mrc config set NOTES_AGENT "" >/dev/null
 

@@ -280,6 +280,25 @@ instructions (skills) in `scribe/` and `teamnotes/`. It works with these three:
   notes folder: in Antigravity, add `~/meetingrec/scribe` as a project (and
   `~/meetingrec/teamnotes` for team notes). Until then *Write up notes…* opens it in
   Terminal and says so.
+- **Antigravity asks** before running the transcription outside its sandbox (inside it
+  Whisper can't use the Mac's graphics chip) and before writing a note to a notes folder
+  outside the meetingrec folder. "Always allow" on the first saves the whole `meetingrec`
+  command, which also covers changing settings and uninstalling, and on the second only
+  that one note. To stop the questions with nothing broader, add these two as **Allow**
+  rules instead: in the app, **Settings → General → Global Permissions**; for `agy` in
+  Terminal, `/permissions` ([Agent permissions](https://antigravity.google/docs/permissions)).
+  Use your own full paths: `~` isn't understood there, and `pwd` in the meetingrec folder
+  shows the path.
+  ```text
+  command(/Users/you/meetingrec/.engine/bin/meetingrec transcribe)
+  write_file(/Users/you/your-notes-folder)
+  ```
+  The second is only needed for a notes folder outside the meetingrec folder; when the
+  question comes up, you can also change the file it names to the folder before clicking
+  *Always allow*. If you clicked *Always allow* for the transcription already, remove the
+  `command(…/meetingrec)` line it saved. With `scribe` or `teamnotes` in Terminal, `agy`
+  is already given your notes folder and doesn't ask. Saying no to the transcription
+  still works, on the processor instead: a few minutes slower for an hour-long call.
 - **Codex** works in a sandbox, and inside it Whisper can't use the Mac's graphics chip.
   So while Codex is your agent, meetingrec adds a
   [Codex rule](https://learn.chatgpt.com/docs/agent-configuration/rules) that lets `meetingrec
@@ -559,6 +578,7 @@ Issues are public, so never paste a transcript, note text, or anyone's name into
 | `meeting-notes` skill not found | The agent was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start the agent from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
 | `notes are set to be written by …, but there's no … command` | `scribe` and `teamnotes` need your agent's command. Install it (the message says how), use *Write up notes…* to open its app, or pick another agent: ○ → Settings → *Agent*. |
+| Antigravity asks every time to run `meetingrec transcribe`, or to write a note | Add the two Allow rules in [Coding agents](#coding-agents). Saying yes, or no to the transcription (it then runs more slowly on the processor), also works. |
 | "Opened in Terminal: Antigravity has no project for …" | Add that folder as a project in Antigravity, so *Write up notes…* can open the app (see [Coding agents](#coding-agents)). |
 | Codex asks to run `meetingrec transcribe` outside its sandbox | meetingrec's Codex rule is missing or for another folder. Pick Codex again in ○ → Settings → *Agent* to write it, or say yes: inside the sandbox Whisper can't use the Mac's graphics chip. Saying no still works, just slower. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |

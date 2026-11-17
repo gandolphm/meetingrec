@@ -49,12 +49,13 @@ else
   fi
 fi
 
-# Codex's sandbox lets it write only in the folder it starts in (and /tmp). The
-# agent writes the note itself, with its own file tool, so a notes folder
-# elsewhere needs --add-dir; so does the recordings folder, which clear-input
-# empties, and, for team notes, scribe/transcripts, where a kept transcript
-# goes. Only folders outside the start folder, and only ones that exist.
-if [ "$kind" = codex ]; then
+# Codex's sandbox lets it write only in the folder it starts in (and /tmp), and
+# Antigravity asks before writing outside it. The agent writes the note itself,
+# with its own file tool, so a notes folder elsewhere needs --add-dir (both take
+# it); so does the recordings folder, which clear-input empties, and, for team
+# notes, scribe/transcripts, where a kept transcript goes. Only folders outside
+# the start folder, and only ones that exist.
+if [ "$kind" = codex ] || [ "$kind" = agy ]; then
   mr="$REPO_ROOT/.engine/bin/meetingrec" start="$REPO_ROOT/$folder" dirs=()
   if [ "$folder" = scribe ]; then
     dirs+=("$("$mr" config get NOTES_VAULT 2>/dev/null || true)")
