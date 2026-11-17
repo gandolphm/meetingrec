@@ -600,6 +600,15 @@ EOF
 # An agent that's already here is never joined by an offer to install Claude
 # Code. An update, or a NOTES_AGENT already saved, keeps the saved choice.
 AGENT=claude AGENT_KIND=claude AGENT_NAME="Claude Code" AGENT_CMD="" AGENT_APP="" AGENTS_FOUND=0
+# An open model downloaded for Ollama or LM Studio, said along with the agents
+# on a first install. Only said: meetingrec doesn't write notes with one yet.
+LOCAL_MODEL=""
+say_local_model() {
+  [ -n "$LOCAL_MODEL" ] || return 0
+  echo "  Also found a local model: ${LOCAL_MODEL#*$'\t'} (${LOCAL_MODEL%%$'\t'*}). meetingrec doesn't"
+  echo "  automatically write up notes with local models through the menu bar yet."
+}
+
 choose_agent() {
   local mr="$REPO/.engine/bin/meetingrec" saved cmd name path app i reply where n=0 default=1 chose=""
   local cmds=() names=() paths=() apps=() found=()
@@ -613,6 +622,7 @@ choose_agent() {
     [ -n "$path$app" ] && found+=("$((${#cmds[@]} - 1))")
   done < <("$mr" agents | tr '\t' '|')
   AGENTS_FOUND="${#found[@]}"
+  [ -n "$UPDATE" ] || LOCAL_MODEL="$("$mr" local-model 2>/dev/null)"
 
   if [ -z "$UPDATE" ] && [ "$AGENTS_FOUND" -gt 0 ] \
       && ! grep -q '^NOTES_AGENT=' "$HOME/.config/meetingrec/config.sh" 2>/dev/null; then
@@ -627,6 +637,7 @@ choose_agent() {
       done
       if [ -t 0 ]; then
         echo "  This Mac has more than one coding agent. Which one should write up your notes?"
+        echo "  You can change this later: ○ → Settings → Agent."
         n=0
         for i in "${found[@]}"; do
           n=$((n + 1))
@@ -635,8 +646,13 @@ choose_agent() {
           else where="the app; scribe in Terminal needs the ${cmds[$i]} command too"; fi
           printf '    %d. %s (%s)\n' "$n" "${names[$i]}" "$where"
         done
+        say_local_model
+        # "1 or 2", "1, 2 or 3"
+        local numbers="" k
+        for ((k = 1; k < n; k++)); do numbers="$numbers${numbers:+, }$k"; done
+        numbers="$numbers or $n"
         while :; do
-          read -r -p "  Number [$default]: " reply
+          read -r -p "  Type $numbers, or press Enter for ${names[${found[$((default - 1))]}]}: " reply
           reply="${reply:-$default}"
           case "$reply" in ""|*[!0-9]*) reply=0 ;; esac
           [ "$reply" -ge 1 ] && [ "$reply" -le "$n" ] && break
@@ -662,8 +678,13 @@ choose_agent() {
   if [ -n "$chose" ]; then
     if [ "$AGENTS_FOUND" -eq 1 ]; then
       ok "found $AGENT_NAME. meetingrec will use it to write up your notes."
+      say_local_model
+    elif [ -t 0 ]; then
+      # The question already said how to change it, and the local model.
+      ok "$AGENT_NAME will write up your notes."
     else
       ok "$AGENT_NAME will write up your notes. To change it: ○ → Settings → Agent."
+      say_local_model
     fi
   elif [ -n "$AGENT_CMD$AGENT_APP" ] || command -v "${AGENT%% *}" >/dev/null 2>&1; then
     ok "notes are written by $AGENT_NAME"
@@ -675,6 +696,8 @@ choose_agent() {
     note "notes are set to be written by $AGENT_NAME, which isn't on this Mac. Install it, or"
     note "pick another: ○ → Settings → Agent."
   fi
+  # A saved choice on a first install (a re-run): the local model too.
+  [ -n "$chose" ] || say_local_model
 }
 
 # Claude Code comes two ways, and either one writes up notes: the claude command,
@@ -704,6 +727,7 @@ install_claude() {
     step "Coding agent"
     echo "  meetingrec writes up your notes with a coding agent: Claude Code, Codex,"
     echo "  Antigravity, etc. This Mac has none yet. This installer can add Claude Code."
+    say_local_model
     read -r -p "  Install Claude Code now? [Y/n] " yn
     case "$yn" in
       [nN]*)
@@ -720,17 +744,6 @@ install_claude() {
   if [ -x "$HOME/.local/bin/claude" ] && ! in_shell_startup ".local/bin"; then
     add_line "$HOME/.zprofile" 'export PATH="$HOME/.local/bin:$PATH"'
   fi
-}
-
-# Whether this Mac has an open model downloaded (Ollama or LM Studio), said
-# beside the agents. Only reported: meetingrec doesn't write notes with one yet.
-report_local_model() {
-  [ -n "$UPDATE" ] && return 0
-  local found
-  found="$("$REPO/.engine/bin/meetingrec" local-model 2>/dev/null)" || return 0
-  step "Local model"
-  ok "found ${found#*$'\t'} (${found%%$'\t'*}). meetingrec doesn't automatically write up notes"
-  echo "    with local models through the menu bar yet."
 }
 
 install_commands() {
@@ -1025,7 +1038,6 @@ main() {
   install_personal_files
   choose_agent
   install_claude
-  report_local_model
   install_commands
   install_hammerspoon_config
   if [ -n "$UPDATE" ]; then
