@@ -280,25 +280,42 @@ instructions (skills) in `scribe/` and `teamnotes/`. It works with these three:
   notes folder: in Antigravity, add `~/meetingrec/scribe` as a project (and
   `~/meetingrec/teamnotes` for team notes). Until then *Write up notes…* opens it in
   Terminal and says so.
-- **Antigravity asks** before running the transcription outside its sandbox (inside it
-  Whisper can't use the Mac's graphics chip) and before writing a note to a notes folder
-  outside the meetingrec folder. "Always allow" on the first saves the whole `meetingrec`
-  command, which also covers changing settings and uninstalling, and on the second only
-  that one note. To stop the questions with nothing broader, add these two as **Allow**
-  rules instead: in the app, **Settings → General → Global Permissions**; for `agy` in
-  Terminal, `/permissions` ([Agent permissions](https://antigravity.google/docs/permissions)).
+- **Antigravity asks** before running meetingrec's steps outside its sandbox (inside it
+  meetingrec can't read its own files, and Whisper can't use the Mac's graphics chip):
+  in its *Auto* mode for the transcription and for removing the recording afterwards,
+  in *Default* for every step. It also asks before writing a note to a notes folder
+  outside the meetingrec folder. "Always allow" saves the whole `meetingrec` command,
+  which also covers changing settings and uninstalling, and for a note only that one
+  note. To stop the questions with nothing broader, give it these instead.
   Use your own full paths: `~` isn't understood there, and `pwd` in the meetingrec folder
-  shows the path.
-  ```text
-  command(/Users/you/meetingrec/.engine/bin/meetingrec transcribe)
-  write_file(/Users/you/your-notes-folder)
-  ```
-  The second is only needed for a notes folder outside the meetingrec folder; when the
-  question comes up, you can also change the file it names to the folder before clicking
-  *Always allow*. If you clicked *Always allow* for the transcription already, remove the
-  `command(…/meetingrec)` line it saved. With `scribe` or `teamnotes` in Terminal, `agy`
-  is already given your notes folder and doesn't ask. Saying no to the transcription
-  still works, on the processor instead: a few minutes slower for an hour-long call.
+  shows the path. ([Agent permissions](https://antigravity.google/docs/permissions))
+  - **In the app:** **Settings → General → Global Permissions**, in the allow list. The app
+    shows only what's inside the brackets, so edit the entries *Always allow* saved, or
+    add command rules and a file-write rule:
+    ```text
+    /Users/you/meetingrec/.engine/bin/meetingrec transcribe
+    /Users/you/meetingrec/.engine/bin/meetingrec clear-input
+    /Users/you/your-notes-folder
+    ```
+  - **For `agy` in Terminal:** `/permissions`, or `permissions` → `allow` in
+    `~/.gemini/antigravity-cli/settings.json`, written out in full:
+    ```text
+    command(/Users/you/meetingrec/.engine/bin/meetingrec transcribe)
+    command(/Users/you/meetingrec/.engine/bin/meetingrec clear-input)
+    write_file(/Users/you/your-notes-folder)
+    ```
+
+  If it asks about other steps (`prepare`, `session-info`, `note-path`, `share-copy`),
+  they're safe to allow the same way, one line each. Not `config`, `move`, `update` or
+  `uninstall`.
+
+  The notes-folder rule is only needed for a notes folder outside the meetingrec folder;
+  when the question comes up, you can also change the file it names to the folder before
+  clicking *Always allow*. If you clicked *Always allow* for a step already, add the
+  step's name (` transcribe`) to the end of the entry it saved. With `scribe` or
+  `teamnotes` in Terminal, `agy` is already given your notes folder and doesn't ask about
+  it. Saying no to the transcription still works, on the processor instead: a few
+  minutes slower for an hour-long call.
 - **Codex** works in a sandbox, and inside it Whisper can't use the Mac's graphics chip.
   So while Codex is your agent, meetingrec adds a
   [Codex rule](https://learn.chatgpt.com/docs/agent-configuration/rules) that lets `meetingrec
