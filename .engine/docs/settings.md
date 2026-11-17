@@ -1,6 +1,6 @@
 # Settings in detail
 
-Most changes are a sentence to Claude or a click in **○ → Settings**: see
+Most changes are a sentence to your agent or a click in **○ → Settings**: see
 [Make it yours](../../README.md#make-it-yours). This page covers where your settings live and
 the few that need more than that.
 
@@ -19,8 +19,8 @@ the few that need more than that.
 Rules are plain English, one bullet each, and take priority over the skills' defaults. A
 team's rules beat your general ones for that team. A few things can't be changed by a rule,
 because other parts of meetingrec depend on them: recordings aren't deleted before the note
-is saved, notes keep the format the notes table and to-do pages read, and Claude never edits
-the skills' own files. At the end of each write-up Claude offers to remember the names it
+is saved, notes keep the format the notes table and to-do pages read, and the agent never
+edits the skills' own files. At the end of each write-up the agent offers to remember the names it
 corrected and any preferences your corrections suggested; you choose which to keep.
 
 ## Files to leave as they are
@@ -39,7 +39,7 @@ with the repo:
 
 To-dos are tagged with the note's `context` (`work` unless your rules say otherwise). If you
 start using another, add a `tags include <context>` block to `Tasks.md` in your notes vault.
-Claude points this out when it happens.
+The agent points this out when it happens.
 
 ## Whisper model
 

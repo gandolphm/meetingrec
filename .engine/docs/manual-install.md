@@ -41,9 +41,11 @@ c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d  /Users/you/.lo
 ```
 If the long number is different, delete the file and download it again.
 
-**Claude Code:** skip this if `claude` already runs in Terminal. If you use only the
-[Claude app](https://claude.ai/download), you can skip it too: *Write up notes…* in the
-menu bar opens the app, but the `scribe` and `teamnotes` commands need the `claude` command.
+**A coding agent:** meetingrec works with Claude Code, Codex or Antigravity (see
+[Coding agents](../../README.md#coding-agents)). Skip this if you already have one, as a
+command (`claude`, `codex` or `agy`) or as an app; with Codex or Antigravity, also do step 4's
+`config set NOTES_AGENT` line in step 4. An app alone is enough for *Write up notes…* in the menu
+bar, but the `scribe` and `teamnotes` commands need the command. To install Claude Code:
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash
 ```
@@ -191,6 +193,13 @@ Expected: no output.
 The defaults work if you followed steps 2 and 3 exactly. If you put audiotee somewhere
 else, edit `AUDIOTEE_BIN` in `~/.config/meetingrec/config.sh`.
 
+If Codex or Antigravity writes your notes instead of Claude Code, say so (from the repo
+folder):
+```bash
+.engine/bin/meetingrec config set NOTES_AGENT codex    # or: agy
+```
+Expected: `NOTES_AGENT → codex`. You can change it later in **○ → Settings → *Agent***.
+
 ## 5. Do a test recording and grant permissions
 
 macOS asks for permission the first time each app records audio. Do a short test run from
@@ -320,7 +329,7 @@ Expected:
 If it prints nothing, `~/.local/bin` isn't on your PATH: run
 `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zprofile` and open a new window. Without
 these commands, use `<repo>/.engine/bin/meetingrec`, and start note-writing from the ○ menu or with
-`cd <repo>/scribe && claude`.
+`cd <repo>/scribe` and your agent (`claude`, `codex` or `agy`).
 
 Now go back to the README and [set up Obsidian](../../README.md#set-up-obsidian) (recommended).
 

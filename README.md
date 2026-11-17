@@ -1,21 +1,21 @@
 # meetingrec
 
-Record a meeting on your Mac, and Claude Code turns it into Markdown notes with to-dos,
-decisions and follow-ups. No meeting bot joins the call.
+Record a meeting on your Mac, and a coding agent (Claude Code, Codex or Antigravity) turns it
+into Markdown notes with to-dos, decisions and follow-ups. No meeting bot joins the call.
 
 - **Records virtual meetings** from the menu bar or Terminal, on two tracks: your mic and
   everyone else.
 - **Transcribes on your Mac** with Whisper. The audio is never uploaded; the transcript goes
-  to Claude to write the notes (see [What leaves your Mac](#what-leaves-your-mac)).
+  to your agent to write the notes (see [What leaves your Mac](#what-leaves-your-mac)).
 - **Personal notes:** TL;DR, your to-dos, decisions and questions to ask.
 - **Team notes:** third person, action items for everyone grouped by owner, and a
   plain-Markdown copy you can paste into Slack or email.
 - **Built for [Obsidian](https://obsidian.md)** (free, recommended), which adds linked people
   and a to-do dashboard. Any Markdown editor can open the notes.
-- **Yours to customize:** ask Claude to change how your notes are written ("from now on,
+- **Yours to customize:** ask your agent to change how your notes are written ("from now on,
   keep Key Points to five bullets"), or edit the settings files yourself.
 
-It works with Claude Code today; support for other agents, like Codex, is planned.
+It works with the agent you already use: [Claude Code, Codex or Antigravity](#coding-agents).
 
 Feel free to email with any [feedback](#feedback), suggestions, or questions at **goblin_outlet@icloud.com**.
 
@@ -30,7 +30,8 @@ Feel free to email with any [feedback](#feedback), suggestions, or questions at 
   [Quick install](#quick-install-recommended) · [Manual install](.engine/docs/manual-install.md) ·
   [Set up Obsidian](#set-up-obsidian) (recommended)
 - [Your first meeting](#your-first-meeting)
-- [The three parts](#the-three-parts) · [What leaves your Mac](#what-leaves-your-mac)
+- [The three parts](#the-three-parts) · [Coding agents](#coding-agents) ·
+  [What leaves your Mac](#what-leaves-your-mac)
 - [Usage](#usage): [record](#record-a-virtual-meeting) ·
   [personal notes](#write-your-personal-notes-scribe) · [team notes](#write-team-notes-teamnotes)
 - [Make it yours](#make-it-yours): where notes go, names, rules, teams, moving things
@@ -51,14 +52,15 @@ Either way, finish with [Set up Obsidian](#set-up-obsidian) (recommended).
 
 - A Mac with **Apple silicon**, running **macOS 14.2 or later**. System-audio capture uses
   Core Audio taps, which first shipped in 14.2.
-- A **Claude plan that includes Claude Code**, or Anthropic API access. Claude Code can be the
-  `claude` command or the **[Claude app](https://claude.ai/download)** for Mac (its Code tab).
-  If your Mac has neither, the installer asks whether to install the `claude` command. The
-  `scribe` and `teamnotes` commands need the `claude` command; *Write up notes…* in the menu
-  bar opens the app if you have it, and Terminal if not.
+- **A coding agent**, signed in: **Claude Code** (the `claude` command or the
+  [Claude app](https://claude.ai/download)'s Code tab; a Claude plan that includes it, or
+  Anthropic API access), **Codex** (the `codex` command or the ChatGPT app), or
+  **Antigravity** (the `agy` command or the Antigravity app). The installer uses the one
+  your Mac has, asks if there's more than one, and offers to install Claude Code if there's
+  none. See [Coding agents](#coding-agents).
 - **Disk space:** about **0.55 GB** for the Whisper model and tools, or **2–2.5 GB** if your
-  Mac also needs Apple's Command Line Tools and Claude Code. Recordings take about 230 MB per
-  hour of meeting until their notes are written.
+  Mac also needs Apple's Command Line Tools and the installer adds Claude Code. Recordings
+  take about 230 MB per hour of meeting until their notes are written.
 
 You don't need Homebrew or an administrator password for meetingrec itself (unless you
 choose Homebrew in the [install options](#install-options)). If your Mac doesn't have
@@ -89,9 +91,12 @@ the script before running it.
   already set up as an Obsidian vault, or type the folder of an Obsidian vault you already
   use. Notes go in a `meeting-notes` folder inside it. You can change this later (see
   [Moving things](#moving-things)).
-- **Install Claude Code?** Only if your Mac has neither the `claude` command nor the Claude
-  app. Press Enter to install it. If you type `n`, install the Claude app or Claude Code
-  yourself before your first write-up.
+- **Which coding agent.** If your Mac has one of Claude Code, Codex or Antigravity (its
+  command or its app), the installer uses it and says so. If it has more than one, pick
+  one by number, or press Enter for the one it suggests. If it has none, it offers to
+  install Claude Code: press Enter, or type `n` and install one yourself before your first
+  write-up. Change it later in **○ → Settings → *Agent***. It also mentions a local model
+  (Ollama or LM Studio) if it finds one; meetingrec doesn't write notes with those yet.
 - **Accessibility access for Hammerspoon.** You can click *Deny*. meetingrec doesn't use
   it.
 - **System audio permission for Hammerspoon.** macOS never shows a prompt for this one,
@@ -125,14 +130,15 @@ If the installer added Hammerspoon, its own hammer icon is hidden: meetingrec on
 **○**. To open Hammerspoon itself, press **Cmd+Space**, type *Hammerspoon* and press Return.
 See [Hammerspoon's own icon](.engine/docs/install-details.md#hammerspoons-own-icon).
 
-**Then sign in to Claude Code.** Open a **new** Terminal window, so it picks up the new
-PATH, and run:
+**Then sign in to your agent**, if you haven't before. The installer's last lines say how
+for the one it chose. For Claude Code: open a **new** Terminal window, so it picks up the
+new PATH, and run:
 ```bash
 claude
 ```
 Expected: Claude Code starts and asks you to choose a theme, then to log in. Follow the
-prompts. When you reach the `>` prompt, type `/exit`. If you use only the Claude app,
-open it and sign in there instead.
+prompts. When you reach the `>` prompt, type `/exit`. For Codex or Antigravity, run `codex`
+or `agy` once the same way. If you use only an agent's app, open it and sign in there.
 
 Then [set up Obsidian](#set-up-obsidian) (recommended).
 
@@ -179,8 +185,8 @@ straight to [Your first meeting](#your-first-meeting).
    (In the file picker, Cmd+Shift+G lets you paste the path.)
 
    **Already use Obsidian?** You can keep your notes in your own vault instead (see
-   [What Claude asks the first time](#what-claude-asks-the-first-time)), and Claude offers to
-   copy in the to-do page. Do steps 3 and 4 in whichever vaults you use.
+   [What your agent asks the first time](#what-your-agent-asks-the-first-time)), and the
+   agent offers to copy in the to-do page. Do steps 3 and 4 in whichever vaults you use.
 3. **Enable Bases** (in each vault): *Settings → Core plugins → Bases* → on. This powers
    `index.base`, a sortable table of all your meetings.
 4. **Install the Tasks plugin** (in each vault): *Settings → Community plugins → Turn on
@@ -201,12 +207,12 @@ straight to [Your first meeting](#your-first-meeting).
 1. **Before the call:** put on headphones, click **○** in the menu bar → *Start
    recording…*, type a title, click *Start*. Tell the others you're recording.
 2. **After the call:** click **● 34m** → *Stop*.
-3. **Write it up:** click **○** → *Write up notes…*. The Claude app opens with `scribe`
-   typed in (or Claude Code opens in Terminal, if you don't have the app or chose Terminal in
+3. **Write it up:** click **○** → *Write up notes…*. Your agent's app opens with `scribe`
+   typed in (or the agent opens in Terminal, if you don't have its app or chose Terminal in
    **○ → Settings → *Write up notes opens in***); press **Enter**.
-   The first time, Claude asks [a few setup questions](#what-claude-asks-the-first-time). Then
-   it asks about the meeting (who was there, what kind of meeting) and transcribes it.
-4. **Read it:** Claude tells you where the note is. Open it in Obsidian, where your to-dos
+   The first time, the agent asks [a few setup questions](#what-your-agent-asks-the-first-time).
+   Then it asks about the meeting (who was there, what kind of meeting) and transcribes it.
+4. **Read it:** the agent tells you where the note is. Open it in Obsidian, where your to-dos
    also show up on the `Tasks.md` dashboard, or in any Markdown editor.
 
 Team meeting instead? See [team notes](#write-team-notes-teamnotes).
@@ -232,7 +238,7 @@ meetingrec/
 │   ├── install.sh              #   the installer, also run by updates
 │   ├── config.example.sh       #   template for ~/.config/meetingrec/config.sh
 │   ├── docs/                   #   the manual install and other guides
-│   ├── lib/                    #   transcription and share-copy scripts the commands run
+│   ├── lib/                    #   transcription, checks and other helpers the commands run
 │   ├── tests/                  #   the automated checks
 │   └── tools/                  #   build scripts for the prebuilt downloads
 ├── scribe/                     # notes folder #1 (an Obsidian vault) — personal notes
@@ -256,19 +262,53 @@ and notes tables: change them as you like, and updates leave them alone.
 
 ---
 
+## Coding agents
+
+meetingrec records and transcribes; a coding agent writes the notes, following the
+instructions (skills) in `scribe/` and `teamnotes/`. It works with these three:
+
+| Agent | *Write up notes…* opens | `scribe` / `teamnotes` in Terminal need |
+| --- | --- | --- |
+| **Claude Code** | the Claude app's Code tab, or Claude Code in Terminal | the `claude` command |
+| **Codex** | the ChatGPT app (its Codex chats), or Codex in Terminal | the `codex` command |
+| **Antigravity** | the Antigravity app, or `agy` in Terminal | the `agy` command |
+
+- **Choose** in the installer, or later in **○ → Settings → *Agent***. App or Terminal:
+  **○ → Settings → *Write up notes opens in***. If you have only an agent's app, Terminal is
+  greyed out and *Write up notes…* opens the app.
+- **Antigravity's app** opens a write-up only in an Antigravity *project* that holds the
+  notes folder: in Antigravity, add `~/meetingrec/scribe` as a project (and
+  `~/meetingrec/teamnotes` for team notes). Until then *Write up notes…* opens it in
+  Terminal and says so.
+- **Codex in Terminal** works in a sandbox and asks before it runs the transcription
+  outside it, so Whisper can use the Mac's graphics chip. Say yes.
+- **Any other agent** that can run commands and read skill files may work too: ○ →
+  Settings → *Agent* → *Other command…*, with the command that starts it. The request is
+  added as its last word, and it always opens in Terminal. Only the three above have been
+  tried.
+- **Local models** (Ollama, LM Studio) aren't supported through the menu bar yet.
+
+The skills ask their questions with each agent's own question tool, and the notes come out
+the same.
+
+---
+
 ## What leaves your Mac
 
 Recording and transcription happen on your Mac. The audio files are never uploaded.
 
-Writing the notes happens in Claude Code, so these go to Anthropic:
+Writing the notes happens in your coding agent, so these go to its provider (Anthropic for
+Claude Code, OpenAI for Codex, Google for Antigravity):
 - the transcript;
 - your answers to the skill's questions (title, attendees, meeting type);
 - your names and rules files, and the team profile for team notes;
-- anything else Claude Code reads while it works, such as files in your notes vault.
+- anything else the agent reads while it works, such as files in your notes vault.
 
-How Anthropic stores and uses that depends on your Claude plan and settings: see
-[Anthropic's privacy policy](https://www.anthropic.com/legal/privacy). If a meeting
-shouldn't leave your Mac, record it but don't write it up with Claude.
+How the provider stores and uses that depends on your plan and settings: see
+[Anthropic's](https://www.anthropic.com/legal/privacy),
+[OpenAI's](https://openai.com/policies/privacy-policy/) or
+[Google's](https://policies.google.com/privacy) privacy policy. If a meeting shouldn't leave
+your Mac, record it but don't write it up with an agent.
 
 meetingrec also goes online to install and update itself: GitHub for its own files and
 tools, and Hugging Face for the Whisper model. It checks GitHub for updates once a day
@@ -310,14 +350,14 @@ Each recording is a folder in `scribe/input/` (or wherever `OUTPUT_ROOT` points;
 
 Click **○** → *Write up notes…* and press **Enter**, or type `scribe` in Terminal from any
 folder (manual install: see [step 7](.engine/docs/manual-install.md#7-add-the-commands-optional)).
-By hand: `cd ~/meetingrec/scribe`, run `claude`, then type **`scribe`** or "write up notes from
-this meeting".
+By hand: `cd ~/meetingrec/scribe`, start your agent (`claude`, `codex` or `agy`), then type
+**`scribe`** or "write up notes from this meeting".
 
 The skill:
 1. finds the newest recording in `input/`;
 2. asks a few quick questions (title, attendees, type), using the names to help Whisper;
 3. transcribes locally with Whisper, about 90 seconds for a 30-minute call;
-4. sends the transcript to Claude, which writes `meeting-notes/<Title>.md` in your notes
+4. sends the transcript to your agent, which writes `meeting-notes/<Title>.md` in your notes
    vault and tells you the path (see [What leaves your Mac](#what-leaves-your-mac));
 5. asks whether to delete the transcript or move it to `~/meetingrec/scribe/transcripts/`,
    then clears the recording out of `input/`. The audio is deleted either way, unless you
@@ -344,8 +384,9 @@ For a meeting whose notes go to the whole team:
    Move the folder, not just the `.wav` files inside it. Phone recordings of in-person
    meetings and transcripts can go straight into `teamnotes/input/`.
 2. Click **○** → *Write up team notes…* and press **Enter**, or type `teamnotes` in
-   Terminal. By hand: `cd ~/meetingrec/teamnotes`, run `claude`, then type **"team notes"**.
-3. Pick the **team** profile (or **other**). The first time you pick **team**, Claude asks
+   Terminal. By hand: `cd ~/meetingrec/teamnotes`, start your agent, then type **"team
+   notes"**.
+3. Pick the **team** profile (or **other**). The first time you pick **team**, the agent asks
    for your team's name and roster. Mark who was present, and confirm the action-item owners
    before anything is written.
 4. You get two files:
@@ -363,10 +404,10 @@ For a meeting whose notes go to the whole team:
 
 Everything personal lives in files that **git ignores**: your colleagues', customers' and
 partners' names are never committed, and updating meetingrec never overwrites them. You
-rarely need to open them: most changes are a sentence to Claude while you write up a
+rarely need to open them: most changes are a sentence to your agent while you write up a
 meeting, or a click in **○ → Settings**.
 
-| I want to… | Say to Claude | Or |
+| I want to… | Say to your agent | Or |
 | --- | --- | --- |
 | Keep my notes in a vault I already use | "keep my notes in ~/Documents/My Vault" | ○ → Settings → *Personal notes* → *Choose folder…* |
 | Keep team notes somewhere else | "keep team notes in ~/…" | ○ → Settings → *Team notes* |
@@ -380,12 +421,14 @@ meeting, or a click in **○ → Settings**.
 | Move the meetingrec folder itself | — | `meetingrec move ~/Projects` (see [Moving things](#moving-things)) |
 | Remove meetingrec from this Mac | — | ○ → Settings → *Uninstall meetingrec…* (see [Uninstalling](#uninstalling)) |
 | Stop the daily update check | — | ○ → Settings → untick *Check for updates daily* |
-| Write up notes in Terminal instead of the Claude app | — | ○ → Settings → *Write up notes opens in* → *Terminal* |
+| Write notes with another coding agent | — | ○ → Settings → *Agent* (see [Coding agents](#coding-agents)) |
+| Write up notes in Terminal instead of the agent's app | — | ○ → Settings → *Write up notes opens in* → *Terminal* |
 | Use Homebrew's ffmpeg and whisper.cpp instead | — | `meetingrec config set USE_HOMEBREW on`, then `meetingrec update` |
 | Use a more accurate Whisper model | "re-run with medium.en" ([download it first](.engine/docs/settings.md#whisper-model)) | — |
 
-You don't need a meeting to change these. Open Claude in the notes folder
-(`cd ~/meetingrec/scribe`, or `teamnotes` for team notes, then `claude`) and ask it to
+You don't need a meeting to change these. Start your agent in the notes folder
+(`cd ~/meetingrec/scribe`, or `teamnotes` for team notes, then `claude`, `codex` or `agy`)
+and ask it to
 show, change or remove your names, rules or team profiles: "what rules do I have?", "delete the rule about Key
 Points", "Pat is now the team lead". The files it edits are listed under
 [Where everything is saved](.engine/docs/settings.md#where-everything-is-saved). Don't use the `scribe` command for
@@ -393,8 +436,10 @@ this: it starts a write-up.
 
 Settings saves to `~/.config/meetingrec/config.sh`. From Terminal, `meetingrec config list`
 shows every setting and `meetingrec config set NOTES_VAULT ~/path` changes one (also
-`TEAM_VAULT`, `OUTPUT_ROOT`, `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`, and `WRITEUP_IN` with `app` or `terminal`). Changing a notes
-folder doesn't move the notes already in the old one; ask Claude to move them.
+`TEAM_VAULT`, `OUTPUT_ROOT`, `AUTO_UPDATE_CHECK` or `USE_HOMEBREW` with `on` or `off`,
+`WRITEUP_IN` with `app` or `terminal`, and `NOTES_AGENT` with the command that starts your
+agent: `claude`, `codex`, `agy`, or another). Changing a notes folder doesn't move the notes
+already in the old one; ask your agent to move them.
 
 Pick the vault itself, not its `meeting-notes` folder: notes go in a `meeting-notes` folder
 inside whatever you pick, and meetingrec offers the vault instead if you pick a folder inside
@@ -403,15 +448,15 @@ own, and nothing is ever overwritten. A note whose name is taken (a weekly meeti
 gets the date added, like `Acme check-in (2026-10-30).md`. Team notes already have the date
 in their name, so they get a number instead.
 
-### What Claude asks the first time
+### What your agent asks the first time
 
-- **Your name** (personal notes), and how Whisper tends to mishear it. It's how Claude
+- **Your name** (personal notes), and how Whisper tends to mishear it. It's how the agent
   tells which to-dos are yours.
 - **Where your notes go:** meetingrec's own `scribe/` or `teamnotes/` vault, or one you
-  already use. The installer asks this for personal notes, so Claude only asks if you
+  already use. The installer asks this for personal notes, so the agent only asks if you
   skipped it; team notes are asked the first time you write them. Personal and team notes
-  need separate vaults. Claude Code asks permission
-  the first time it writes outside the meetingrec folder.
+  need separate vaults. Your agent may ask permission the first time it writes outside the
+  meetingrec folder.
 - **Your team's name and roster**, the first time you pick the **team** profile.
 
 For where each setting is saved, how rules work, and the Whisper model, see
@@ -504,11 +549,14 @@ Issues are public, so never paste a transcript, note text, or anyone's name into
 | No notifications from the menu bar (starting, stopping, updates) | Turn on **System Settings → Notifications → Hammerspoon → Allow notifications**. |
 | No warning when a track stops recording mid-call | Those warnings come from the recorder script, so macOS lists them as **Script Editor**. Turn on **System Settings → Notifications → Script Editor → Allow notifications**. It only appears there after the first one. |
 | `your recordings folder … is missing` when starting | The recordings folder you chose was moved, renamed, or is on a drive that isn't connected, and meetingrec won't record into a new folder in its place. Reconnect the drive, or choose the folder again in **○ → Settings → Recordings**. |
-| `meeting-notes` skill not found | Claude was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start `claude` from inside `scribe/` (`teamnotes/` for team notes). |
+| `meeting-notes` skill not found | The agent was started in the wrong folder. Use **○** → *Write up notes…* or the `scribe` command, or start the agent from inside `scribe/` (`teamnotes/` for team notes). |
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
+| `notes are set to be written by …, but there's no … command` | `scribe` and `teamnotes` need your agent's command. Install it (the message says how), use *Write up notes…* to open its app, or pick another agent: ○ → Settings → *Agent*. |
+| "Opened in Terminal: Antigravity has no project for …" | Add that folder as a project in Antigravity, so *Write up notes…* can open the app (see [Coding agents](#coding-agents)). |
+| Codex asks to run `meetingrec transcribe` outside its sandbox | Say yes: inside the sandbox Whisper can't use the Mac's graphics chip. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |
 | ○ button missing or frozen | ○ → *Reload config*. If the ○ is gone or that fails, run `killall Hammerspoon`, then open Hammerspoon again: press **Cmd+Space**, type *Hammerspoon* and press Return. Check `~/.hammerspoon/meetingrec.log`. |
-| `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Run `claude` in the repo folder and ask it to help keep your edit, then update again. |
+| `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Start your agent in the repo folder and ask it to help keep your edit, then update again. |
 | Tasks dashboard is empty | Install and enable the Tasks plugin in *that* vault ([Set up Obsidian](#set-up-obsidian)). |
 | `claude: command not found` | Open a new Terminal window. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and add that line to `~/.zprofile`. |
 
