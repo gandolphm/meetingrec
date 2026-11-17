@@ -25,7 +25,7 @@ jobs:
           shellcheck --version
           shellcheck -S warning \
             .engine/bin/meetingrec .engine/bin/scribe .engine/bin/teamnotes \
-            .engine/install.sh .engine/lib/transcribe.sh .engine/tools/*.sh \
+            .engine/bin/*.command .engine/install.sh .engine/lib/*.sh .engine/tools/*.sh \
             .engine/tests/*.sh
 
       - name: Python compiles

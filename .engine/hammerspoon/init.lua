@@ -415,37 +415,85 @@ end
 -- is needed, or Terminal. If that one can't open, the other is tried. Both are
 -- a plain `open` of a link, so no macOS permission is involved. The skills work
 -- the same however Claude was started.
+--
+-- Codex (NOTES_AGENT is plain "codex") has an app link too, and gets the same
+-- choice. Nothing opens it in Terminal by a link, so its Terminal is the one
+-- every other agent gets: bin/scribe.command or bin/teamnotes.command. macOS
+-- runs a .command file in a new Terminal window, again with no permission, and
+-- the file runs the scribe or teamnotes command, which starts the agent with
+-- the request sent. An agent with options, "claude --model x" included, always
+-- goes that way: a link can't carry them.
 -- ---------------------------------------------------------------------------
 
 local function urlEncode(s)
   return (s:gsub("[^%w%-%._~/]", function(c) return string.format("%%%02X", string.byte(c)) end))
 end
 
-local CLAUDE_APP = { name = "Claude app", link = "claude://code/new", folderParam = "folder" }
-local CLAUDE_TERMINAL = { name = "Claude Code in Terminal", link = "claude-cli://open", folderParam = "cwd" }
+-- An agent's app or Terminal link: the notes folder and the request ride along
+-- as two parameters, and the request waits in the box for Enter.
+local CLAUDE_APP = { name = "Claude app", link = "claude://code/new", folderParam = "folder", textParam = "q",
+  insteadOfTerminal = " Run claude once in Terminal, then try again." }
+local CLAUDE_TERMINAL = { name = "Claude Code in Terminal", link = "claude-cli://open", folderParam = "cwd", textParam = "q" }
+-- Codex's app is the ChatGPT app, which kept the codex:// links.
+local CODEX_APP = { name = "ChatGPT app", link = "codex://threads/new", folderParam = "path", textParam = "prompt",
+  insteadOfTerminal = "" }
+-- Any agent, in Terminal: bin/scribe.command or bin/teamnotes.command.
+local COMMAND_FILE = { name = "Terminal" }
+
+-- Which agents have an app link, and what stands in for Terminal. Only the
+-- plain command counts: a link can't carry options.
+local function writeUpTargets(agent)
+  if agent == "claude" then return CLAUDE_APP, CLAUDE_TERMINAL end
+  if agent == "codex" then return CODEX_APP, COMMAND_FILE end
+  return nil, COMMAND_FILE
+end
+
+local function openTarget(target, folder, request)
+  local what = REPO .. "/.engine/bin/" .. folder .. ".command"
+  if target.link then
+    what = target.link .. "?" .. target.folderParam .. "=" .. urlEncode(REPO .. "/" .. folder) ..
+      "&" .. target.textParam .. "=" .. urlEncode(request)
+  end
+  local _, opened = hs.execute('open "' .. what .. '"')
+  return opened
+end
+
+-- Both belong to Settings, further down, where loadSettings is defined.
+local settings = {}   -- NAME -> { value = "…", isDefault = true|false }
+local loadSettings
 
 local function writeUp(folder, request)
   local dir = REPO .. "/" .. folder
   -- Asked rather than assumed, so a change made from Terminal counts at once.
-  run({ "config", "get", "WRITEUP_IN" }, function(exitCode, stdOut)
-    local terminalFirst = exitCode == 0 and stdOut:match("^terminal") ~= nil
-    local order = terminalFirst and { CLAUDE_TERMINAL, CLAUDE_APP } or { CLAUDE_APP, CLAUDE_TERMINAL }
+  run({ "config", "list" }, function(exitCode, stdOut)
+    local agent = exitCode == 0 and stdOut:match("NOTES_AGENT\t([^\t\n]*)") or "claude"
+    -- Settings shows the agent from its cache. Bring that up to date when the
+    -- agent was changed from Terminal since the menu loaded.
+    if not settings.NOTES_AGENT or settings.NOTES_AGENT.value ~= agent then loadSettings() end
+    local app, terminal = writeUpTargets(agent)
+    local terminalFirst = exitCode == 0 and stdOut:match("WRITEUP_IN\tterminal\t") ~= nil
+    local order = { app, terminal }
+    if terminalFirst or not app then order = { terminal, app } end
     for _, target in ipairs(order) do
-      local query = "?" .. target.folderParam .. "=" .. urlEncode(dir) .. "&q=" .. urlEncode(request)
-      local _, opened = hs.execute('open "' .. target.link .. query .. '"')
-      if opened then
-        log("write-up: %s in %s", target.name, dir)
-        -- Having no Claude app is normal; asking for Terminal and not getting it isn't.
-        if terminalFirst and target == CLAUDE_APP then
-          notify("MeetingRec", "Couldn't open Terminal, so this opened in the Claude app. " ..
-            "Run claude once in Terminal, then try again.")
+      if openTarget(target, folder, request) then
+        log("write-up: %s in %s", target.link and target.name or (agent .. " in Terminal"), dir)
+        -- Having no app is normal; asking for Terminal and not getting it isn't.
+        if terminalFirst and target == app then
+          notify("MeetingRec", "Couldn't open Terminal, so this opened in the " .. app.name .. "." ..
+            app.insteadOfTerminal)
         end
         return
       end
     end
-    log("write-up: nothing handles claude:// or claude-cli:// links")
-    notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
-      folder .. " in Terminal.")
+    if agent == "claude" then
+      log("write-up: nothing handles claude:// or claude-cli:// links")
+      notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
+        folder .. " in Terminal.")
+    else
+      log("write-up: couldn't open %s.command", folder)
+      notify("MeetingRec", "Couldn't open a Terminal window for " .. agent .. ". Type " ..
+        folder .. " in Terminal.")
+    end
   end)
 end
 
@@ -461,9 +509,8 @@ end
 -- ---------------------------------------------------------------------------
 
 local HOME = os.getenv("HOME")
-local settings = {}   -- NAME -> { value = "…", isDefault = true|false }
 
-local function loadSettings(after)
+loadSettings = function(after)
   run({ "config", "list" }, function(exitCode, stdOut)
     if exitCode == 0 then
       for name, value, kind in stdOut:gmatch("([%w_]+)\t([^\t\n]*)\t(%a+)") do
@@ -642,6 +689,17 @@ local function settingsMenu()
   local autoOn = not auto or auto.value ~= "off"
   local writeUpIn = settings.WRITEUP_IN
   local inTerminal = writeUpIn ~= nil and writeUpIn.value == "terminal"
+  -- The app-or-Terminal choice is for the agents that have an app link. Any
+  -- other always opens in Terminal, so the menu says which agent instead.
+  local agent = settings.NOTES_AGENT and settings.NOTES_AGENT.value or "claude"
+  local app = writeUpTargets(agent)
+  local writeUpItem = { title = "Notes are written by: " .. agent .. " (in Terminal)", disabled = true }
+  if app then
+    writeUpItem = { title = "Write up notes in", menu = {
+        { title = app.name, checked = not inTerminal, fn = function() saveSetting("WRITEUP_IN", "app") end },
+        { title = "Terminal", checked = inTerminal, fn = function() saveSetting("WRITEUP_IN", "terminal") end },
+      } }
+  end
   return {
     { title = "Check for updates daily", checked = autoOn, fn = function()
         local want = autoOn and "off" or "on"
@@ -649,10 +707,7 @@ local function settingsMenu()
           if want == "on" then startAutoCheck() else stopAutoCheck() end
         end)
       end },
-    { title = "Write up notes in", menu = {
-        { title = "Claude app", checked = not inTerminal, fn = function() saveSetting("WRITEUP_IN", "app") end },
-        { title = "Terminal", checked = inTerminal, fn = function() saveSetting("WRITEUP_IN", "terminal") end },
-      } },
+    writeUpItem,
     { title = "-" },
     folderMenu("NOTES_VAULT", "Personal notes"),
     folderMenu("TEAM_VAULT", "Team notes"),

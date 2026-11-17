@@ -1066,7 +1066,13 @@ cmd_update() {
 #   set NAME VALUE   for a folder, "" means "the default", which follows the
 #                    repo if it moves.
 #   list             every setting, one per line: NAME<tab>value<tab>default|custom
-CONFIG_NAMES="NOTES_VAULT TEAM_VAULT OUTPUT_ROOT AUTO_UPDATE_CHECK USE_HOMEBREW WRITEUP_IN"
+#
+# NOTES_AGENT is the coding agent that writes up notes: the command that starts
+# it, such as "claude" (the default), "codex", or a command with options.
+# Named NOTES_AGENT, not AGENT: a variable called AGENT that a shell or an agent
+# had already exported would be read as the setting whenever config.sh has no
+# line for it.
+CONFIG_NAMES="NOTES_VAULT TEAM_VAULT OUTPUT_ROOT AUTO_UPDATE_CHECK USE_HOMEBREW WRITEUP_IN NOTES_AGENT"
 
 config_default() {
   case "$1" in
@@ -1076,6 +1082,7 @@ config_default() {
     AUTO_UPDATE_CHECK) echo "on" ;;
     USE_HOMEBREW) echo "off" ;;
     WRITEUP_IN) echo "app" ;;
+    NOTES_AGENT) echo "claude" ;;
     *) die "config: NAME must be one of: $CONFIG_NAMES" ;;
   esac
 }
@@ -1126,6 +1133,22 @@ cmd_config() {
     set)
       [ $# -eq 3 ] || die "usage: meetingrec config set $name <value>"
       local value="$3"
+      if [ "$name" = NOTES_AGENT ]; then
+        # The command that starts the agent, options included. It's split on
+        # spaces when it's run (lib/start-agent.sh) and never handed to a shell,
+        # so no quoting: that also keeps config.sh valid.
+        case "$value" in
+          *'"'*|*"'"*|*'$'*|*'`'*|*'\'*|*$'\n'*)
+            die "config: the agent command can't contain quotes, \$, \` or \\. Options with spaces in them aren't supported." ;;
+        esac
+        local words=()
+        read -r -a words <<<"$value"
+        value="${words[*]:-}"
+        [ -n "$value" ] || value="$default"
+        config_write "$name" "$name=\"$value\""
+        printf '%s → %s\n' "$name" "$value"
+        return 0
+      fi
       local choice1="" choice2=""
       case "$name" in
         AUTO_UPDATE_CHECK|USE_HOMEBREW) choice1=on choice2=off ;;

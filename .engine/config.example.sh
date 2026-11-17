@@ -63,10 +63,22 @@ HAMMERSPOON_SHA256="11bb1c90faf5427f37c7bd4fe7eab9774ae43e1d5cb020c5b3088dac3284
 # itself. "off" leaves only ○ → Check for updates…. Also in ○ → Settings.
 # AUTO_UPDATE_CHECK="on"
 
-# Where the menu bar's "Write up notes…" opens Claude Code: "app" for the Claude
-# app, "terminal" for Terminal. If that one can't open, it tries the other. Also
-# in ○ → Settings.
+# Where the menu bar's "Write up notes…" opens the agent: "app" for its app,
+# "terminal" for Terminal. If that one can't open, it tries the other. Also in
+# ○ → Settings. For Claude Code (the Claude app) and Codex (the ChatGPT app):
+# any other agent (NOTES_AGENT, below), or one with options, always opens in
+# Terminal.
 # WRITEUP_IN="app"
+
+# The coding agent that writes up your notes: the command that starts it. The
+# scribe and teamnotes commands and the menu bar's "Write up notes…" run it in
+# the notes folder with the request added as the last word. "claude" is Claude
+# Code. "codex" is Codex, and "agy" is Antigravity, which gets the request after
+# -i. Any other command works the same way, and options can follow the command,
+# as in "codex --oss --local-provider ollama" for a model running on this Mac.
+# No quotes inside it, so no options with spaces. To change it, run:
+#   meetingrec config set NOTES_AGENT codex
+# NOTES_AGENT="claude"
 
 # Use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of the pinned copies
 # install.sh downloads. "on" gets whatever versions Homebrew currently has, and

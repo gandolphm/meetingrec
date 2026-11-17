@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 #
-# scribe — write up personal notes from any folder: opens Claude Code in scribe/, where
-# the meeting-notes skill lives, and starts it.
+# scribe — write up personal notes from any folder: opens the coding agent in
+# scribe/, where the meeting-notes skill lives, and starts it.
 #
 #   scribe                       start the write-up
 #   scribe keep the transcript   anything after it goes along as extra instructions
 #
-# The same as: cd <repo>/scribe && claude, then typing: scribe
+# The agent is Claude Code unless NOTES_AGENT says otherwise (see
+# lib/start-agent.sh). With Claude Code it's the same as:
+# cd <repo>/scribe && claude, then typing: scribe
 set -euo pipefail
 
 # Follow the ~/.local/bin link back to the repo, wherever it was cloned.
 REPO_ROOT="$(dirname "$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")")"
-CLAUDE="$(command -v claude || echo "$HOME/.local/bin/claude")"
-[ -x "$CLAUDE" ] || { echo "scribe: Claude Code isn't installed. Install it: curl -fsSL https://claude.ai/install.sh | bash" >&2; exit 1; }
-
-cd "$REPO_ROOT/scribe"
-exec "$CLAUDE" "scribe${*:+ $*}"
+exec bash "$REPO_ROOT/.engine/lib/start-agent.sh" scribe "scribe" "$@"

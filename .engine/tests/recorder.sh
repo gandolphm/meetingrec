@@ -448,6 +448,80 @@ mrc config set WRITEUP_IN terminal >/dev/null
 check "...and saves terminal" [ "$(mrc config get WRITEUP_IN)" = terminal ]
 mrc config set WRITEUP_IN "" >/dev/null
 check "...and an empty value goes back to the app" [ "$(mrc config get WRITEUP_IN)" = app ]
+check "notes are written by Claude Code by default" [ "$(mrc config get NOTES_AGENT)" = claude ]
+check "...and an AGENT variable in the environment isn't the setting" [ "$(AGENT=other mrc config get NOTES_AGENT)" = claude ]
+mrc config set NOTES_AGENT "  codex   --oss --local-provider  ollama " >/dev/null
+check "an agent command is saved with its options, tidied" [ "$(mrc config get NOTES_AGENT)" = "codex --oss --local-provider ollama" ]
+check "...and list shows it" has "$(mrc config list)" $'^NOTES_AGENT\tcodex --oss --local-provider ollama\tcustom$'
+for bad in 'codex "x"' "codex 'x'" 'codex $HOME' 'codex `id`' 'codex \x'; do
+  out="$(mrc config set NOTES_AGENT "$bad" 2>&1)"; rc=$?
+  check "an agent command with ${bad#codex } in it is refused" [ "$rc" -ne 0 ]
+done
+check "...and the saved one is kept" [ "$(mrc config get NOTES_AGENT)" = "codex --oss --local-provider ollama" ]
+check "...and config.sh still loads" bash -c '. "$1"' _ "$CFG"
+mrc config set NOTES_AGENT "" >/dev/null
+check "an empty agent goes back to Claude Code" [ "$(mrc config get NOTES_AGENT)" = claude ]
+
+# The stand-in agents print the folder they were started in and then each word
+# they were given, one per line.
+echo "scribe and teamnotes: starting the agent"
+AGENTS="$T/agents"
+mkdir -p "$AGENTS"
+for a in claude codex agy my-agent; do
+  printf '#!/bin/bash\npwd\nprintf "%%s\\n" "$@"\n' > "$AGENTS/$a"
+  chmod +x "$AGENTS/$a"
+done
+# PATH is the stand-ins and the system's tools only: no real agent, wherever the
+# person running the tests keeps theirs.
+launch() { local cmd="$1"; shift; MEETINGREC_CONFIG="$CFG" PATH="$AGENTS:/usr/bin:/bin" "$REPO/.engine/bin/$cmd" "$@" 2>&1; }
+lines() { printf '%s\n' "$@"; }
+real_repo="$(cd "$REPO" && pwd -P)"
+
+check "scribe starts Claude Code in scribe/ with the request" \
+  [ "$(launch scribe)" = "$(lines "$real_repo/scribe" "scribe")" ]
+check "...and extra words go along in the same request" \
+  [ "$(launch scribe keep the transcript)" = "$(lines "$real_repo/scribe" "scribe keep the transcript")" ]
+check "teamnotes starts it in teamnotes/ with its own request" \
+  [ "$(launch teamnotes for the board)" = "$(lines "$real_repo/teamnotes" "team notes for the board")" ]
+ln -s "$REPO/.engine/bin/scribe" "$T/scribe-link"
+check "a link to the command finds the repo, as from ~/.local/bin" \
+  [ "$(MEETINGREC_CONFIG="$CFG" PATH="$AGENTS:/usr/bin:/bin" "$T/scribe-link" 2>&1)" = "$(lines "$real_repo/scribe" "scribe")" ]
+
+out="$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)"; rc=$?
+check "without Claude Code, scribe stops" [ "$rc" -eq 1 ]
+check "...and says how to install it" has "$out" "^scribe: Claude Code isn't installed. Install it: curl -fsSL https://claude.ai/install.sh | bash$"
+out="$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/teamnotes" 2>&1)"
+check "...under its own name for teamnotes" has "$out" "^teamnotes: Claude Code isn't installed"
+mkdir -p "$HOME/.local/bin"
+cp "$AGENTS/claude" "$HOME/.local/bin/claude"
+check "Claude Code in ~/.local/bin is found when PATH doesn't have it yet" \
+  [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" "scribe")" ]
+rm "$HOME/.local/bin/claude"
+
+mrc config set NOTES_AGENT "claude --model opus" >/dev/null
+check "Claude Code's options come before the request" \
+  [ "$(launch scribe)" = "$(lines "$real_repo/scribe" --model opus "scribe")" ]
+mrc config set NOTES_AGENT codex >/dev/null
+check "Codex gets the request as its one word" \
+  [ "$(launch teamnotes)" = "$(lines "$real_repo/teamnotes" "team notes")" ]
+mrc config set NOTES_AGENT "codex --oss --local-provider ollama" >/dev/null
+check "...after its options" \
+  [ "$(launch scribe keep it)" = "$(lines "$real_repo/scribe" --oss --local-provider ollama "scribe keep it")" ]
+mrc config set NOTES_AGENT agy >/dev/null
+check "Antigravity gets the request after -i" \
+  [ "$(launch scribe)" = "$(lines "$real_repo/scribe" -i "scribe")" ]
+mrc config set NOTES_AGENT "$AGENTS/my-agent --prompt" >/dev/null
+check "any other command gets its options, then the request" \
+  [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" --prompt "scribe")" ]
+check "the .command file the menu opens starts the same thing" \
+  [ "$(launch teamnotes.command)" = "$(lines "$real_repo/teamnotes" --prompt "team notes")" ]
+check "...and both are executable" [ -x "$REPO/.engine/bin/scribe.command" -a -x "$REPO/.engine/bin/teamnotes.command" ]
+mrc config set NOTES_AGENT "not-installed --fast" >/dev/null
+out="$(launch scribe)"; rc=$?
+check "an agent that isn't installed stops the command" [ "$rc" -eq 1 ]
+check "...naming the command that's missing" has "$out" '^scribe: .*"not-installed --fast".*no not-installed command'
+check "...and how to go back to Claude Code" has "$out" 'meetingrec config set NOTES_AGENT claude$'
+mrc config set NOTES_AGENT "" >/dev/null
 
 echo "note-path"
 notes="$HOME/Notes Vault/meeting-notes"
