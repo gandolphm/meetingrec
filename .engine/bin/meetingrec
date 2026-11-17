@@ -12,6 +12,7 @@
 #                        [--yes] [--dry-run]
 #   meetingrec vault-root <folder>   (for the installer, skills and menu bar)
 #   meetingrec antigravity-project <folder>   (for the menu bar)
+#   meetingrec agents                (for the installer and menu bar)
 #   meetingrec prepare | session-info | transcribe | note-path | share-copy | clear-input
 #                                    (the routine steps of writing notes, for the skills;
 #                                    see "Writing notes" below)
@@ -1558,6 +1559,42 @@ cmd_uninstall() {
 }
 
 # --------------------------------------------------------------------------
+# agents
+# --------------------------------------------------------------------------
+# Which of the coding agents meetingrec knows are on this Mac, for the
+# installer's question and the menu's choice. One line each:
+#
+#   <command><tab><name><tab><command's path or ""><tab><app's path or "">
+#
+# An agent counts as installed with either. The app is what the menu bar's
+# "Write up notes…" can open; scribe and teamnotes need the command. Looked for
+# in the caller's PATH and where these agents install themselves, since the
+# menu bar's PATH is short and this script sets its own.
+#
+#   meetingrec agents
+KNOWN_AGENTS="claude|Claude Code|Claude.app
+codex|Codex|ChatGPT.app
+agy|Antigravity|Antigravity.app"
+
+cmd_agents() {
+  [ $# -eq 0 ] || die "usage: meetingrec agents"
+  # Overridden by the tests, so the agents on the Mac running them don't count.
+  local dirs="${MEETINGREC_AGENT_DIRS-$CALLER_PATH:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.npm-global/bin}"
+  local app_dirs="${MEETINGREC_APP_DIRS-/Applications:$HOME/Applications}"
+  local line cmd name app found_cmd found_app d
+  while IFS='|' read -r cmd name app; do
+    found_cmd="" found_app=""
+    while IFS= read -r d; do
+      [ -n "$d" ] && [ -x "$d/$cmd" ] && [ ! -d "$d/$cmd" ] && { found_cmd="$d/$cmd"; break; }
+    done <<<"${dirs//:/$'\n'}"
+    while IFS= read -r d; do
+      [ -n "$d" ] && [ -d "$d/$app" ] && { found_app="$d/$app"; break; }
+    done <<<"${app_dirs//:/$'\n'}"
+    printf '%s\t%s\t%s\t%s\n' "$cmd" "$name" "$found_cmd" "$found_app"
+  done <<<"$KNOWN_AGENTS"
+}
+
+# --------------------------------------------------------------------------
 # antigravity-project
 # --------------------------------------------------------------------------
 # Prints the ID of the Antigravity project that holds <folder>, for the menu
@@ -1994,6 +2031,7 @@ case "${1:-}" in
   uninstall) shift; cmd_uninstall "$@" ;;
   vault-root) shift; cmd_vault_root "$@" ;;
   antigravity-project) shift; cmd_antigravity_project "$@" ;;
+  agents) shift; cmd_agents "$@" ;;
   prepare)      shift; cmd_prepare "$@" ;;
   session-info) shift; cmd_session_info "$@" ;;
   transcribe)   shift; cmd_transcribe "$@" ;;

@@ -590,12 +590,84 @@ EOF
   fi
 }
 
+# The coding agent that writes up notes, saved as NOTES_AGENT. Asked only on a
+# first install, and only when this Mac has another agent meetingrec knows
+# (Codex, Antigravity): with none, it's Claude Code, as it always was. The
+# default is Claude Code when it's installed, otherwise the first agent found,
+# so nobody is pushed to install one they don't use. Never during an update,
+# never when NOTES_AGENT is already saved, and never without a keyboard.
+AGENT=claude AGENT_KIND=claude AGENT_NAME="Claude Code" AGENT_CMD="" AGENT_APP=""
+choose_agent() {
+  local mr="$REPO/.engine/bin/meetingrec" saved cmd name path app i reply where
+  local cmds=() names=() paths=() apps=() shown=() n=0 default="" others=0
+  # env -u: a NOTES_AGENT variable in this shell isn't the saved setting.
+  saved="$(env -u NOTES_AGENT "$mr" config get NOTES_AGENT 2>/dev/null)"
+  AGENT="${saved:-claude}"
+  # Read with "|" between fields: with a tab, read would merge an empty field
+  # into the next one (a tab is whitespace to it).
+  while IFS='|' read -r cmd name path app; do
+    cmds+=("$cmd") names+=("$name") paths+=("$path") apps+=("$app")
+    [ "$cmd" != claude ] && [ -n "$path$app" ] && others=$((others + 1))
+  done < <("$mr" agents | tr '\t' '|')
+
+  if [ -z "$UPDATE" ] && [ "$others" -gt 0 ] && [ -t 0 ] \
+      && ! grep -q '^NOTES_AGENT=' "$HOME/.config/meetingrec/config.sh" 2>/dev/null; then
+    step "Coding agent"
+    echo "  Which coding agent should write up your notes?"
+    for i in "${!cmds[@]}"; do
+      # Claude Code is always offered, since this installer can add it.
+      [ "${cmds[$i]}" = claude ] || [ -n "${paths[$i]}${apps[$i]}" ] || continue
+      n=$((n + 1)) shown+=("$i")
+      if [ -n "${paths[$i]}" ] && [ -n "${apps[$i]}" ]; then where="the ${cmds[$i]} command and the app"
+      elif [ -n "${paths[$i]}" ]; then where="the ${cmds[$i]} command"
+      elif [ -n "${apps[$i]}" ]; then where="the app; scribe in Terminal needs the ${cmds[$i]} command too"
+      else where="not installed yet; this installer can add it"; fi
+      printf '    %d. %s (%s)\n' "$n" "${names[$i]}" "$where"
+      # The default: Claude Code when it's installed, otherwise the first one found.
+      if [ -n "${paths[$i]}${apps[$i]}" ] && { [ -z "$default" ] || [ "${cmds[$i]}" = claude ]; }; then
+        default="$n"
+      fi
+    done
+    echo "  To change it later: ○ → Settings → Notes are written by."
+    while :; do
+      read -r -p "  Number [$default]: " reply
+      reply="${reply:-$default}"
+      case "$reply" in ""|*[!0-9]*) reply=0 ;; esac
+      [ "$reply" -ge 1 ] && [ "$reply" -le "$n" ] && break
+      note "type a number from 1 to $n"
+    done
+    AGENT="${cmds[${shown[$((reply - 1))]}]}"
+    "$mr" config set NOTES_AGENT "$AGENT" >/dev/null || die "Couldn't save NOTES_AGENT to your config."
+  fi
+
+  # The name, command and app, for what the rest of the installer says.
+  AGENT_KIND="${AGENT%% *}" AGENT_KIND="${AGENT_KIND##*/}" AGENT_NAME="$AGENT"
+  for i in "${!cmds[@]}"; do
+    [ "${cmds[$i]}" = "$AGENT_KIND" ] || continue
+    AGENT_NAME="${names[$i]}" AGENT_CMD="${paths[$i]}" AGENT_APP="${apps[$i]}"
+  done
+  # Claude Code has a step of its own (install_claude).
+  [ "$AGENT_KIND" = claude ] && return
+  [ -n "$reply" ] || step "Coding agent"
+  if [ -n "$AGENT_CMD$AGENT_APP" ]; then
+    ok "notes are written by $AGENT_NAME"
+  elif command -v "${AGENT%% *}" >/dev/null 2>&1; then
+    ok "notes are written by $AGENT_NAME"
+  else
+    note "notes are set to be written by $AGENT, which isn't on this Mac. Install it, or"
+    note "pick another: ○ → Settings → Notes are written by."
+  fi
+}
+
 # Claude Code comes two ways, and either one writes up notes: the claude command,
 # and the Code tab of the Claude app (which the menu bar opens first).
 has_claude_cli() { command -v claude >/dev/null 2>&1 || [ -x "$HOME/.local/bin/claude" ]; }
 claude_app() { ls -d /Applications/Claude.app "$HOME/Applications/Claude.app" 2>/dev/null | head -n 1; }
 
 install_claude() {
+  # Only when Claude Code writes the notes: with another agent chosen, it isn't
+  # needed, so it's neither checked nor offered.
+  [ "$AGENT_KIND" = claude ] || return 0
   step "Claude Code"
   local app yn
   app="$(claude_app)"
@@ -853,15 +925,31 @@ EOF
 
 finish() {
   local sign_in
-  if has_claude_cli; then
-    sign_in="Open a ${B}new${N} Terminal window, run ${B}claude${N} once, sign in, then type ${B}/exit${N}.
+  case "$AGENT_KIND" in
+    claude)
+      if has_claude_cli; then
+        sign_in="Open a ${B}new${N} Terminal window, run ${B}claude${N} once, sign in, then type ${B}/exit${N}.
      The menu bar's \"Write up notes…\" works only after that first session ends."
-  elif [ -n "$(claude_app)" ]; then
-    sign_in="Open the ${B}Claude${N} app and sign in, if you haven't yet."
-  else
-    sign_in="Install Claude Code before your first write-up: the Claude app
+      elif [ -n "$(claude_app)" ]; then
+        sign_in="Open the ${B}Claude${N} app and sign in, if you haven't yet."
+      else
+        sign_in="Install Claude Code before your first write-up: the Claude app
      (https://claude.ai/download), or in Terminal: curl -fsSL https://claude.ai/install.sh | bash"
-  fi
+      fi ;;
+    codex)
+      if [ -n "$AGENT_CMD" ]; then
+        sign_in="Open a ${B}new${N} Terminal window, run ${B}codex${N} once and sign in, then quit it."
+      else
+        sign_in="Open the ${B}ChatGPT${N} app and sign in to Codex, if you haven't yet."
+      fi ;;
+    agy)
+      sign_in="Sign in to Antigravity, if you haven't yet (run ${B}agy${N} once in a ${B}new${N} Terminal
+     window, or open the app). For \"Write up notes…\" to open the Antigravity app,
+     add ${B}${REPO/#$HOME/~}/scribe${N} (and ${B}teamnotes${N}) as projects in it; otherwise it opens
+     in Terminal." ;;
+    *)
+      sign_in="Check that ${B}${AGENT%% *}${N} starts in a ${B}new${N} Terminal window, and sign in to it." ;;
+  esac
   cat <<EOF
 
 ${G}${B}Done.${N} meetingrec is installed in ${B}$REPO${N}
@@ -870,7 +958,7 @@ What's left (see the README for details):
   1. $sign_in
   2. Set up Obsidian ("Set up Obsidian" in the README).
 
-The first time you write up a meeting, Claude asks your name, where your notes
+The first time you write up a meeting, $AGENT_NAME asks your name, where your notes
 should go (meetingrec's folder, or an Obsidian vault you already use) and, for
 team notes, your team's roster. It saves the answers for next time.
 
@@ -897,6 +985,7 @@ main() {
   install_audiotee
   install_hammerspoon_app
   install_personal_files
+  choose_agent
   install_claude
   install_commands
   install_hammerspoon_config

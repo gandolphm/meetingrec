@@ -36,8 +36,17 @@ if [ "$kind" = claude ]; then
   path="$(command -v "$program" || echo "$HOME/.local/bin/claude")"
   [ -x "$path" ] || { echo "$folder: Claude Code isn't installed. Install it: curl -fsSL https://claude.ai/install.sh | bash" >&2; exit 1; }
 else
-  path="$(command -v "$program" || true)"
-  [ -n "$path" ] || { echo "$folder: notes are set to be written by \"$agent\", but there's no $program command on this Mac. Install it, or go back to Claude Code: meetingrec config set NOTES_AGENT claude" >&2; exit 1; }
+  # Antigravity's own installer puts agy in ~/.local/bin too.
+  path="$(command -v "$program" || { [ "$kind" = agy ] && [ -x "$HOME/.local/bin/agy" ] && echo "$HOME/.local/bin/agy"; } || true)"
+  if [ -z "$path" ]; then
+    case "$kind" in
+      codex) how=" Install it: npm install -g @openai/codex (or brew install --cask codex)." ;;
+      agy)   how=" Install it: see https://antigravity.google/docs/getting-started (the CLI tab)." ;;
+      *)     how="" ;;
+    esac
+    echo "$folder: notes are set to be written by \"$agent\", but there's no $program command on this Mac.$how Or go back to Claude Code: meetingrec config set NOTES_AGENT claude" >&2
+    exit 1
+  fi
 fi
 
 # Antigravity takes the request to start with after -i. The others take it as

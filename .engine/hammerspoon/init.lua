@@ -471,8 +471,9 @@ local function openTarget(target, folder, request, project)
   return opened
 end
 
--- Both belong to Settings, further down, where loadSettings is defined.
+-- These belong to Settings, further down, where loadSettings is defined.
 local settings = {}   -- NAME -> { value = "…", isDefault = true|false }
+local agents = {}     -- from `meetingrec agents`: { cmd, name, path, app }, in its order
 local loadSettings
 
 local function writeUp(folder, request)
@@ -543,6 +544,8 @@ end
 
 local HOME = os.getenv("HOME")
 
+-- The agents found on this Mac are asked for too, each time: one installed
+-- since the menu loaded should show up in Settings without a reload.
 loadSettings = function(after)
   run({ "config", "list" }, function(exitCode, stdOut)
     if exitCode == 0 then
@@ -550,7 +553,16 @@ loadSettings = function(after)
         settings[name] = { value = value, isDefault = (kind == "default") }
       end
     end
-    if after then after() end
+    run({ "agents" }, function(found, list)
+      if found == 0 then
+        local fresh = {}
+        for cmd, name, path, app in list:gmatch("([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)") do
+          fresh[#fresh + 1] = { cmd = cmd, name = name, path = path, app = app }
+        end
+        agents = fresh
+      end
+      if after then after() end
+    end)
   end)
 end
 
@@ -722,11 +734,33 @@ local function settingsMenu()
   local autoOn = not auto or auto.value ~= "off"
   local writeUpIn = settings.WRITEUP_IN
   local inTerminal = writeUpIn ~= nil and writeUpIn.value == "terminal"
-  -- The app-or-Terminal choice is for the agents that have an app link. Any
-  -- other always opens in Terminal, so the menu says which agent instead.
+  -- Which agent writes the notes: the ones meetingrec knows, greyed out when
+  -- they aren't on this Mac, and any other command typed in.
   local agent = settings.NOTES_AGENT and settings.NOTES_AGENT.value or "claude"
+  local agentItems, known = {}, false
+  for _, a in ipairs(agents) do
+    local installed = a.path ~= "" or a.app ~= ""
+    known = known or a.cmd == agent
+    agentItems[#agentItems + 1] = {
+      title = a.name .. (installed and "" or " (not installed)"),
+      checked = a.cmd == agent, disabled = not installed and a.cmd ~= agent,
+      fn = function() saveSetting("NOTES_AGENT", a.cmd) end }
+  end
+  if not known then
+    agentItems[#agentItems + 1] = { title = agent, checked = true }
+  end
+  agentItems[#agentItems + 1] = { title = "-" }
+  agentItems[#agentItems + 1] = { title = "Other command…", fn = function()
+      local button, typed = hs.dialog.textPrompt("Notes are written by",
+        "The command that starts the coding agent, with any options, as you'd type it in " ..
+          "Terminal. The request is added after it. No quotes.",
+        known and "" or agent, "Save", "Cancel")
+      if button == "Save" and typed and typed:match("%S") then saveSetting("NOTES_AGENT", typed) end
+    end }
+  -- The app-or-Terminal choice is for the agents that have an app link. Any
+  -- other always opens in Terminal.
   local app = writeUpTargets(agent)
-  local writeUpItem = { title = "Notes are written by: " .. agent .. " (in Terminal)", disabled = true }
+  local writeUpItem = { title = "Write up notes in Terminal", disabled = true }
   if app then
     writeUpItem = { title = "Write up notes in", menu = {
         { title = app.name, checked = not inTerminal, fn = function() saveSetting("WRITEUP_IN", "app") end },
@@ -740,6 +774,7 @@ local function settingsMenu()
           if want == "on" then startAutoCheck() else stopAutoCheck() end
         end)
       end },
+    { title = "Notes are written by", menu = agentItems },
     writeUpItem,
     { title = "-" },
     folderMenu("NOTES_VAULT", "Personal notes"),

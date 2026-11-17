@@ -76,8 +76,9 @@ HAMMERSPOON_SHA256="11bb1c90faf5427f37c7bd4fe7eab9774ae43e1d5cb020c5b3088dac3284
 # Code. "codex" is Codex, and "agy" is Antigravity, which gets the request after
 # -i. Any other command works the same way, and options can follow the command,
 # as in "codex --oss --local-provider ollama" for a model running on this Mac.
-# No quotes inside it, so no options with spaces. To change it, run:
-#   meetingrec config set NOTES_AGENT codex
+# No quotes inside it, so no options with spaces. The installer asks when this
+# Mac has more than one of the agents meetingrec knows. To change it: ○ →
+# Settings → Notes are written by, or run: meetingrec config set NOTES_AGENT codex
 # NOTES_AGENT="claude"
 
 # Use Homebrew's ffmpeg, whisper.cpp and Hammerspoon instead of the pinned copies

@@ -521,6 +521,17 @@ out="$(launch scribe)"; rc=$?
 check "an agent that isn't installed stops the command" [ "$rc" -eq 1 ]
 check "...naming the command that's missing" has "$out" '^scribe: .*"not-installed --fast".*no not-installed command'
 check "...and how to go back to Claude Code" has "$out" 'meetingrec config set NOTES_AGENT claude$'
+mrc config set NOTES_AGENT codex >/dev/null
+out="$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)"
+check "a missing Codex comes with its install command" has "$out" 'npm install -g @openai/codex'
+mrc config set NOTES_AGENT agy >/dev/null
+out="$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)"
+check "...and a missing Antigravity with where to get it" has "$out" 'antigravity.google'
+mkdir -p "$HOME/.local/bin"
+cp "$AGENTS/agy" "$HOME/.local/bin/agy"
+check "Antigravity in ~/.local/bin, where its installer puts it, is found without PATH" \
+  [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" -i "scribe")" ]
+rm "$HOME/.local/bin/agy"
 mrc config set NOTES_AGENT "" >/dev/null
 
 # Antigravity's app link takes a project, which meetingrec reads from the
@@ -547,6 +558,26 @@ touch -t 202001010000 "$PROJECTS/scribe-1.json"
 printf '{"id":"scribe-2","projectResources":{"resources":[{"folderUri":"file:///x"},{"folderUri":"%s"}]}}' "$scribe_uri" > "$PROJECTS/scribe-2.json"
 check "two projects holding it: the one changed last" [ "$(mrc antigravity-project "$REPO/scribe")" = scribe-2 ]
 rm -rf "$HOME/.gemini"
+
+# Which agents are installed, for the installer's question and the menu. The
+# folders are the test's own, so the agents on the Mac running this don't count.
+echo "agents"
+AG="$T/agent-dirs"
+mkdir -p "$AG/bin1" "$AG/bin2" "$AG/apps" "$AG/bin1/codex"
+agents_out() { MEETINGREC_AGENT_DIRS="$AG/bin1:$AG/bin2" MEETINGREC_APP_DIRS="$AG/apps" mrc agents; }
+check "nothing installed: every agent listed, with no command or app" \
+  [ "$(agents_out)" = "$(printf 'claude\tClaude Code\t\t\ncodex\tCodex\t\t\nagy\tAntigravity\t\t')" ]
+printf '#!/bin/sh\n' > "$AG/bin2/claude"; chmod +x "$AG/bin2/claude"
+printf '#!/bin/sh\n' > "$AG/bin2/agy"
+mkdir -p "$AG/apps/ChatGPT.app" "$AG/apps/Claude.app"
+out="$(agents_out)"
+check "a command is found in any of the folders" has "$out" $'^claude\tClaude Code\t'"$AG/bin2/claude"$'\t'
+check "...with its app beside it" has "$out" $'^claude\tClaude Code\t.*\t'"$AG/apps/Claude.app"'$'
+check "an app alone counts, with no command (a folder named codex isn't one)" \
+  has "$out" $'^codex\tCodex\t\t'"$AG/apps/ChatGPT.app"'$'
+check "a file that can't run isn't a command" has "$out" $'^agy\tAntigravity\t\t$'
+out="$(MEETINGREC_AGENT_DIRS="" MEETINGREC_APP_DIRS="" mrc agents x 2>&1)"; rc=$?
+check "agents takes no arguments" [ "$rc" -ne 0 ]
 
 echo "note-path"
 notes="$HOME/Notes Vault/meeting-notes"
