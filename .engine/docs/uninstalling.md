@@ -28,7 +28,8 @@ added it).
 - **meetingrec's own files** in the meetingrec folder, the downloads in
   `~/.local/share/meetingrec` (model, ffmpeg, whisper-cli, audiotee, update backups), your
   settings in `~/.config/meetingrec`, the recording measurements in
-  `~/.local/state/meetingrec`, the three commands, and the menu-bar config.
+  `~/.local/state/meetingrec`, the three commands, the menu-bar config, and the Codex rule
+  meetingrec adds while Codex is your agent (`~/.codex/rules/meetingrec.rules`).
 - **Hammerspoon**, only if the installer added it and the menu bar was all it ran, along
   with its preferences (such as the hidden hammer icon). If you had Hammerspoon before, it
   stays, along with your own config and preferences.

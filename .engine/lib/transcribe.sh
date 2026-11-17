@@ -73,8 +73,24 @@ fi
 
 ARGS=(-m "$MODELFILE" -f "$WAV" -osrt -of "$OUTDIR/$BASE")
 [ -n "$PROMPT" ] && ARGS+=(--prompt "$PROMPT")
+# Inside an agent's sandbox (Codex's sets CODEX_SANDBOX) whisper-cli can't set up
+# the GPU, and instead of falling back to the CPU it crashes ("failed to allocate
+# Metal buffer"). So in Codex's sandbox it goes straight to the CPU (-ng), and
+# anywhere else a failed run is tried once more on the CPU: about 2.4x slower,
+# but a transcript instead of a crash.
 rc=0
-whisper-cli "${ARGS[@]}" >/dev/null || rc=$?
+if [ -n "${CODEX_SANDBOX:-}" ]; then
+  echo "NO_GPU running in a sandbox, so Whisper runs on the CPU (slower)"
+  whisper-cli "${ARGS[@]}" -ng >/dev/null || rc=$?
+else
+  whisper-cli "${ARGS[@]}" >/dev/null || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "NO_GPU whisper-cli failed on the GPU (exit $rc), so it ran again on the CPU (slower)"
+    rm -f "$SRT"
+    rc=0
+    whisper-cli "${ARGS[@]}" -ng >/dev/null || rc=$?
+  fi
+fi
 # Only ever the converted copy: when the input went straight in, WAV is the input.
 [ "$MADE_WAV" -eq 1 ] && rm -f "$WAV"
 [ "$rc" -eq 0 ] || { echo "TRANSCRIBE_FAILED (whisper-cli exited $rc)" >&2; exit 1; }

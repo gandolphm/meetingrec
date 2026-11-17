@@ -293,8 +293,10 @@ def do_track(session, name, model, prompt, offset=0.0, timeline=None):
         os.path.exists(tmp) and os.remove(tmp)
 
     pct = 100.0 * (1 - speech / duration) if duration else 0
+    # transcribe.sh says NO_GPU when Whisper had to run on the CPU (a sandbox).
+    cpu = " — on the CPU, the GPU wasn't available" if "NO_GPU" in rc.stdout else ""
     return cues, (f"{name}: {len(cues)} cues from {len(regions)} speech regions "
-                  f"({speech:.0f}s speech in {duration:.0f}s — {pct:.0f}% silence skipped)")
+                  f"({speech:.0f}s speech in {duration:.0f}s — {pct:.0f}% silence skipped){cpu}")
 
 
 def main():

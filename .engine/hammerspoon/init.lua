@@ -619,6 +619,11 @@ local function saveSetting(name, value, onSaved)
       notify("MeetingRec — setting not changed", cliError(stdErr, stdOut))
       return
     end
+    -- Picking Codex writes a Codex rule (meetingrec codex-rule): say so.
+    if stdOut:match("CODEX_RULE written") then
+      notify("MeetingRec — Codex", "Codex may now run meetingrec's transcription outside its sandbox "
+        .. "without asking, so Whisper can use the GPU (~/.codex/rules/meetingrec.rules).")
+    end
     loadSettings(onSaved)
   end)
 end

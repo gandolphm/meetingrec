@@ -14,6 +14,7 @@
 #   meetingrec antigravity-project <folder>   (for the menu bar)
 #   meetingrec agents                (for the installer and menu bar)
 #   meetingrec local-model           (for the installer)
+#   meetingrec codex-rule            (for the installer; see below)
 #   meetingrec prepare | session-info | transcribe | note-path | share-copy | clear-input
 #                                    (the routine steps of writing notes, for the skills;
 #                                    see "Writing notes" below)
@@ -695,6 +696,10 @@ cmd_config() {
         [ -n "$value" ] || value="$default"
         config_write "$name" "$name=\"$value\""
         printf '%s → %s\n' "$name" "$value"
+        # Codex's rule for transcription follows the agent (see codex-rule). The
+        # setting is saved either way: a rule that couldn't be written only means
+        # Codex keeps asking.
+        ( cmd_codex_rule ) || true
         return 0
       fi
       local choice1="" choice2=""
@@ -975,6 +980,8 @@ cmd_uninstall() {
     p="$HOME/.local/bin/$name"
     [ -L "$p" ] && [ "$(readlink "$p")" = "$repo/.engine/bin/$name" ] && gone+=("$p")
   done
+  # Codex's rule for transcription, if it's this folder's (see codex-rule).
+  codex_rule_ours && head -n 1 "$CODEX_RULE" | grep -qxF "# meetingrec: $repo" && gone+=("$CODEX_RULE")
   # Notes and recordings in folders you picked elsewhere: never touched, since
   # a vault of yours holds more than meetingrec's files, but named, so nobody
   # thinks they went too.
@@ -1138,6 +1145,69 @@ cmd_agents() {
     done <<<"${app_dirs//:/$'\n'}"
     printf '%s\t%s\t%s\t%s\n' "$cmd" "$name" "$found_cmd" "$found_app"
   done <<<"$KNOWN_AGENTS"
+}
+
+# --------------------------------------------------------------------------
+# codex-rule
+# --------------------------------------------------------------------------
+# Inside Codex's sandbox Whisper can't use the GPU (whisper-cli crashes; see
+# lib/transcribe.sh), so Codex asks to run `meetingrec transcribe` outside it,
+# once per recording: the rule it saves holds that recording's path. This file
+# is one Codex rule (https://learn.chatgpt.com/docs/agent-configuration/rules) that lets
+# `<this folder>/.engine/bin/meetingrec transcribe …` run outside the sandbox
+# without asking, whatever the recording. Nothing else: `config set` can change
+# which command starts the agent, so it stays behind Codex's question.
+#
+# Kept in step with NOTES_AGENT: written while Codex is the agent (by config set,
+# the installer, an update and a move, which rewrite the path), removed when
+# another agent is picked or meetingrec is uninstalled. One file per Mac, so
+# the last meetingrec folder to write it is the one it's for. Prints what it did:
+#
+#   CODEX_RULE written|unchanged|removed <file>      (or nothing: no file, no Codex)
+#
+#   meetingrec codex-rule
+CODEX_RULE="${CODEX_HOME:-$HOME/.codex}/rules/meetingrec.rules"
+
+codex_rule_text() {
+  local quoted
+  # A Starlark string, the way JSON writes one.
+  quoted="$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' \
+    "$REPO_ROOT/.engine/bin/meetingrec")"
+  cat <<EOF
+# meetingrec: $REPO_ROOT
+# Written by meetingrec so Codex runs its transcription outside Codex's sandbox
+# without asking: inside it, Whisper can't use the GPU. Only \`meetingrec
+# transcribe\`. meetingrec rewrites this file when it moves, and removes it when
+# you pick another agent or uninstall meetingrec.
+prefix_rule(
+    pattern = [$quoted, "transcribe"],
+    decision = "allow",
+)
+EOF
+}
+
+# The file was written by meetingrec (any folder's).
+codex_rule_ours() { head -n 1 "$CODEX_RULE" 2>/dev/null | grep -q '^# meetingrec: '; }
+
+cmd_codex_rule() {
+  [ $# -eq 0 ] || die "usage: meetingrec codex-rule"
+  local agent kind
+  agent="$(cmd_config get NOTES_AGENT)"
+  kind="${agent%% *}" kind="${kind##*/}"
+  if [ "$kind" = codex ]; then
+    if [ "$(cat "$CODEX_RULE" 2>/dev/null)" = "$(codex_rule_text)" ]; then
+      echo "CODEX_RULE unchanged $CODEX_RULE"
+      return 0
+    fi
+    if ! { mkdir -p "$(dirname "$CODEX_RULE")" && codex_rule_text > "$CODEX_RULE"; }; then
+      die "couldn't write $CODEX_RULE"
+    fi
+    echo "CODEX_RULE written $CODEX_RULE"
+  elif codex_rule_ours && head -n 1 "$CODEX_RULE" | grep -qxF "# meetingrec: $REPO_ROOT"; then
+    # Only this folder's: another meetingrec folder on this Mac may still use Codex.
+    rm -f "$CODEX_RULE" && echo "CODEX_RULE removed $CODEX_RULE"
+  fi
+  return 0
 }
 
 # --------------------------------------------------------------------------
@@ -1546,6 +1616,7 @@ case "${1:-}" in
   antigravity-project) shift; cmd_antigravity_project "$@" ;;
   agents) shift; cmd_agents "$@" ;;
   local-model) shift; cmd_local_model "$@" ;;
+  codex-rule)  shift; cmd_codex_rule "$@" ;;
   prepare)      shift; cmd_prepare "$@" ;;
   session-info) shift; cmd_session_info "$@" ;;
   transcribe)   shift; cmd_transcribe "$@" ;;

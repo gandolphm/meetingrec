@@ -25,6 +25,8 @@ MR="$REPO/.engine/bin/meetingrec"
 export HOME="$T/home"
 export XDG_STATE_HOME="$T/state"
 export MEETINGREC_CONFIG="$T/config.sh"
+# Codex's settings folder follows HOME, unless CODEX_HOME says otherwise.
+unset CODEX_HOME
 STATE_FILE="$XDG_STATE_HOME/meetingrec/current"
 
 mkdir -p "$REPO/scribe/transcripts" "$INBOX" "$REPO/teamnotes/input" "$STUBS"
@@ -136,6 +138,7 @@ check() { local name="$1"; shift; if "$@"; then ok "$name"; else bad "$name"; fi
 exist()  { local f; for f; do [ -e "$f" ] || return 1; done; }
 absent() { local f; for f; do [ ! -e "$f" ] || return 1; done; }
 has()    { printf '%s' "$1" | grep -q "$2"; }
+hasnt()  { ! has "$@"; }
 
 # shellcheck source=/dev/null
 state() { ( . "$STATE_FILE"; eval "printf '%s' \"\${$1:-}\"" ); }
@@ -502,11 +505,23 @@ mrc config set NOTES_AGENT "claude --model opus" >/dev/null
 check "Claude Code's options come before the request" \
   [ "$(launch scribe)" = "$(lines "$real_repo/scribe" --model opus "scribe")" ]
 mrc config set NOTES_AGENT codex >/dev/null
-check "Codex gets the request as its one word" \
-  [ "$(launch teamnotes)" = "$(lines "$real_repo/teamnotes" "team notes")" ]
+# Codex's sandbox writes only in the start folder, so the folders it writes in
+# elsewhere come with --add-dir: here both vaults are in the home folder.
+nv="$(cd "$(mrc config get NOTES_VAULT)" && pwd -P)" tv="$(cd "$(mrc config get TEAM_VAULT)" && pwd -P)"
+check "Codex gets the request as its one word, after the team vault and scribe/transcripts" \
+  [ "$(launch teamnotes)" = "$(lines "$real_repo/teamnotes" --add-dir "$tv" --add-dir "$real_repo/scribe/transcripts" "team notes")" ]
 mrc config set NOTES_AGENT "codex --oss --local-provider ollama" >/dev/null
-check "...after its options" \
-  [ "$(launch scribe keep it)" = "$(lines "$real_repo/scribe" --oss --local-provider ollama "scribe keep it")" ]
+check "...after its options, and in scribe the notes vault (the inbox is inside scribe/)" \
+  [ "$(launch scribe keep it)" = "$(lines "$real_repo/scribe" --oss --local-provider ollama --add-dir "$nv" "scribe keep it")" ]
+mkdir -p "$T/inbox-elsewhere"
+check "...and a recordings folder elsewhere too" \
+  [ "$(printf 'OUTPUT_ROOT="%s"\n' "$T/inbox-elsewhere" >> "$CFG"; launch scribe)" \
+    = "$(lines "$real_repo/scribe" --oss --local-provider ollama --add-dir "$nv" --add-dir "$(cd "$T/inbox-elsewhere" && pwd -P)" "scribe")" ]
+sed -i '' '/inbox-elsewhere/d' "$CFG"
+check "...but no folder that doesn't exist" \
+  [ "$(MEETINGREC_CONFIG="$CFG" HOME="$T/nohome" PATH="$AGENTS:/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1 | grep -c -- --add-dir)" = 0 ]
+mrc config set NOTES_AGENT "$AGENTS/my-agent" >/dev/null
+check "...and no other agent gets --add-dir" [ "$(launch teamnotes | grep -c -- --add-dir)" = 0 ]
 mrc config set NOTES_AGENT agy >/dev/null
 check "Antigravity gets the request after -i" \
   [ "$(launch scribe)" = "$(lines "$real_repo/scribe" -i "scribe")" ]
@@ -532,6 +547,46 @@ cp "$AGENTS/agy" "$HOME/.local/bin/agy"
 check "Antigravity in ~/.local/bin, where its installer puts it, is found without PATH" \
   [ "$(MEETINGREC_CONFIG="$CFG" PATH="/usr/bin:/bin" "$REPO/.engine/bin/scribe" 2>&1)" = "$(lines "$real_repo/scribe" -i "scribe")" ]
 rm "$HOME/.local/bin/agy"
+mrc config set NOTES_AGENT "" >/dev/null
+
+# While Codex is the agent, a Codex rule lets `meetingrec transcribe` run outside
+# its sandbox, where Whisper can't use the GPU.
+echo "codex-rule"
+RULE="$HOME/.codex/rules/meetingrec.rules"
+rm -f "$RULE"
+out="$(mrc config set NOTES_AGENT claude)"
+check "no Codex rule while another agent writes notes" [ ! -e "$RULE" ]
+check "...and nothing said about one" [ "$out" = "NOTES_AGENT → claude" ]
+out="$(mrc config set NOTES_AGENT "codex --oss")"
+check "picking Codex writes the rule" [ -f "$RULE" ]
+check "...and says so" has "$out" "^CODEX_RULE written $RULE$"
+check "...for this folder's meetingrec transcribe only" \
+  has "$(cat "$RULE")" "^    pattern = \[\"$real_repo/.engine/bin/meetingrec\", \"transcribe\"\],$"
+check "...marked as meetingrec's" [ "$(head -n 1 "$RULE")" = "# meetingrec: $real_repo" ]
+check "writing it again changes nothing" [ "$(mrc codex-rule)" = "CODEX_RULE unchanged $RULE" ]
+if codex_bin="$(command -v codex)"; then
+  check "Codex itself allows transcribe by it, with any recording" \
+    has "$("$codex_bin" execpolicy check -r "$RULE" -- "$real_repo/.engine/bin/meetingrec" transcribe "$T/a b/2026-11-17_x" --prompt "Ann, Bo" 2>/dev/null)" '"decision":"allow"'
+  check "...and nothing else, not config set" \
+    [ "$("$codex_bin" execpolicy check -r "$RULE" -- "$real_repo/.engine/bin/meetingrec" config set NOTES_AGENT x 2>/dev/null)" = '{"matchedRules":[]}' ]
+else
+  echo "  skip  Codex's own check of the rule (no codex command here)"
+fi
+check "uninstall would remove it" has "$(mrc uninstall --dry-run)" "^  ~/.codex/rules/meetingrec.rules$"
+out="$(mrc config set NOTES_AGENT agy)"
+check "picking another agent removes it" [ ! -e "$RULE" ]
+check "...and says so" has "$out" "^CODEX_RULE removed $RULE$"
+mrc config set NOTES_AGENT codex >/dev/null
+sed -i '' "s|^# meetingrec: .*|# meetingrec: /elsewhere/meetingrec|" "$RULE"
+mrc config set NOTES_AGENT claude >/dev/null
+check "...but not another meetingrec folder's" [ -f "$RULE" ]
+check "...which uninstall leaves too" hasnt "$(mrc uninstall --dry-run)" "meetingrec.rules"
+check "picking Codex in this folder takes it over" \
+  [ "$(mrc config set NOTES_AGENT codex | tail -n 1)" = "CODEX_RULE written $RULE" ]
+mkdir -p "$T/codex-home"
+check "CODEX_HOME is where Codex's settings are, when it's set" \
+  [ "$(CODEX_HOME="$T/codex-home" mrc codex-rule)" = "CODEX_RULE written $T/codex-home/rules/meetingrec.rules" ]
+rm -rf "$RULE" "$T/codex-home"
 mrc config set NOTES_AGENT "" >/dev/null
 
 # Antigravity's app link takes a project, which meetingrec reads from the

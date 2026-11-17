@@ -280,8 +280,15 @@ instructions (skills) in `scribe/` and `teamnotes/`. It works with these three:
   notes folder: in Antigravity, add `~/meetingrec/scribe` as a project (and
   `~/meetingrec/teamnotes` for team notes). Until then *Write up notes…* opens it in
   Terminal and says so.
-- **Codex in Terminal** works in a sandbox and asks before it runs the transcription
-  outside it, so Whisper can use the Mac's graphics chip. Say yes.
+- **Codex** works in a sandbox, and inside it Whisper can't use the Mac's graphics chip.
+  So while Codex is your agent, meetingrec adds a
+  [Codex rule](https://learn.chatgpt.com/docs/agent-configuration/rules) that lets `meetingrec
+  transcribe`, and nothing else, run outside the sandbox without asking:
+  `~/.codex/rules/meetingrec.rules`. It's removed when you pick another agent or uninstall.
+  Without it (deleted, or another agent's sandbox), transcription still works, on the
+  processor instead: a few minutes slower for an hour-long call. Started with `scribe` or
+  `teamnotes`, Codex may also write to a notes or recordings folder you keep outside the
+  meetingrec folder; in the ChatGPT app it asks first.
 - **Any other agent** that can run commands and read skill files may work too: ○ →
   Settings → *Agent* → *Other command…*, with the command that starts it. The request is
   added as its last word, and it always opens in Terminal. Only the three above have been
@@ -553,7 +560,7 @@ Issues are public, so never paste a transcript, note text, or anyone's name into
 | "Couldn't open Claude" from *Write up notes…* | Neither the Claude app nor Claude Code's link handler is installed. Install the [Claude app](https://claude.ai/download), or type `scribe` in Terminal. |
 | `notes are set to be written by …, but there's no … command` | `scribe` and `teamnotes` need your agent's command. Install it (the message says how), use *Write up notes…* to open its app, or pick another agent: ○ → Settings → *Agent*. |
 | "Opened in Terminal: Antigravity has no project for …" | Add that folder as a project in Antigravity, so *Write up notes…* can open the app (see [Coding agents](#coding-agents)). |
-| Codex asks to run `meetingrec transcribe` outside its sandbox | Say yes: inside the sandbox Whisper can't use the Mac's graphics chip. |
+| Codex asks to run `meetingrec transcribe` outside its sandbox | meetingrec's Codex rule is missing or for another folder. Pick Codex again in ○ → Settings → *Agent* to write it, or say yes: inside the sandbox Whisper can't use the Mac's graphics chip. Saying no still works, just slower. |
 | `scribe: command not found` | Open a new Terminal window. If it still fails, see [manual step 7](.engine/docs/manual-install.md#7-add-the-commands-optional). |
 | ○ button missing or frozen | ○ → *Reload config*. If the ○ is gone or that fails, run `killall Hammerspoon`, then open Hammerspoon again: press **Cmd+Space**, type *Hammerspoon* and press Return. Check `~/.hammerspoon/meetingrec.log`. |
 | `couldn't update, so nothing was changed` | A file in the repo was edited on your Mac and the update changes it too; git lists it. Start your agent in the repo folder and ask it to help keep your edit, then update again. |

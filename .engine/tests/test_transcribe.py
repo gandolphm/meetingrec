@@ -347,6 +347,12 @@ class WholeSession(unittest.TestCase):
         self.assertEqual([line[:16] for line in merged], ["[00:00:02] [Them",
                                                           "[00:00:04] [Me] "])
 
+    def test_a_track_run_on_the_cpu_says_so(self):
+        with open(os.path.join(self.lib, "transcribe.sh"), "a") as f:
+            f.write('echo "NO_GPU whisper-cli failed on the GPU"\n')
+        out, _ = self.run_session(system_offset=0.0)
+        self.assertEqual(out.count("on the CPU, the GPU wasn't available"), 2)
+
     def test_per_track_srts_are_in_session_time_and_temp_files_go(self):
         self.run_session(system_offset=4.0)
         self.assertEqual(ts.parse_srt(os.path.join(self.session, "system.srt")),
@@ -364,14 +370,21 @@ class TranscribeSh(unittest.TestCase):
         self.home = os.path.join(self.tmp, "home")
         self.bin = stub_bin(self.home)
         self.log = os.path.join(self.tmp, "calls.log")
+        self.no_gpu = os.path.join(self.tmp, "no-gpu")
         self.models = os.path.join(self.home, ".local", "share", "meetingrec", "models")
         os.makedirs(self.models)
         open(os.path.join(self.models, "ggml-small.en.bin"), "w").close()
         write_script(os.path.join(self.bin, "whisper-cli"), f"""
             #!/usr/bin/env python3
             import sys
+            import os
             a = sys.argv
-            open({self.log!r}, "a").write("whisper-cli -f " + a[a.index("-f") + 1] + "\\n")
+            ng = " -ng" if "-ng" in a else ""
+            open({self.log!r}, "a").write("whisper-cli -f " + a[a.index("-f") + 1] + ng + "\\n")
+            # As inside a sandbox: the GPU can't be set up, and whisper-cli crashes.
+            if not ng and os.path.exists({self.no_gpu!r}):
+                sys.stderr.write("ggml_metal: failed to allocate Metal buffer\\nGGML_ASSERT(buffer) failed\\n")
+                sys.exit(134)
             open(a[a.index("-of") + 1] + ".srt", "w").write("1\\n00:00:00,000 --> 00:00:01,000\\nhi\\n")
             """)
         write_script(os.path.join(self.bin, "ffmpeg"), f"""
@@ -381,8 +394,10 @@ class TranscribeSh(unittest.TestCase):
             shutil.copy(sys.argv[sys.argv.index("-i") + 1], sys.argv[-1])
             """)
 
-    def run_sh(self, audio, out_dir=None):
+    def run_sh(self, audio, out_dir=None, **extra_env):
         env = dict(os.environ, HOME=self.home)
+        env.pop("CODEX_SANDBOX", None)
+        env.update(extra_env)
         p = subprocess.run(["bash", os.path.join(LIB, "transcribe.sh"), audio,
                             out_dir or self.tmp], capture_output=True, text=True, env=env)
         calls = read(self.log).splitlines() if os.path.exists(self.log) else []
@@ -416,6 +431,32 @@ class TranscribeSh(unittest.TestCase):
         p, calls = self.run_sh(audio)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(calls[0], f"ffmpeg {os.path.join(self.tmp, 'call.16k.wav')}")
+
+    def test_without_the_gpu_it_runs_again_on_the_cpu(self):
+        open(self.no_gpu, "w").close()
+        audio = os.path.join(self.tmp, "track.wav")
+        write_wav(audio, 1.0)
+        p, calls = self.run_sh(audio)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(calls, [f"whisper-cli -f {audio}", f"whisper-cli -f {audio} -ng"])
+        self.assertIn("NO_GPU", p.stdout)
+        self.assertIn("OK ", p.stdout)
+
+    def test_in_codexs_sandbox_it_goes_straight_to_the_cpu(self):
+        audio = os.path.join(self.tmp, "track.wav")
+        write_wav(audio, 1.0)
+        p, calls = self.run_sh(audio, CODEX_SANDBOX="seatbelt")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(calls, [f"whisper-cli -f {audio} -ng"])
+        self.assertIn("NO_GPU", p.stdout)
+
+    def test_a_failure_on_the_cpu_too_is_still_a_failure(self):
+        write_script(os.path.join(self.bin, "whisper-cli"), "#!/bin/sh\nexit 1\n")
+        audio = os.path.join(self.tmp, "track.wav")
+        write_wav(audio, 1.0)
+        p, _ = self.run_sh(audio)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("TRANSCRIBE_FAILED", p.stderr)
 
     def test_missing_model_fails_before_any_conversion(self):
         os.remove(os.path.join(self.models, "ggml-small.en.bin"))

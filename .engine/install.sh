@@ -698,6 +698,20 @@ choose_agent() {
   fi
   # A saved choice on a first install (a re-run): the local model too.
   [ -n "$chose" ] || say_local_model
+
+  # Codex's rule for transcription follows the agent (see meetingrec codex-rule):
+  # said on a first install, and when an update or a move writes or removes it.
+  local rule file
+  rule="$("$mr" codex-rule 2>/dev/null)" || rule=""
+  file="${rule#CODEX_RULE * }" file="${file/#$HOME/~}"
+  case "$rule" in
+    "CODEX_RULE written "*|"CODEX_RULE unchanged "*)
+      if [ -n "$chose" ] || [ "${rule#CODEX_RULE written}" != "$rule" ]; then
+        ok "Codex may run meetingrec's transcription outside its sandbox without asking,"
+        echo "    so Whisper can use the GPU. It's a Codex rule, in $file."
+      fi ;;
+    "CODEX_RULE removed "*) ok "removed meetingrec's Codex rule ($file): Codex isn't the agent." ;;
+  esac
 }
 
 # Claude Code comes two ways, and either one writes up notes: the claude command,
