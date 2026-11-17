@@ -87,7 +87,9 @@ die()  {
 # Whether either zsh startup file already mentions something. Missing files are
 # skipped: grep given a missing file reports an error even when the other matches.
 in_shell_startup() {
-  cat "$HOME/.zprofile" "$HOME/.zshrc" 2>/dev/null | grep -qF -- "$1"
+  # grep reads both itself: with cat | grep, a missing file failed the pipe
+  # (pipefail) even when the other one had the line.
+  grep -qF -- "$1" "$HOME/.zprofile" "$HOME/.zshrc" 2>/dev/null
 }
 
 # Note something in the install record (see RECORD), once.

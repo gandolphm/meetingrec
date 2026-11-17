@@ -591,6 +591,21 @@ check "CODEX_HOME is where Codex's settings are, when it's set" \
 rm -rf "$RULE" "$T/codex-home"
 mrc config set NOTES_AGENT "" >/dev/null
 
+# The installer adds ~/.local/bin to ~/.zprofile only if neither startup file
+# has it already, whichever of the two exists.
+echo "installer: PATH line"
+eval "$(sed -n '/^in_shell_startup() {/,/^}/p' "$SRC/.engine/install.sh")"
+SH="$T/shells"; mkdir -p "$SH"
+check "found in ~/.zshrc when there's no ~/.zprofile" \
+  bash -c 'set -o pipefail; HOME="$1"; printf "export PATH=\"\$HOME/.local/bin:\$PATH\"\n" > "$1/.zshrc"; '"$(declare -f in_shell_startup)"'; in_shell_startup .local/bin' _ "$SH"
+rm -f "$SH/.zshrc"; printf 'export PATH="$HOME/.local/bin:$PATH"\n' > "$SH/.zprofile"
+check "...and in ~/.zprofile when there's no ~/.zshrc" \
+  bash -c 'set -o pipefail; HOME="$1"; '"$(declare -f in_shell_startup)"'; in_shell_startup .local/bin' _ "$SH"
+rm -f "$SH/.zprofile"
+check "...and not found in neither" \
+  bash -c 'set -o pipefail; HOME="$1"; '"$(declare -f in_shell_startup)"'; ! in_shell_startup .local/bin' _ "$SH"
+rm -rf "$SH"
+
 # Antigravity's app link takes a project, which meetingrec reads from the
 # project files Antigravity keeps.
 echo "antigravity-project"
