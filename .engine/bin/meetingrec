@@ -493,9 +493,13 @@ cmd_stop() {
   . "$STATE_FILE"
 
   local dir="${SESSION_DIR:?}" i
+  # Taken now: the recording ends when stop is asked for, not after however long
+  # the recorders take to close. Counting that wait would make a short recording
+  # whose recorder had to be killed look too small for its length.
+  local duration=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
 
-  # SIGINT, never SIGKILL: ffmpeg has to finalize the WAV header or the file is
-  # unreadable. Signal audiotee first and let ffmpeg close on EOF.
+  # SIGINT first: it lets ffmpeg write the WAV header's sizes, which it only does
+  # on the way out. Signal audiotee first and let ffmpeg close on EOF.
   [ "${AUDIOTEE_PID:-0}" -ne 0 ] && kill -INT "$AUDIOTEE_PID" 2>/dev/null
 
   if [ "${SYS_FF_PID:-0}" -ne 0 ]; then
@@ -512,21 +516,94 @@ cmd_stop() {
     alive "${MIC_PID:-0}" || alive "${SYS_FF_PID:-0}" || break
     sleep 1
   done
-  for i in "${MIC_PID:-0}" "${SYS_FF_PID:-0}"; do
+
+  # Whatever is still running is killed, with SIGKILL. ffmpeg only notices a
+  # request to stop when its input hands it audio, and a microphone hands it none
+  # once the laptop's lid is closed (AirPods and the MacBook's own alike). It then
+  # waits for ever: SIGTERM is one more request to it, not a force-quit. Left
+  # alone it keeps the microphone open (the orange dot, and AirPods held in call
+  # mode) after stop has said "stopped": for 3 s after the lid opened with the
+  # MacBook's microphone, and for nine minutes with AirPods, until it was killed
+  # by hand (2026-11-16).
+  #
+  # Nothing is lost by it: the audio is flushed to disk as it arrives (FLUSH,
+  # above), and the sizes ffmpeg never wrote are filled in below (finish_header).
+  # Ten seconds is far more than a recorder that is going to stop needs (it has
+  # only those sizes left to write, and takes a second or two), and it still
+  # leaves the Mac, which waits about 30 s for this before it sleeps, room.
+  local killed=0
+  for i in "${AUDIOTEE_PID:-0}" "${MIC_PID:-0}" "${SYS_FF_PID:-0}"; do
     if alive "$i"; then
-      warn "pid $i did not exit on SIGINT; sending SIGTERM (its WAV may be truncated)"
-      kill -TERM "$i" 2>/dev/null
+      warn "pid $i didn't stop when asked, so it was killed. Its recording is kept."
+      kill -KILL "$i" 2>/dev/null
+      killed=1
     fi
   done
+  # A kill takes a moment, and the files must be closed before they're measured.
+  if [ "$killed" -eq 1 ]; then
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      alive "${AUDIOTEE_PID:-0}" || alive "${MIC_PID:-0}" || alive "${SYS_FF_PID:-0}" || break
+      sleep 0.1
+    done
+  fi
 
   rm -f "$dir/.tap.pcm"
 
-  local duration=$(( $(date +%s) - ${STARTED_EPOCH:-0} ))
-
   MR_DIR="$dir" MR_DUR="$duration" MR_EXPECT="$EXPECTED_BYTES_PER_SEC" \
   MR_STATE="$STATE_DIR" python3 - <<'PY'
-import json, os, datetime, glob, wave, array, math, re
+import json, os, datetime, glob, wave, array, math, re, struct
 d, dur = os.environ["MR_DIR"], int(os.environ["MR_DUR"])
+
+
+def finish_header(path):
+    """Write the two sizes in a WAV's header if its recorder never did.
+
+    ffmpeg starts a WAV with both sizes set to 0xFFFFFFFF and comes back to fill
+    them in when it stops. One that was killed (see stop) or that crashed never
+    does: the audio is all there, but the file claims 37 hours of it, and how a
+    player takes that is up to the player. The sizes follow from the file's
+    length, so they are written here. True if the header was changed.
+
+    The file's modification time is put back afterwards. It is the moment the
+    last audio was written, and the track's place on the timeline is worked out
+    from it below; left at "now" it would move the whole track by however long
+    stop waited for the recorder.
+    """
+    try:
+        st = os.stat(path)
+        with open(path, "r+b") as f:
+            head = f.read(4096)
+            if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+                return False
+            # ffmpeg writes fmt and a LIST chunk before data, so data is found
+            # by walking the chunks, not assumed to sit at byte 36.
+            pos, block = 12, 2
+            while pos + 8 <= len(head):
+                cid = head[pos:pos + 4]
+                size = struct.unpack("<I", head[pos + 4:pos + 8])[0]
+                if cid == b"data":
+                    break
+                if cid == b"fmt " and pos + 22 <= len(head):
+                    block = struct.unpack("<H", head[pos + 20:pos + 22])[0] or 2
+                pos += 8 + size + (size & 1)
+            else:
+                return False
+            start = pos + 8
+            data = st.st_size - start
+            data -= data % block       # a kill can land in the middle of a sample
+            if data < 0:
+                return False
+            if size == data and struct.unpack("<I", head[4:8])[0] == start + data - 8:
+                return False
+            f.truncate(start + data)
+            f.seek(4)
+            f.write(struct.pack("<I", start + data - 8))
+            f.seek(pos + 4)
+            f.write(struct.pack("<I", data))
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+        return True
+    except (OSError, struct.error):
+        return False
 
 _PROG = re.compile(r"time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)"
                    r".*?elapsed=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
@@ -700,10 +777,13 @@ if os.path.exists(cf):
 # when you clicked record — that is all the merge needs.
 expect = int(os.environ["MR_EXPECT"])
 first_sample = {}
+repaired = set()
 for name in ("mic.wav", "system.wav"):
     fp = os.path.join(d, name)
     if not os.path.exists(fp):
         continue
+    if finish_header(fp):
+        repaired.add(name)
     try:
         with wave.open(fp, "rb") as w:
             frame = w.getsampwidth() * w.getnchannels()
@@ -726,6 +806,9 @@ for name in ("mic.wav", "system.wav"):
     size = os.path.getsize(fp)
     checks[name] = {"bytes": size,
                     "bytes_per_sec": round(size / dur) if dur else None}
+    if name in repaired:
+        # Its recorder was killed or crashed: see finish_header.
+        checks[name]["header_repaired"] = True
     if name in first_sample:
         t0, audio_secs, span, pts, input_hz = first_sample[name]
         checks[name]["audio_seconds"] = round(audio_secs, 3)

@@ -58,12 +58,18 @@ trap cleanup EXIT
 # SIGINT or SIGTERM, then fixes the header and exits 0, like the real one. It
 # prints the real one's progress lines too. STUB_FFMPEG_KEEP=0.8 keeps only
 # that share of the audio while time= runs on at full speed, which is what the
-# real one does when it drops microphone buffers.
+# real one does when it drops microphone buffers. STUB_FFMPEG_STUCK=1 is the
+# real one with a microphone that has gone quiet (a closed lid): from the first
+# signal it writes no more audio and never exits, time= stands still while
+# elapsed= runs on, and its header keeps the 0xFFFFFFFF sizes the real one
+# starts with.
 cat > "$STUBS/ffmpeg" <<'PY'
 #!/usr/bin/env python3
 import math, os, signal, struct, sys, time
 out, rate = sys.argv[-1], 16000
 keep = float(os.environ.get("STUB_FFMPEG_KEEP", "1"))
+stuck = bool(os.environ.get("STUB_FFMPEG_STUCK"))
+quiet = None   # when the microphone went quiet, in seconds of capture
 if __import__("os").environ.get("STUB_FFMPEG_FAIL"):
     sys.stderr.write("stub ffmpeg: told to fail\n"); sys.exit(1)
 # Like the real one with -nostdin: no -y, an existing output file is an error.
@@ -74,17 +80,27 @@ def header(n):
     return (b"RIFF" + struct.pack("<I", 36 + n) + b"WAVEfmt "
             + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
             + b"data" + struct.pack("<I", n))
-f.write(header(0)); f.flush()
+if stuck:
+    f.write(header(0).replace(struct.pack("<I", 36), b"\xff" * 4)[:-4] + b"\xff" * 4)
+else:
+    f.write(header(0))
+f.flush()
 chunk = struct.pack("<1600h", *[int(3000 * math.sin(2 * math.pi * 440 * i / rate))
                                 for i in range(1600)])
 n, began = 0, time.time()
 def progress():
-    t = time.time() - began
-    clock = "%02d:%02d:%05.2f" % (t // 3600, t % 3600 // 60, t % 60)
+    e = time.time() - began
+    t = e if quiet is None else quiet
+    clock = lambda x: "%02d:%02d:%05.2f" % (x // 3600, x % 3600 // 60, x % 60)
     sys.stderr.write("size=%8dKiB time=%s bitrate= 256.0kbits/s speed=   1x elapsed=%s    \r"
-                     % ((44 + n) // 1024, clock, clock[1:]))
+                     % ((44 + n) // 1024, clock(t), clock(e)[1:]))
     sys.stderr.flush()
 def stop(*_):
+    global quiet
+    if stuck:
+        if quiet is None:
+            quiet = time.time() - began
+        return
     progress()
     f.seek(0); f.write(header(n)); f.close(); sys.exit(0)
 # Set explicitly: a background job inherits SIGINT as ignored.
@@ -92,7 +108,7 @@ signal.signal(signal.SIGINT, stop)
 signal.signal(signal.SIGTERM, stop)
 # Paced by the clock, not by counting sleeps: the rate checks measure it.
 while True:
-    while n + len(chunk) <= (time.time() - began) * rate * 2 * keep:
+    while quiet is None and n + len(chunk) <= (time.time() - began) * rate * 2 * keep:
         f.write(chunk); n += len(chunk)
     f.flush(); progress(); time.sleep(0.1)
 PY
@@ -196,6 +212,33 @@ PY
     "$1" "$(( $(date +%s) - 100 ))" > "$STATE_FILE"
 }
 field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["checks"][sys.argv[2]].get(sys.argv[3]))' "$@"; }
+
+echo "a recorder that doesn't stop when asked (the mic went quiet: a closed lid)"
+STUB_FFMPEG_STUCK=1 "$MR" start "Stuck" --mic-only >/dev/null 2>&1
+dir="$(state SESSION_DIR)"
+pid="$(state MIC_PID)"
+sleep 2
+t0="$(secs)"
+out="$("$MR" stop 2>&1)"; rc=$?
+t1="$(secs)"
+check "stop succeeds" [ "$rc" -eq 0 ]
+check "...in under 13 s" python3 -c "import sys; sys.exit(0 if $t1 - $t0 < 13 else 1)"
+check "the recorder is gone, not left holding the microphone" bash -c '! kill -0 "$1" 2>/dev/null' _ "$pid"
+check "stop says it had to kill it" has "$out" "pid $pid didn't stop when asked, so it was killed"
+if has "$out" WARNING; then bad "...which is not a warning about the recording" "$(grep WARNING <<< "$out")"
+else ok "...which is not a warning about the recording"; fi
+check "the tool is idle" [ "$("$MR" status)" = idle ]
+check "the WAV's header says what the file holds" python3 -c '
+import os, struct, sys, wave
+p = sys.argv[1]; b = open(p, "rb").read(44); size = os.path.getsize(p)
+riff, data = struct.unpack("<I", b[4:8])[0], struct.unpack("<I", b[40:44])[0]
+with wave.open(p, "rb") as w: frames = w.getnframes()
+sys.exit(0 if riff == size - 8 and data == size - 44 and frames == data // 2 and frames > 16000 else 1)' "$dir/mic.wav"
+check "session.json says the header was repaired" [ "$(field "$dir/session.json" mic.wav header_repaired)" = True ]
+check "...and how much audio there is" \
+  python3 -c "import sys; sys.exit(0 if 1.5 < float(sys.argv[1]) < 4 else 1)" "$(field "$dir/session.json" mic.wav audio_seconds)"
+check "the file's time is still when the audio ended, not when the header was fixed" \
+  python3 -c "import os, sys; sys.exit(0 if os.path.getmtime(sys.argv[1]) < $t0 + 1 else 1)" "$dir/mic.wav"
 
 echo "a track that lost audio is not a track that started late"
 s="$T/sessions/lossy"
