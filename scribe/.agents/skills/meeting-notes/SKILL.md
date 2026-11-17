@@ -43,7 +43,13 @@ user's Mac, such as Claude Code**, not a web sandbox.
 **Any coding agent can run this skill. One thing depends on the agent: the question
 tool.** Where a step says to ask *with the question tool*, use your agent's tool for asking
 the user multiple-choice questions. **In Claude Code that is `AskUserQuestion`: always use
-it.** If your agent has no such tool, or it isn't available in this session, ask in chat
+it.** **In Codex it is `request_user_input_async`: use it whenever it's offered.** It takes
+any number of questions per call and adds a free-text answer to each by itself, so don't
+add an "Other" option. It returns at once and the user's answers arrive as a new message:
+after the call, end your turn and go on only when they arrive. If Codex offers only
+`request_user_input`, use that: one to three questions per call, each with two or three
+options, so split a longer step over several calls and keep each question's likeliest
+options. If your agent has no such tool, or it isn't available in this session, ask in chat
 instead, as a short numbered list: the same questions and options, everything the step puts
 in one call in one message, then wait for the answer. Where an option's text says to type
 something "in Other", that means the tool's free-text answer; reword it if yours is called
