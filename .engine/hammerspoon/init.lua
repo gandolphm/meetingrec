@@ -416,8 +416,10 @@ end
 -- a plain `open` of a link, so no macOS permission is involved. The skills work
 -- the same however Claude was started.
 --
--- Codex (NOTES_AGENT is plain "codex") has an app link too, and gets the same
--- choice. Nothing opens it in Terminal by a link, so its Terminal is the one
+-- Codex and Antigravity (NOTES_AGENT is plain "codex" or "agy") have app links
+-- too, and get the same choice. Antigravity's takes a project, not a folder, so
+-- it works once the notes folder is a project in Antigravity; until then the
+-- write-up opens in Terminal and says how to add it. Nothing opens it in Terminal by a link, so its Terminal is the one
 -- every other agent gets: bin/scribe.command or bin/teamnotes.command. macOS
 -- runs a .command file in a new Terminal window, again with no permission, and
 -- the file runs the scribe or teamnotes command, which starts the agent with
@@ -437,6 +439,11 @@ local CLAUDE_TERMINAL = { name = "Claude Code in Terminal", link = "claude-cli:/
 -- Codex's app is the ChatGPT app, which kept the codex:// links.
 local CODEX_APP = { name = "ChatGPT app", link = "codex://threads/new", folderParam = "path", textParam = "prompt",
   insteadOfTerminal = "" }
+-- Not in Antigravity's docs: read from its app (2.32.1). `project` is the ID of
+-- an Antigravity project that holds the folder; `meetingrec antigravity-project`
+-- finds it.
+local ANTIGRAVITY_APP = { name = "Antigravity app", link = "antigravity://open", projectParam = "project",
+  textParam = "prompt", insteadOfTerminal = "" }
 -- Any agent, in Terminal: bin/scribe.command or bin/teamnotes.command.
 local COMMAND_FILE = { name = "Terminal" }
 
@@ -445,12 +452,18 @@ local COMMAND_FILE = { name = "Terminal" }
 local function writeUpTargets(agent)
   if agent == "claude" then return CLAUDE_APP, CLAUDE_TERMINAL end
   if agent == "codex" then return CODEX_APP, COMMAND_FILE end
+  if agent == "agy" then return ANTIGRAVITY_APP, COMMAND_FILE end
   return nil, COMMAND_FILE
 end
 
-local function openTarget(target, folder, request)
+-- project: for a link that takes one; without it that link can't be opened.
+local function openTarget(target, folder, request, project)
   local what = REPO .. "/.engine/bin/" .. folder .. ".command"
-  if target.link then
+  if target.projectParam then
+    if not project then return false end
+    what = target.link .. "?" .. target.projectParam .. "=" .. urlEncode(project) ..
+      "&" .. target.textParam .. "=" .. urlEncode(request)
+  elseif target.link then
     what = target.link .. "?" .. target.folderParam .. "=" .. urlEncode(REPO .. "/" .. folder) ..
       "&" .. target.textParam .. "=" .. urlEncode(request)
   end
@@ -474,25 +487,45 @@ local function writeUp(folder, request)
     local terminalFirst = exitCode == 0 and stdOut:match("WRITEUP_IN\tterminal\t") ~= nil
     local order = { app, terminal }
     if terminalFirst or not app then order = { terminal, app } end
-    for _, target in ipairs(order) do
-      if openTarget(target, folder, request) then
-        log("write-up: %s in %s", target.link and target.name or (agent .. " in Terminal"), dir)
-        -- Having no app is normal; asking for Terminal and not getting it isn't.
-        if terminalFirst and target == app then
-          notify("MeetingRec", "Couldn't open Terminal, so this opened in the " .. app.name .. "." ..
-            app.insteadOfTerminal)
+    local function open(project)
+      for _, target in ipairs(order) do
+        if openTarget(target, folder, request, project) then
+          log("write-up: %s in %s", target.link and target.name or (agent .. " in Terminal"), dir)
+          -- Having no app is normal; asking for Terminal and not getting it isn't.
+          if terminalFirst and target == app then
+            notify("MeetingRec", "Couldn't open Terminal, so this opened in the " .. app.name .. "." ..
+              app.insteadOfTerminal)
+          elseif not terminalFirst and app and app.projectParam and not project then
+            local home = os.getenv("HOME")
+            local shown = dir:sub(1, #home + 1) == home .. "/" and "~" .. dir:sub(#home + 1) or dir
+            notify("MeetingRec", "Opened in Terminal: Antigravity has no project for " .. shown ..
+              ". To use the Antigravity app, add that folder as a project in Antigravity once.")
+          end
+          return true
         end
-        return
+      end
+      return false
+    end
+    local function finish(opened)
+      if opened then return end
+      if agent == "claude" then
+        log("write-up: nothing handles claude:// or claude-cli:// links")
+        notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
+          folder .. " in Terminal.")
+      else
+        log("write-up: couldn't open %s.command", folder)
+        notify("MeetingRec", "Couldn't open a Terminal window for " .. agent .. ". Type " ..
+          folder .. " in Terminal.")
       end
     end
-    if agent == "claude" then
-      log("write-up: nothing handles claude:// or claude-cli:// links")
-      notify("MeetingRec", "Couldn't open Claude. Install the Claude app, or type " ..
-        folder .. " in Terminal.")
+    if app and app.projectParam then
+      run({ "antigravity-project", dir }, function(found, out)
+        local project = found == 0 and out:match("^(%S+)") or nil
+        if not project then log("write-up: no Antigravity project holds %s", dir) end
+        finish(open(project))
+      end)
     else
-      log("write-up: couldn't open %s.command", folder)
-      notify("MeetingRec", "Couldn't open a Terminal window for " .. agent .. ". Type " ..
-        folder .. " in Terminal.")
+      finish(open())
     end
   end)
 end

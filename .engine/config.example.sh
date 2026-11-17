@@ -65,9 +65,9 @@ HAMMERSPOON_SHA256="11bb1c90faf5427f37c7bd4fe7eab9774ae43e1d5cb020c5b3088dac3284
 
 # Where the menu bar's "Write up notes…" opens the agent: "app" for its app,
 # "terminal" for Terminal. If that one can't open, it tries the other. Also in
-# ○ → Settings. For Claude Code (the Claude app) and Codex (the ChatGPT app):
-# any other agent (NOTES_AGENT, below), or one with options, always opens in
-# Terminal.
+# ○ → Settings. For Claude Code (the Claude app), Codex (the ChatGPT app) and
+# Antigravity (its app, once the notes folder is a project in it): any other
+# agent (NOTES_AGENT, below), or one with options, always opens in Terminal.
 # WRITEUP_IN="app"
 
 # The coding agent that writes up your notes: the command that starts it. The

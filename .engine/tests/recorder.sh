@@ -523,6 +523,31 @@ check "...naming the command that's missing" has "$out" '^scribe: .*"not-install
 check "...and how to go back to Claude Code" has "$out" 'meetingrec config set NOTES_AGENT claude$'
 mrc config set NOTES_AGENT "" >/dev/null
 
+# Antigravity's app link takes a project, which meetingrec reads from the
+# project files Antigravity keeps.
+echo "antigravity-project"
+PROJECTS="$HOME/.gemini/config/projects"
+mkdir -p "$PROJECTS"
+scribe_uri="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).as_uri())' "$real_repo/scribe")"
+team_uri="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).as_uri())' "$real_repo/teamnotes")"
+out="$(mrc antigravity-project "$REPO/scribe")"; rc=$?
+check "no project files: nothing found" [ "$rc" -eq 1 -a -z "$out" ]
+printf '{"id":"other","projectResources":{"resources":[{"folderUri":"file:///somewhere/else"}]}}' > "$PROJECTS/other.json"
+printf 'not json' > "$PROJECTS/broken.json"
+printf '{"id":"bare","projectResources":{}}' > "$PROJECTS/bare.json"
+mrc antigravity-project "$REPO/scribe" >/dev/null; rc=$?
+check "...nor with only other folders, a broken file and an empty project" [ "$rc" -eq 1 ]
+printf '{"id":"scribe-1","projectResources":{"resources":[{"folderUri":"%s"}]}}' "$scribe_uri" > "$PROJECTS/scribe-1.json"
+check "a project holding the folder gives its ID" [ "$(mrc antigravity-project "$REPO/scribe")" = scribe-1 ]
+check "...whatever the path's spelling (a trailing slash)" [ "$(mrc antigravity-project "$REPO/scribe/")" = scribe-1 ]
+check "...and its folder URI is %-encoded (the repo's path has a space and an apostrophe)" has "$scribe_uri" '%20'
+printf '{"id":"team-git","projectResources":{"resources":[{"gitFolder":{"folderUri":"%s","defaultBranch":"main"}}]}}' "$team_uri" > "$PROJECTS/team-git.json"
+check "a folder inside a git repo is found too" [ "$(mrc antigravity-project "$REPO/teamnotes")" = team-git ]
+touch -t 202001010000 "$PROJECTS/scribe-1.json"
+printf '{"id":"scribe-2","projectResources":{"resources":[{"folderUri":"file:///x"},{"folderUri":"%s"}]}}' "$scribe_uri" > "$PROJECTS/scribe-2.json"
+check "two projects holding it: the one changed last" [ "$(mrc antigravity-project "$REPO/scribe")" = scribe-2 ]
+rm -rf "$HOME/.gemini"
+
 echo "note-path"
 notes="$HOME/Notes Vault/meeting-notes"
 mkdir -p "$notes" "$HOME/Team Notes/meeting-notes" "$HOME/Team Notes/share"

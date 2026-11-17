@@ -11,6 +11,7 @@
 #   meetingrec uninstall [--keep-notes | --delete-notes] [--keep-claude | --remove-claude]
 #                        [--yes] [--dry-run]
 #   meetingrec vault-root <folder>   (for the installer, skills and menu bar)
+#   meetingrec antigravity-project <folder>   (for the menu bar)
 #   meetingrec prepare | session-info | transcribe | note-path | share-copy | clear-input
 #                                    (the routine steps of writing notes, for the skills;
 #                                    see "Writing notes" below)
@@ -1557,6 +1558,56 @@ cmd_uninstall() {
 }
 
 # --------------------------------------------------------------------------
+# antigravity-project
+# --------------------------------------------------------------------------
+# Prints the ID of the Antigravity project that holds <folder>, for the menu
+# bar's link into the Antigravity app (antigravity://open?project=<id>&prompt=…):
+# the link takes a project, not a folder. Exits 1 when there is none; the user
+# adds the folder as a project in Antigravity once. Antigravity keeps each
+# project in ~/.gemini/config/projects/<id>.json, with its folders as file://
+# URIs: a resource's own folderUri, or one level down for a folder inside a git
+# repo ({"gitFolder": {"folderUri": …}}). Read here, never written: those files
+# are Antigravity's own. When more than one project holds the folder, the one
+# changed last wins.
+#
+#   meetingrec antigravity-project <folder>
+cmd_antigravity_project() {
+  [ $# -eq 1 ] || die "usage: meetingrec antigravity-project <folder>"
+  python3 - "$1" "$HOME/.gemini/config/projects" <<'PY'
+import glob, json, os, sys
+from urllib.parse import unquote, urlparse
+
+want = os.path.realpath(sys.argv[1])
+found = []
+for path in glob.glob(os.path.join(sys.argv[2], "*.json")):
+    try:
+        with open(path) as f:
+            project = json.load(f)
+        resources = project["projectResources"].get("resources") or []
+    except (OSError, ValueError, KeyError, AttributeError, TypeError):
+        continue
+    uris = []
+    for r in resources:
+        if not isinstance(r, dict):
+            continue
+        uris.append(r.get("folderUri"))
+        uris += [v.get("folderUri") for v in r.values() if isinstance(v, dict)]
+    for uri in uris:
+        if not isinstance(uri, str):
+            continue
+        u = urlparse(uri)
+        if u.scheme != "file" or u.netloc not in ("", "localhost"):
+            continue
+        if os.path.realpath(unquote(u.path)) == want and project.get("id"):
+            found.append((os.path.getmtime(path), str(project["id"])))
+            break
+if not found:
+    sys.exit(1)
+print(max(found)[1])
+PY
+}
+
+# --------------------------------------------------------------------------
 # vault-root
 # --------------------------------------------------------------------------
 # Notes go in meeting-notes/ inside the folder picked for them, so a folder
@@ -1942,6 +1993,7 @@ case "${1:-}" in
   move)   shift; cmd_move "$@" ;;
   uninstall) shift; cmd_uninstall "$@" ;;
   vault-root) shift; cmd_vault_root "$@" ;;
+  antigravity-project) shift; cmd_antigravity_project "$@" ;;
   prepare)      shift; cmd_prepare "$@" ;;
   session-info) shift; cmd_session_info "$@" ;;
   transcribe)   shift; cmd_transcribe "$@" ;;
