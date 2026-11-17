@@ -567,7 +567,7 @@ install_personal_files() {
     made=1
   done
   if [ "$made" -eq 1 ]; then
-    ok "created. Claude fills them in the first time you write up a meeting"
+    ok "created. Your coding agent fills them in the first time you write up a meeting"
   else
     ok "keeping your existing files"
   fi

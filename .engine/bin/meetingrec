@@ -52,6 +52,8 @@ AUDIOTEE_SHA="${AUDIOTEE_SHA:-unknown}"
 # follows a symlink (e.g. ~/.local/bin/meetingrec -> repo/.engine/bin/meetingrec) back to the repo.
 REPO_ROOT="$(dirname "$(dirname "$(dirname "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")")")")"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$REPO_ROOT/scribe/input}"
+# Python helpers the commands run (transcription, checks, backups).
+LIB="$REPO_ROOT/.engine/lib"
 SAMPLE_RATE=16000
 
 # 16000 samples/s x 2 bytes x 1 channel. Every format change moves this number,
@@ -209,35 +211,7 @@ byte_rate_check() {
 # Echoes: ok|<rate>|<ch>|<bits>|<float>|<device>   or   mismatch|... or unknown|
 # --------------------------------------------------------------------------
 audiotee_metadata() {
-  MR_LOG="$1" MR_RATE="$SAMPLE_RATE" python3 - <<'PY' 2>/dev/null || echo "unknown|||||"
-import json, os, sys
-want = int(os.environ["MR_RATE"])
-meta = None
-try:
-    for line in open(os.environ["MR_LOG"], encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            continue
-        if msg.get("message_type") == "metadata" and msg.get("data"):
-            meta = msg["data"]
-            break
-except OSError:
-    pass
-if not meta:
-    print("unknown|||||"); sys.exit(0)
-rate  = meta.get("sample_rate")
-ch    = meta.get("channels_per_frame")
-bits  = meta.get("bits_per_channel")
-flt   = meta.get("is_float")
-dev   = meta.get("device_name") or "unknown"
-ok = (int(rate or 0) == want and int(ch or 0) == 1
-      and int(bits or 0) == 16 and not flt)
-print(f"{'ok' if ok else 'mismatch'}|{rate}|{ch}|{bits}|{flt}|{dev}")
-PY
+  MR_LOG="$1" MR_RATE="$SAMPLE_RATE" python3 "$LIB/audiotee_metadata.py" 2>/dev/null || echo "unknown|||||"
 }
 
 # FLUSH: both ffmpeg outputs take `-flush_packets 1`.
@@ -259,24 +233,7 @@ PY
 # too: audiotee taps it, so if the system track comes back silent this is the
 # forensic fact you want. Both are read at start because both can change later.
 audio_devices() {
-  system_profiler -json SPAudioDataType 2>/dev/null | python3 -c '
-import json, sys
-try:
-    items = json.load(sys.stdin).get("SPAudioDataType", [])
-except Exception:
-    print("unknown|unknown"); sys.exit(0)
-def walk(nodes):
-    for it in nodes:
-        yield it
-        for sub in (it.get("_items") or []):
-            yield sub
-inp = out = "unknown"
-for it in walk(items):
-    name = it.get("_name", "unknown")
-    if "coreaudio_default_audio_input_device" in it:  inp = name
-    if "coreaudio_default_audio_output_device" in it: out = name
-print(f"{inp}|{out}")
-' || echo "unknown|unknown"
+  system_profiler -json SPAudioDataType 2>/dev/null | python3 "$LIB/audio_devices.py" || echo "unknown|unknown"
 }
 
 write_session_json() {
@@ -284,45 +241,7 @@ write_session_json() {
   local tap_meta="${6:-}"
   MR_DIR="$dir" MR_TITLE="$title" MR_TRACKS="$tracks" MR_MIC="$mic_device" \
   MR_OUT="$out_device" MR_TAP="$tap_meta" \
-  MR_SHA="$AUDIOTEE_SHA" MR_RATE="$SAMPLE_RATE" python3 - <<'PY'
-import json, os, datetime
-d = os.environ["MR_DIR"]
-doc = {
-    "title": os.environ["MR_TITLE"],
-    "started": datetime.datetime.now(datetime.timezone.utc)
-                 .isoformat(timespec="seconds").replace("+00:00", "Z"),
-    "tracks": os.environ["MR_TRACKS"].split(","),
-    "mic_device": os.environ["MR_MIC"],
-    "output_device": os.environ["MR_OUT"],
-    "audiotee_sha": os.environ["MR_SHA"],
-    "format": {
-        "sample_rate": int(os.environ["MR_RATE"]),
-        "channels": 1,
-        "encoding": "s16le",
-    },
-}
-
-# What audiotee said it was actually producing. When this disagrees with
-# "format" above, the WAV header is wrong but the PCM is fine — these are the
-# values needed to re-wrap it.
-tap = os.environ.get("MR_TAP", "")
-if tap:
-    status, rate, ch, bits, flt, dev = (tap.split("|") + [""] * 6)[:6]
-    doc["tap"] = {"assertion": status, "device": dev or "unknown"}
-    if rate:
-        def num(v):
-            try:
-                return int(float(v))
-            except ValueError:
-                return v
-        doc["tap"]["reported_format"] = {
-            "sample_rate": num(rate), "channels": num(ch),
-            "bits_per_channel": num(bits), "is_float": flt == "True",
-        }
-with open(os.path.join(d, "session.json"), "w") as f:
-    json.dump(doc, f, indent=2)
-    f.write("\n")
-PY
+  MR_SHA="$AUDIOTEE_SHA" MR_RATE="$SAMPLE_RATE" python3 "$LIB/write_session_json.py"
 }
 
 # --------------------------------------------------------------------------
@@ -553,353 +472,7 @@ cmd_stop() {
   rm -f "$dir/.tap.pcm"
 
   MR_DIR="$dir" MR_DUR="$duration" MR_EXPECT="$EXPECTED_BYTES_PER_SEC" \
-  MR_STATE="$STATE_DIR" python3 - <<'PY'
-import json, os, datetime, glob, wave, array, math, re, struct
-d, dur = os.environ["MR_DIR"], int(os.environ["MR_DUR"])
-
-
-def finish_header(path):
-    """Write the two sizes in a WAV's header if its recorder never did.
-
-    ffmpeg starts a WAV with both sizes set to 0xFFFFFFFF and comes back to fill
-    them in when it stops. One that was killed (see stop) or that crashed never
-    does: the audio is all there, but the file claims 37 hours of it, and how a
-    player takes that is up to the player. The sizes follow from the file's
-    length, so they are written here. True if the header was changed.
-
-    The file's modification time is put back afterwards. It is the moment the
-    last audio was written, and the track's place on the timeline is worked out
-    from it below; left at "now" it would move the whole track by however long
-    stop waited for the recorder.
-    """
-    try:
-        st = os.stat(path)
-        with open(path, "r+b") as f:
-            head = f.read(4096)
-            if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
-                return False
-            # ffmpeg writes fmt and a LIST chunk before data, so data is found
-            # by walking the chunks, not assumed to sit at byte 36.
-            pos, block = 12, 2
-            while pos + 8 <= len(head):
-                cid = head[pos:pos + 4]
-                size = struct.unpack("<I", head[pos + 4:pos + 8])[0]
-                if cid == b"data":
-                    break
-                if cid == b"fmt " and pos + 22 <= len(head):
-                    block = struct.unpack("<H", head[pos + 20:pos + 22])[0] or 2
-                pos += 8 + size + (size & 1)
-            else:
-                return False
-            start = pos + 8
-            data = st.st_size - start
-            data -= data % block       # a kill can land in the middle of a sample
-            if data < 0:
-                return False
-            if size == data and struct.unpack("<I", head[4:8])[0] == start + data - 8:
-                return False
-            f.truncate(start + data)
-            f.seek(4)
-            f.write(struct.pack("<I", start + data - 8))
-            f.seek(pos + 4)
-            f.write(struct.pack("<I", data))
-        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
-        return True
-    except (OSError, struct.error):
-        return False
-
-_PROG = re.compile(r"time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)"
-                   r".*?elapsed=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
-
-
-def clock_error_ppm(log):
-    """How fast this track's capture clock ran, vs the wall clock, in ppm.
-
-    Recorded here because the ffmpeg logs do not survive: the meeting-notes skill
-    deletes the whole session directory once the note is written. Measuring at
-    stop means every recording leaves evidence about drift without anyone having
-    to remember to look, which is what answers the phase 5 question over time.
-
-    ffmpeg's progress lines carry both the audio timestamp (advanced by the
-    device clock) and the wall clock. If the device clock is fast or slow, the
-    difference grows linearly, and the slope is the error. Drift *between* the
-    two tracks is the difference of their two errors — a constant offset is
-    already corrected, a diverging one cannot be.
-    """
-    try:
-        raw = open(log, encoding="utf-8", errors="replace").read()
-    except OSError:
-        return None
-    pts = []
-    for m in _PROG.finditer(raw.replace("\r", "\n")):
-        t = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
-        e = int(m.group(4)) * 3600 + int(m.group(5)) * 60 + float(m.group(6))
-        if e >= 30.0:          # skip device startup and buffer priming
-            pts.append((e, t - e))
-    if len(pts) < 20:
-        return None            # too short to fit a slope worth reporting
-    n = len(pts)
-    mx = sum(p[0] for p in pts) / n
-    my = sum(p[1] for p in pts) / n
-    den = sum((x - mx) ** 2 for x, _ in pts)
-    if den == 0:
-        return None
-    return sum((x - mx) * (y - my) for x, y in pts) / den * 1e6
-
-
-_SIZE = re.compile(r"size=\s*(\d+)KiB\s+time=\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
-_INPUT_HZ = re.compile(r"Input #0.*?Stream #0:0.*?Audio: [^,\n]+, (\d+) Hz", re.S)
-
-
-def capture_progress(log, bytes_per_sec):
-    """ffmpeg's progress lines as [(audio seconds written, seconds captured)].
-
-    The two columns answer different questions. size= is what reached the file.
-    time= is the capture clock: the timestamp the device put on the last buffer.
-    On a healthy track they stay equal. When buffers go missing they part, and
-    the gap between them is exactly the audio that was lost up to that point.
-
-    They do go missing. FFmpeg's avfoundation input keeps one audio buffer: a
-    new one replaces the last whether or not it was read, and ffmpeg looks every
-    10 ms or so. A mic at 24 kHz hands over a buffer every 21 ms and loses
-    nothing. At 48 kHz (AirPods in their 48 kHz mode) it is every 10.7 ms, and
-    about one buffer in nine is overwritten; at 44.1 kHz (a MacBook Air's own
-    mic) every 11.6 ms, and about one in fourteen. Nothing is logged, and time=
-    keeps pace with the wall clock throughout. Measured on a 32-minute call:
-    1720 s of audio for 1944 s captured.
-
-    meetingrec's own ffmpeg is built with a patch that queues the buffers
-    (.engine/tools/ffmpeg-avfoundation-audio-queue.patch), so it should lose
-    nothing. This stays for Homebrew's ffmpeg, which has no such patch, and for
-    whatever else loses audio one day.
-
-    Also returns the mic's input sample rate, which is what decides it.
-    """
-    try:
-        raw = open(log, encoding="utf-8", errors="replace").read()
-    except OSError:
-        return [], None
-    pts = []
-    for m in _SIZE.finditer(raw.replace("\r", "\n")):
-        t = int(m.group(2)) * 3600 + int(m.group(3)) * 60 + float(m.group(4))
-        pts.append((int(m.group(1)) * 1024.0 / bytes_per_sec, t))
-    hz = _INPUT_HZ.search(raw)
-    return pts, (int(hz.group(1)) if hz else None)
-
-
-def timeline(pts, audio_secs, span, step=30.0):
-    """A thinned [[audio seconds, seconds captured], ...] for the merge.
-
-    Where a line sits in the file says when it was said only if nothing was
-    lost before it. This is the map from one to the other: a point every half
-    minute, which follows the loss even when it is uneven (it depends on how
-    busy the Mac is), and ends on the exact totals.
-    """
-    out = [[0.0, 0.0]]
-    for a, t in pts:
-        a, t = min(a, audio_secs), min(t, span)
-        if t - out[-1][1] >= step and a >= out[-1][0]:
-            out.append([round(a, 2), round(t, 2)])
-    if span - out[-1][1] < step / 2 and len(out) > 1:
-        out.pop()
-    out.append([round(audio_secs, 3), round(span, 3)])
-    return out
-
-
-def peak_dbfs(path):
-    """Loudest sample in the file, in dBFS. None if unreadable.
-
-    This is the actual silence test — the one phase 0 ran by hand with ffmpeg's
-    volumedetect, finally automated. Size alone cannot do it: a tap that TCC has
-    denied still streams zeros at the full 32,000 B/s, so it satisfies the
-    byte-rate check, the metadata check and the size guard while recording
-    nothing. Digital silence reads -91 dBFS or lower; anything real is far above.
-
-    Done with array.max rather than ffmpeg so stop stays instant on a long
-    recording: the per-chunk max runs in C, so an hour of audio costs well under
-    a second and adds no dependency to the stop path.
-    """
-    try:
-        peak = 0
-        with wave.open(path, "rb") as w:
-            if w.getsampwidth() != 2:
-                return None
-            while True:
-                chunk = w.readframes(1 << 16)
-                if not chunk:
-                    break
-                a = array.array("h")
-                a.frombytes(chunk[:len(chunk) - len(chunk) % 2])
-                if a:
-                    peak = max(peak, max(a), -min(a))
-    except Exception:
-        return None
-    if peak <= 0:
-        return -math.inf
-    return 20 * math.log10(peak / 32768.0)
-p = os.path.join(d, "session.json")
-try:
-    doc = json.load(open(p))
-except Exception:
-    doc = {}
-doc["ended"] = (datetime.datetime.now(datetime.timezone.utc)
-                .isoformat(timespec="seconds").replace("+00:00", "Z"))
-doc["duration_seconds"] = dur
-
-checks = {}
-cf = os.path.join(d, "format-check.txt")
-if os.path.exists(cf):
-    checks["startup_format"] = [l for l in open(cf).read().splitlines() if l.strip()]
-# Track start offsets. The two tracks do NOT begin at the same instant: each
-# ffmpeg only starts capturing once its device is open, and opening the mic can
-# take seconds — a Bluetooth headset renegotiates to the HFP voice profile
-# first. Measured on AirPods Pro: mic.wav began 4.7s after system.wav.
-#
-# Left uncorrected that offset lands straight in the merged transcript, tagging
-# every [Me] line seconds early and interleaving replies ahead of what they
-# replied to. So it is measured here, while the evidence still exists, rather
-# than guessed at later.
-#
-# Each track's first sample is (when ffmpeg finalized the file) minus (how long
-# it had been capturing). The finalize mtime is exact: SIGINT makes ffmpeg seek
-# back and rewrite the RIFF header, so mtime is the moment capture ended. Frame
-# count comes from the header rather than from file size, because ffmpeg writes
-# 78 bytes of header and chunks, not the canonical 44. It is capped by the file
-# size all the same: an ffmpeg that died before rewriting the header leaves a
-# placeholder that reads as 37 hours of audio.
-#
-# How long it had been capturing is NOT how much audio the file holds. A track
-# that lost audio along the way is shorter than its capture, and taking the
-# audio length made every lost second look like a second of late start: a mic
-# track that lost 11% of a 32-minute call was reported as starting 225 s late,
-# and the merge then moved all of its lines by 225 s. So the capture length
-# comes from ffmpeg's capture clock (see capture_progress), and what is missing
-# from the file is recorded as lost audio, with a timeline the merge can follow.
-#
-# Note this measures the offset between the tracks, not either one's offset from
-# when you clicked record — that is all the merge needs.
-expect = int(os.environ["MR_EXPECT"])
-first_sample = {}
-repaired = set()
-for name in ("mic.wav", "system.wav"):
-    fp = os.path.join(d, name)
-    if not os.path.exists(fp):
-        continue
-    if finish_header(fp):
-        repaired.add(name)
-    try:
-        with wave.open(fp, "rb") as w:
-            frame = w.getsampwidth() * w.getnchannels()
-            frames = min(w.getnframes(), max(0, os.path.getsize(fp) - 44) // frame)
-            audio_secs = frames / float(w.getframerate())
-    except Exception:
-        continue  # unreadable WAV is the silence guard's problem, not this one
-    pts, input_hz = capture_progress(os.path.join(d, name[:-4] + "-ffmpeg.log"), expect)
-    # Never shorter than the audio: an ffmpeg that was killed leaves a last
-    # progress line up to half a second old.
-    span = max(audio_secs, pts[-1][1] if pts else 0.0)
-    first_sample[name] = (os.path.getmtime(fp) - span, audio_secs, span, pts, input_hz)
-base = min((v[0] for v in first_sample.values()), default=0.0)
-
-warnings = []
-for name in ("mic.wav", "system.wav"):
-    fp = os.path.join(d, name)
-    if not os.path.exists(fp):
-        continue
-    size = os.path.getsize(fp)
-    checks[name] = {"bytes": size,
-                    "bytes_per_sec": round(size / dur) if dur else None}
-    if name in repaired:
-        # Its recorder was killed or crashed: see finish_header.
-        checks[name]["header_repaired"] = True
-    if name in first_sample:
-        t0, audio_secs, span, pts, input_hz = first_sample[name]
-        checks[name]["audio_seconds"] = round(audio_secs, 3)
-        checks[name]["start_offset_seconds"] = round(t0 - base, 3)
-        if input_hz and name == "mic.wav":   # the system track's is our own fifo
-            checks[name]["input_sample_rate"] = input_hz
-        # Under a second is not worth correcting for: the progress lines are
-        # only that precise.
-        lost = span - audio_secs
-        if lost >= 1.0:
-            checks[name]["lost_seconds"] = round(lost, 3)
-            checks[name]["timeline"] = timeline(pts, audio_secs, span)
-        if lost >= 2.0 and lost > 0.03 * span:
-            side = "your side" if name == "mic.wav" else "the other side"
-            warnings.append(
-                f"{name} lost {100 * lost / span:.0f}% of its audio ({lost:.0f}s of "
-                f"{span:.0f}s), in small gaps spread across the call. Its lines "
-                f"are still placed at the right time, but words on {side} may be "
-                f"missing or misheard.")
-    ppm = clock_error_ppm(os.path.join(d, name[:-4] + "-ffmpeg.log"))
-    if ppm is not None:
-        checks[name]["clock_error_ppm"] = round(ppm, 1)
-    # Is the file the right size?
-    if dur > 5 and size < expect * dur * 0.5:
-        warnings.append(f"{name} is {size} bytes for {dur}s "
-                        f"(expected ~{expect*dur}) — likely a permissions problem")
-    # Does it contain anything? A full-size file of zeros passes every other
-    # check we have, so this is the one that catches a denied tap.
-    pk = peak_dbfs(fp)
-    if pk is not None:
-        checks[name]["peak_dbfs"] = (None if pk == -math.inf else round(pk, 1))
-        if pk < -60:
-            cause = ("System Audio Recording" if name == "system.wav"
-                     else "Microphone")
-            warnings.append(
-                f"{name} is silent (peak {'-inf' if pk == -math.inf else f'{pk:.0f}'} "
-                f"dBFS) — it recorded no audio at all. Either nothing was playing, "
-                f"or whatever launched meetingrec lacks {cause} permission. "
-                f"Permissions attach to the launcher, so a working Terminal does "
-                f"not mean a working menu bar.")
-doc["checks"] = checks
-
-# A large skew is not itself an error — the merge corrects for it — but it means
-# seconds of one side went uncaptured, so it is worth seeing. Audio lost along
-# the way is not skew, and is reported above.
-skew = max((c.get("start_offset_seconds", 0) for c in checks.values()
-            if isinstance(c, dict)), default=0)
-if skew > 8:
-    warnings.append(f"tracks started {skew:.1f}s apart — that much of the "
-                    f"later track was missed (connect headphones before recording)")
-if warnings:
-    doc["warnings"] = warnings
-with open(p, "w") as f:
-    json.dump(doc, f, indent=2); f.write("\n")
-
-# Keep the measurements after the recording itself is gone.
-#
-# The meeting-notes skill deletes the whole session directory once the note is
-# written — that is the retention policy, and it is correct for audio. But it
-# also takes session.json, so anything learned about the hardware would die with
-# every meeting and the drift question could never accumulate an answer. One
-# line per session, outside the vault so Obsidian never indexes it, costs
-# nothing and means the evidence outlives the recording.
-try:
-    state = os.environ.get("MR_STATE")
-    if state:
-        os.makedirs(state, exist_ok=True)
-        row = {"session": os.path.basename(d), "started": doc.get("started"),
-               "duration_seconds": dur,
-               "mic_device": doc.get("mic_device"),
-               "output_device": doc.get("output_device")}
-        for name in ("mic.wav", "system.wav"):
-            c = checks.get(name)
-            if isinstance(c, dict):
-                row[name] = {k: c.get(k) for k in
-                             ("clock_error_ppm", "start_offset_seconds",
-                              "peak_dbfs", "audio_seconds", "lost_seconds",
-                              "input_sample_rate")}
-        if warnings:
-            row["warnings"] = warnings
-        with open(os.path.join(state, "metrics.jsonl"), "a") as f:
-            f.write(json.dumps(row) + "\n")
-except Exception:
-    pass  # never let bookkeeping fail a stop
-
-for w in warnings:
-    print("WARNING: " + w)
-PY
+  MR_STATE="$STATE_DIR" python3 "$LIB/stop_checks.py"
 
   rm -f "$STATE_FILE"
 
@@ -934,14 +507,7 @@ backup_own_files() {
   local list="$BACKUPS/.list.$$" file
   mkdir -p "$BACKUPS" || die "couldn't create $BACKUPS, so nothing was changed."
   git -C "$REPO_ROOT" ls-files -z --others --ignored --exclude-standard 2>/dev/null \
-    | python3 -c '
-import sys
-skip = ("scribe/input/", "teamnotes/input/")
-for p in sys.stdin.buffer.read().split(b"\0"):
-    s = p.decode("utf-8", "surrogateescape")
-    if not s or s.startswith(skip) or s.endswith(".DS_Store") or "/__pycache__/" in s:
-        continue
-    sys.stdout.buffer.write(p + b"\0")' > "$list"
+    | python3 "$LIB/backup_list.py" > "$list"
   if [ ! -s "$list" ]; then
     rm -f "$list"; return 0
   fi
@@ -950,17 +516,8 @@ for p in sys.stdin.buffer.read().split(b"\0"):
   file="$file.tar.gz"
   # The archive, plus a fingerprint of each file to check against afterwards.
   tar -C "$REPO_ROOT" -czf "$file" --null -T "$list" 2>/dev/null \
-    && python3 - "$REPO_ROOT" "$list" > "$file.sums" <<'PY' \
+    && python3 "$LIB/backup_sums.py" "$REPO_ROOT" "$list" > "$file.sums" \
     || { rm -f "$list" "$file" "$file.sums"; die "couldn't back up your files before updating, so nothing was changed."; }
-import hashlib, json, os, sys
-root, names = sys.argv[1], open(sys.argv[2], "rb").read().split(b"\0")
-sums = {}
-for n in filter(None, names):
-    path = os.path.join(root.encode(), n)
-    if os.path.isfile(path):
-        sums[n.decode("utf-8", "surrogateescape")] = hashlib.sha256(open(path, "rb").read()).hexdigest()
-json.dump(sums, sys.stdout)
-PY
   rm -f "$list"
   BACKUP_FILE="$file"
 }
@@ -970,19 +527,7 @@ PY
 settle_backup() {
   [ -n "$BACKUP_FILE" ] || return 0
   local changed file
-  changed="$(python3 - "$REPO_ROOT" "$BACKUP_FILE.sums" <<'PY'
-import hashlib, json, os, sys
-root, sums = sys.argv[1], json.load(open(sys.argv[2]))
-for name, digest in sorted(sums.items()):
-    path = os.path.join(root, name)
-    try:
-        same = hashlib.sha256(open(path, "rb").read()).hexdigest() == digest
-    except OSError:
-        same = False
-    if not same:
-        print(name)
-PY
-)" || changed="(couldn't check)"
+  changed="$(python3 "$LIB/backup_changed.py" "$REPO_ROOT" "$BACKUP_FILE.sums")" || changed="(couldn't check)"
   rm -f "$BACKUP_FILE.sums"
   if [ -z "$changed" ]; then
     rm -f "$BACKUP_FILE"
@@ -1039,7 +584,7 @@ cmd_update() {
       # Git refused before touching a file, so the backup isn't needed.
       [ -n "$BACKUP_FILE" ] && rm -f "$BACKUP_FILE" "$BACKUP_FILE.sums"
       printf '%s\n' "$out" | sed 's/^/  /' >&2
-      die "couldn't update, so nothing was changed. Git's reason is above: usually a file in $REPO_ROOT was edited on this Mac and the update changes it too. Ask Claude (run claude in $REPO_ROOT) to help keep your edit, then try again."
+      die "couldn't update, so nothing was changed. Git's reason is above: usually a file in $REPO_ROOT was edited on this Mac and the update changes it too. Ask your coding agent (start it in $REPO_ROOT) to help keep your edit, then try again."
     fi
     settle_backup
     echo "updated $before → $("${git[@]}" rev-parse --short HEAD):"
@@ -1645,38 +1190,7 @@ cmd_local_model() {
 #   meetingrec antigravity-project <folder>
 cmd_antigravity_project() {
   [ $# -eq 1 ] || die "usage: meetingrec antigravity-project <folder>"
-  python3 - "$1" "$HOME/.gemini/config/projects" <<'PY'
-import glob, json, os, sys
-from urllib.parse import unquote, urlparse
-
-want = os.path.realpath(sys.argv[1])
-found = []
-for path in glob.glob(os.path.join(sys.argv[2], "*.json")):
-    try:
-        with open(path) as f:
-            project = json.load(f)
-        resources = project["projectResources"].get("resources") or []
-    except (OSError, ValueError, KeyError, AttributeError, TypeError):
-        continue
-    uris = []
-    for r in resources:
-        if not isinstance(r, dict):
-            continue
-        uris.append(r.get("folderUri"))
-        uris += [v.get("folderUri") for v in r.values() if isinstance(v, dict)]
-    for uri in uris:
-        if not isinstance(uri, str):
-            continue
-        u = urlparse(uri)
-        if u.scheme != "file" or u.netloc not in ("", "localhost"):
-            continue
-        if os.path.realpath(unquote(u.path)) == want and project.get("id"):
-            found.append((os.path.getmtime(path), str(project["id"])))
-            break
-if not found:
-    sys.exit(1)
-print(max(found)[1])
-PY
+  python3 "$LIB/antigravity_project.py" "$1" "$HOME/.gemini/config/projects"
 }
 
 # --------------------------------------------------------------------------
@@ -1721,7 +1235,6 @@ cmd_vault_root() {
 #   meetingrec share-copy <team note>
 #   meetingrec clear-input <input> --delete|--keep-transcript|--keep-recording --note <file>...
 
-LIB="$REPO_ROOT/.engine/lib"
 # Kept transcripts, personal and team alike.
 KEEP_DIR="$REPO_ROOT/scribe/transcripts"
 AUDIO_EXT="m4a|mp3|wav|mp4|aac|caf"
@@ -1822,42 +1335,7 @@ cmd_prepare() {
 # tracks to pre-fill the questions, and whether each track captured sound.
 cmd_session_info() {
   [ $# -eq 1 ] && [ -d "$1" ] || die "usage: meetingrec session-info <session folder>"
-  python3 - "$1" <<'PY'
-import datetime, json, os, sys
-d = sys.argv[1]
-name = os.path.basename(os.path.normpath(d))
-try:
-    doc = json.load(open(os.path.join(d, "session.json")))
-except (OSError, ValueError):
-    doc = None
-if doc is None:
-    # A half-written session still gets a note: go by the audio files.
-    tracks = [t for t in ("mic", "system") if os.path.exists(os.path.join(d, t + ".wav"))]
-    print("NO SESSION FILE")
-    print("TITLE=" + name.split("_", 1)[-1].replace("-", " "))
-    print("DATE=" + name[:10])
-    print("TRACKS=" + ",".join(tracks))
-    sys.exit(0)
-started = doc.get("started") or ""
-try:
-    date = (datetime.datetime.fromisoformat(started.replace("Z", "+00:00"))
-            .astimezone().date().isoformat())
-except ValueError:
-    date = name[:10]
-print("TITLE=" + (doc.get("title") or name.split("_", 1)[-1].replace("-", " ")))
-print("DATE=" + date)
-print("TRACKS=" + ",".join(doc.get("tracks") or []))
-for track, c in (doc.get("checks") or {}).items():
-    if not isinstance(c, dict):
-        continue
-    peak = c.get("peak_dbfs")
-    print(f"TRACK {track}: peak {peak} dBFS, {c.get('audio_seconds')}s")
-    # Healthy speech peaks around -5 to -30; below -60 is digital silence.
-    if peak is None or peak < -60:
-        print(f"SILENT {track}")
-for w in doc.get("warnings") or []:
-    print("WARNING " + w)
-PY
+  python3 "$LIB/session_info.py" "$1"
 }
 
 # Whisper (whisper.cpp v1.9.5, whisper_full_with_state) primes each 30 s window

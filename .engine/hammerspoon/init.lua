@@ -645,7 +645,7 @@ local function folderChanged(name, label, old)
   local msg = label .. " → " .. tilde(new) .. (settings[name].isDefault and " (default)" or "")
   if name ~= "OUTPUT_ROOT" and old ~= new and countNotes(old) > 0 then
     msg = msg .. ". The notes already in " .. tilde(old) ..
-      " stay there; ask Claude to move them if you like."
+      " stay there; ask your agent to move them if you like."
   end
   notify("MeetingRec", msg)
 end

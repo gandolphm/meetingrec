@@ -681,6 +681,34 @@ check "a short prompt doesn't" bash -c '! grep -q "names prompt" <<< "$1"' _ "$o
 out="$(mrc transcribe "$T/already.txt" --prompt "$long" 2>&1)"
 check "a transcript doesn't, since Whisper isn't run" bash -c '! grep -q "names prompt" <<< "$1"' _ "$out"
 
+# uninstall counts only files that are the user's: the dashboards and notes
+# tables copied from the skills' starters, and personal.md copied from its
+# template, don't count until they're edited. Needs a git copy, since it asks git
+# what's untracked; the copy is this checkout's tracked files as they are now.
+echo "uninstall: whose files count"
+U="$T/uninstall/meetingrec"
+mkdir -p "$U"
+git -C "$SRC" ls-files -z | tar -C "$SRC" --null -T - -cf - | tar -C "$U" -xf -
+git -C "$U" init -q && git -C "$U" add -A \
+  && git -C "$U" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm copy
+for pair in "scribe/.agents/skills/meeting-notes/assets/Tasks.md|scribe/Tasks.md" \
+    "teamnotes/.agents/skills/team-notes/assets/Action Items.md|teamnotes/Action Items.md" \
+    "teamnotes/.agents/skills/team-notes/assets/index.base|teamnotes/index.base" \
+    "scribe/.agents/skills/meeting-notes/assets/index.base|scribe/index.base"; do
+  cp "$U/${pair%%|*}" "$U/${pair#*|}"
+done
+cp "$U/scribe/settings/personal.example.md" "$U/scribe/settings/personal.md"
+cp "$U/teamnotes/settings/personal.example.md" "$U/teamnotes/settings/personal.md"
+plan() { HOME="$T/uninstall/home" XDG_STATE_HOME="$T/uninstall/state" MEETINGREC_CONFIG="$T/uninstall/config.sh" \
+  "$U/.engine/bin/meetingrec" uninstall --dry-run 2>&1 | sed -n 's/^plan \([0-9]*\) .*/\1/p'; }
+check "untouched starters and personal.md copies aren't counted as yours" [ "$(plan)" = 0 ]
+printf '\n- [ ] something\n' >> "$U/scribe/Tasks.md"
+check "...an edited dashboard is" [ "$(plan)" = 1 ]
+mkdir -p "$U/scribe/meeting-notes" && printf 'note\n' > "$U/scribe/meeting-notes/Call.md"
+check "...and so is a note" [ "$(plan)" = 2 ]
+: > "$U/scribe/.DS_Store"
+check "...but not Finder's .DS_Store" [ "$(plan)" = 2 ]
+
 echo
 printf '%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
