@@ -476,6 +476,23 @@ local settings = {}   -- NAME -> { value = "…", isDefault = true|false }
 local agents = {}     -- from `meetingrec agents`: { cmd, name, path, app }, in its order
 local loadSettings
 
+local function parseAgents(list)
+  local found = {}
+  for cmd, name, path, app in list:gmatch("([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)") do
+    found[#found + 1] = { cmd = cmd, name = name, path = path, app = app }
+  end
+  return found
+end
+
+-- Whether an agent meetingrec knows has no command on this Mac, only its app:
+-- then Terminal can't start it, and the app is the only way in.
+local function appOnly(cmd)
+  for _, a in ipairs(agents) do
+    if a.cmd == cmd then return a.path == "" and a.app ~= "" end
+  end
+  return false
+end
+
 local function writeUp(folder, request)
   local dir = REPO .. "/" .. folder
   -- Asked rather than assumed, so a change made from Terminal counts at once.
@@ -486,17 +503,24 @@ local function writeUp(folder, request)
     if not settings.NOTES_AGENT or settings.NOTES_AGENT.value ~= agent then loadSettings() end
     local app, terminal = writeUpTargets(agent)
     local terminalFirst = exitCode == 0 and stdOut:match("WRITEUP_IN\tterminal\t") ~= nil
-    local order = { app, terminal }
-    if terminalFirst or not app then order = { terminal, app } end
-    local function open(project)
+    -- noCommand: the agent's app is here but its command isn't, so the Terminal
+    -- window would only say it's missing. The app goes first, whatever the
+    -- setting. (Claude's Terminal is a link that doesn't open without the
+    -- claude command, so it falls back to the app by itself.)
+    local function open(project, noCommand)
+      local order = { app, terminal }
+      if not app or (terminalFirst and not noCommand) then order = { terminal, app } end
       for _, target in ipairs(order) do
         if openTarget(target, folder, request, project) then
           log("write-up: %s in %s", target.link and target.name or (agent .. " in Terminal"), dir)
+          if terminalFirst and noCommand and target == app then
+            notify("MeetingRec", "Opened in the " .. app.name .. ": Terminal needs the " .. agent ..
+              " command, which isn't on this Mac.")
           -- Having no app is normal; asking for Terminal and not getting it isn't.
-          if terminalFirst and target == app then
+          elseif terminalFirst and target == app then
             notify("MeetingRec", "Couldn't open Terminal, so this opened in the " .. app.name .. "." ..
               app.insteadOfTerminal)
-          elseif not terminalFirst and app and app.projectParam and not project then
+          elseif (not terminalFirst or noCommand) and app and app.projectParam and not project then
             local home = os.getenv("HOME")
             local shown = dir:sub(1, #home + 1) == home .. "/" and "~" .. dir:sub(#home + 1) or dir
             notify("MeetingRec", "Opened in Terminal: Antigravity has no project for " .. shown ..
@@ -519,14 +543,28 @@ local function writeUp(folder, request)
           folder .. " in Terminal.")
       end
     end
-    if app and app.projectParam then
-      run({ "antigravity-project", dir }, function(found, out)
-        local project = found == 0 and out:match("^(%S+)") or nil
-        if not project then log("write-up: no Antigravity project holds %s", dir) end
-        finish(open(project))
+    local function withProject(noCommand)
+      if app and app.projectParam then
+        run({ "antigravity-project", dir }, function(found, out)
+          local project = found == 0 and out:match("^(%S+)") or nil
+          if not project then log("write-up: no Antigravity project holds %s", dir) end
+          finish(open(project, noCommand))
+        end)
+      else
+        finish(open(nil, noCommand))
+      end
+    end
+    -- Asked now, not taken from the cache: the command may have been installed
+    -- or removed since the menu loaded.
+    if app and terminal == COMMAND_FILE then
+      run({ "agents" }, function(found, list)
+        if found == 0 then agents = parseAgents(list) end
+        local noCommand = appOnly(agent)
+        if noCommand then log("write-up: %s has its app but no command", agent) end
+        withProject(noCommand)
       end)
     else
-      finish(open())
+      withProject(false)
     end
   end)
 end
@@ -554,13 +592,7 @@ loadSettings = function(after)
       end
     end
     run({ "agents" }, function(found, list)
-      if found == 0 then
-        local fresh = {}
-        for cmd, name, path, app in list:gmatch("([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)\t([^\t\n]*)") do
-          fresh[#fresh + 1] = { cmd = cmd, name = name, path = path, app = app }
-        end
-        agents = fresh
-      end
+      if found == 0 then agents = parseAgents(list) end
       if after then after() end
     end)
   end)
@@ -759,12 +791,17 @@ local function settingsMenu()
     end }
   -- The app-or-Terminal choice is for the agents that have an app link. Any
   -- other always opens in Terminal.
-  local app = writeUpTargets(agent)
+  local app, terminal = writeUpTargets(agent)
   local writeUpItem = { title = "Write up notes opens in Terminal", disabled = true }
   if app then
+    -- With only the app on this Mac, Terminal can't start the agent: shown
+    -- greyed out, and the app checked, since that's where it opens.
+    local noCommand = terminal == COMMAND_FILE and appOnly(agent)
+    local terminalTitle = noCommand and ("Terminal (needs the " .. agent .. " command)") or "Terminal"
     writeUpItem = { title = "Write up notes opens in", menu = {
-        { title = app.name, checked = not inTerminal, fn = function() saveSetting("WRITEUP_IN", "app") end },
-        { title = "Terminal", checked = inTerminal, fn = function() saveSetting("WRITEUP_IN", "terminal") end },
+        { title = app.name, checked = not inTerminal or noCommand, fn = function() saveSetting("WRITEUP_IN", "app") end },
+        { title = terminalTitle, checked = inTerminal and not noCommand, disabled = noCommand,
+          fn = function() saveSetting("WRITEUP_IN", "terminal") end },
       } }
   end
   return {
