@@ -628,7 +628,7 @@ choose_agent() {
         default="$n"
       fi
     done
-    echo "  To change it later: ○ → Settings → Notes are written by."
+    echo "  To change it later: ○ → Settings → Agent."
     while :; do
       read -r -p "  Number [$default]: " reply
       reply="${reply:-$default}"
@@ -655,7 +655,7 @@ choose_agent() {
     ok "notes are written by $AGENT_NAME"
   else
     note "notes are set to be written by $AGENT, which isn't on this Mac. Install it, or"
-    note "pick another: ○ → Settings → Notes are written by."
+    note "pick another: ○ → Settings → Agent."
   fi
 }
 

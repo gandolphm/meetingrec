@@ -751,7 +751,7 @@ local function settingsMenu()
   end
   agentItems[#agentItems + 1] = { title = "-" }
   agentItems[#agentItems + 1] = { title = "Other command…", fn = function()
-      local button, typed = hs.dialog.textPrompt("Notes are written by",
+      local button, typed = hs.dialog.textPrompt("Agent",
         "The command that starts the coding agent, with any options, as you'd type it in " ..
           "Terminal. The request is added after it. No quotes.",
         known and "" or agent, "Save", "Cancel")
@@ -760,9 +760,9 @@ local function settingsMenu()
   -- The app-or-Terminal choice is for the agents that have an app link. Any
   -- other always opens in Terminal.
   local app = writeUpTargets(agent)
-  local writeUpItem = { title = "Write up notes in Terminal", disabled = true }
+  local writeUpItem = { title = "Write up notes opens in Terminal", disabled = true }
   if app then
-    writeUpItem = { title = "Write up notes in", menu = {
+    writeUpItem = { title = "Write up notes opens in", menu = {
         { title = app.name, checked = not inTerminal, fn = function() saveSetting("WRITEUP_IN", "app") end },
         { title = "Terminal", checked = inTerminal, fn = function() saveSetting("WRITEUP_IN", "terminal") end },
       } }
@@ -774,7 +774,7 @@ local function settingsMenu()
           if want == "on" then startAutoCheck() else stopAutoCheck() end
         end)
       end },
-    { title = "Notes are written by", menu = agentItems },
+    { title = "Agent", menu = agentItems },
     writeUpItem,
     { title = "-" },
     folderMenu("NOTES_VAULT", "Personal notes"),
