@@ -290,7 +290,7 @@ class WholeSession(unittest.TestCase):
         write_script(os.path.join(self.lib, "transcribe.sh"), """
             #!/usr/bin/env bash
             base="$(basename "${1%.*}")"
-            printf '1\\n00:00:00,000 --> 00:00:01,000\\nhello from %s\\n\\n' "$base" > "$2/$base.meetingrec.srt"
+            printf '1\\n00:00:00,000 --> 00:00:01,000\\nhello from %s\\n\\n' "$base" > "$2/$(basename "$1").meetingrec.srt"
             """)
         write_script(os.path.join(stub_bin(self.home), "ffmpeg"), """
             #!/usr/bin/env python3
@@ -418,7 +418,7 @@ class TranscribeSh(unittest.TestCase):
                 open(self.log, "w").close()
                 audio = os.path.join(self.tmp, name)
                 write_wav(audio, 0.5, **kwargs)
-                copy = os.path.join(self.tmp, name[:-4] + ".meetingrec.16k.wav")
+                copy = os.path.join(self.tmp, name + ".meetingrec.16k.wav")
                 p, calls = self.run_sh(audio)
                 self.assertEqual(p.returncode, 0, p.stderr)
                 self.assertEqual(calls, [f"ffmpeg {copy}", f"whisper-cli -f {copy}"])
@@ -430,11 +430,11 @@ class TranscribeSh(unittest.TestCase):
         write(audio, "not really m4a")
         p, calls = self.run_sh(audio)
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(calls[0], f"ffmpeg {os.path.join(self.tmp, 'call.meetingrec.16k.wav')}")
+        self.assertEqual(calls[0], f"ffmpeg {os.path.join(self.tmp, 'call.m4a.meetingrec.16k.wav')}")
 
     def test_a_transcript_beside_the_audio_is_never_touched(self):
         # call.srt may be a phone app's own transcript of call.m4a, dropped in
-        # with it. Whisper writes call.meetingrec.srt, also when the GPU fails.
+        # with it. Whisper writes call.m4a.meetingrec.srt, also when the GPU fails.
         for gpu in (True, False):
             with self.subTest(gpu=gpu):
                 if not gpu:
@@ -446,9 +446,20 @@ class TranscribeSh(unittest.TestCase):
                 p, _ = self.run_sh(audio)
                 self.assertEqual(p.returncode, 0, p.stderr)
                 self.assertEqual(read(theirs), "1\n00:00:00,000 --> 00:00:01,000\nthe app's own words\n")
-                ours = os.path.join(self.tmp, "call.meetingrec.srt")
+                ours = os.path.join(self.tmp, "call.m4a.meetingrec.srt")
                 self.assertIn(f"OK {ours}", p.stdout)
                 self.assertTrue(os.path.exists(ours))
+
+    def test_same_name_audio_files_get_their_own_transcripts(self):
+        wav, m4a = os.path.join(self.tmp, "call.wav"), os.path.join(self.tmp, "call.m4a")
+        write_wav(wav, 1.0)
+        write(m4a, "not really m4a")
+        outs = []
+        for audio in (wav, m4a):
+            p, _ = self.run_sh(audio)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            outs.append(p.stdout.split("OK ", 1)[1].strip())
+        self.assertEqual(outs, [wav + ".meetingrec.srt", m4a + ".meetingrec.srt"])
 
     def test_without_the_gpu_it_runs_again_on_the_cpu(self):
         open(self.no_gpu, "w").close()
@@ -539,3 +550,31 @@ class TranscriptHasWords(unittest.TestCase):
     def test_missing_file(self):
         self.assertFalse(self.check("gone.srt", None))
         self.assertFalse(self.check("gone.txt", None))
+
+
+class SessionJsonOk(unittest.TestCase):
+    """session_json_ok.py: whether clear-input may treat a folder as a recording."""
+
+    def ok(self, text):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        path = os.path.join(tmp, "session.json")
+        if text is not None:
+            write(path, text)
+        return subprocess.run([sys.executable, os.path.join(LIB, "session_json_ok.py"), path],
+                              capture_output=True).returncode == 0
+
+    def test_meetingrecs_own(self):
+        self.assertTrue(self.ok(json.dumps({"title": "x", "started": "2026-01-01T10:00:00Z",
+                                            "tracks": ["mic", "system"]})))
+        self.assertTrue(self.ok(json.dumps({"started": "2026-01-01T10:00:00Z", "tracks": ["mic"]})))
+
+    def test_anything_else(self):
+        for text in (None, "", "not json", "{}", "[]",
+                     json.dumps({"started": "x"}),
+                     json.dumps({"tracks": ["mic"]}),
+                     json.dumps({"started": "x", "tracks": []}),
+                     json.dumps({"started": "x", "tracks": ["slides"]}),
+                     json.dumps({"started": 5, "tracks": ["mic"]})):
+            with self.subTest(text=text):
+                self.assertFalse(self.ok(text))

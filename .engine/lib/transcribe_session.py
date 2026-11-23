@@ -279,8 +279,8 @@ def do_track(session, name, model, prompt, offset=0.0, timeline=None):
         os.path.exists(compact_wav) and os.remove(compact_wav)
         die(f"{name}: transcribe.sh failed ({rc.returncode}): {rc.stderr.strip()}")
 
-    # transcribe.sh names its output <input name>.meetingrec.srt.
-    raw_srt = os.path.join(session, f".{name}.speech.meetingrec.srt")
+    # transcribe.sh names its output <input file name>.meetingrec.srt.
+    raw_srt = os.path.join(session, f".{name}.speech.wav.meetingrec.srt")
     cues = [(to_real(s, mapping), to_real(e, mapping), t) for s, e, t in parse_srt(raw_srt)]
     # Bound against this track's own length before shifting: the offset moves the
     # track onto the shared session timeline, where that bound no longer applies.

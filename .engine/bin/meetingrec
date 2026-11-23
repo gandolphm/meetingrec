@@ -1392,7 +1392,8 @@ cmd_prepare() {
     done < <(ls -t "$inbox")
     while IFS= read -r entry; do
       echo "INPUT file $inbox/$entry"; found=1
-    done < <(ls -t "$inbox" | grep -iE "\.($AUDIO_EXT|$TEXT_EXT)$")
+    done < <(ls -t "$inbox" | grep -iE "\.($AUDIO_EXT|$TEXT_EXT)$" \
+               | grep -vE '\.meetingrec\.(srt|16k\.wav)$')
     [ "$found" -eq 1 ] || echo "NO INPUT"
   fi
 
@@ -1491,12 +1492,21 @@ keep_path() {
   echo "$try"
 }
 
-# Whether a folder is one of meetingrec's recordings: every one has had
-# session.json since the first version, and a track or two. Anything else in
-# an inbox (a folder of handouts, in a recordings folder shared with other
-# things) is never listed as a recording or removed.
+# Whether a folder is one of meetingrec's recordings: a track, or the
+# session.json meetingrec writes (with "started" and "tracks"; another app's
+# file of that name doesn't count). Anything else in an inbox (a folder of
+# handouts, in a recordings folder shared with other things) is never listed
+# as a recording or removed.
 is_session() {
-  [ -f "$1/session.json" ] || [ -f "$1/mic.wav" ] || [ -f "$1/system.wav" ]
+  [ -f "$1/mic.wav" ] || [ -f "$1/system.wav" ] \
+    || python3 "$LIB/session_json_ok.py" "$1/session.json"
+}
+
+# mv that only counts when the file really went: mv -n can skip a move
+# without an error, and every caller stops rather than report a move that
+# didn't happen.
+move_to() {
+  mv -n "$1" "$2" && [ -e "$2" ] && [ ! -e "$1" ]
 }
 
 # Whether a transcript file holds words: in an .srt, cue text other than
@@ -1544,7 +1554,7 @@ cmd_clear_input() {
     die "$input is still recording, so it was left where it is (stop the recording first)"
   fi
   if [ -d "$real" ] && ! is_session "$real"; then
-    die "$input isn't a meetingrec recording (no session.json, mic.wav or system.wav), so it was left where it is"
+    die "$input isn't a meetingrec recording (no mic.wav or system.wav, and no session.json from meetingrec), so it was left where it is"
   fi
   if [ "$mode" != delete ]; then
     [ -d "$KEEP_DIR" ] || die "the transcripts folder $KEEP_DIR is missing, so nothing was moved or removed"
@@ -1557,7 +1567,8 @@ cmd_clear_input() {
       delete) rm -rf "$real" && echo "DELETED $real" ;;
       keep-recording)
         local dest; dest="$(keep_path "$real" "$date")"
-        mv "$real" "$dest" && echo "KEPT $dest" ;;
+        move_to "$real" "$dest" || die "couldn't move $real to $dest, so it's still in the inbox"
+        echo "KEPT $dest" ;;
       keep-transcript)
         # The text and the session file that explains it; the audio goes.
         # Copied, checked, and only then is the recording removed: a move that
@@ -1590,35 +1601,39 @@ cmd_clear_input() {
       delete) rm -f "$real" && echo "DELETED $real" ;;
       keep-transcript|keep-recording)
         local dest; dest="$(keep_path "$real" "$date")"
-        mv -n "$real" "$dest" || die "couldn't move $real"
+        move_to "$real" "$dest" || die "couldn't move $real to $dest, so it's still in the inbox"
         echo "KEPT $dest" ;;
     esac
     return
   fi
 
-  # An audio file, plus what transcribing it made: <name>.meetingrec.srt next
-  # to it, and the 16 kHz copy if a run stopped half-way. Not <name>.srt: that
-  # is a file of the user's (transcribe.sh never writes one), and stays.
-  local stem="${real%.*}" transcript="${real%.*}.meetingrec.srt"
-  local copy="${real%.*}.meetingrec.16k.wav"
+  # An audio file, plus what transcribing it made: <file name>.meetingrec.srt
+  # next to it (call.m4a.meetingrec.srt), and the 16 kHz copy if a run stopped
+  # half-way. Not call.srt: that is a file of the user's (transcribe.sh never
+  # writes one), and stays. Kept transcripts are named call.srt: the
+  # .meetingrec part only kept them apart in the inbox.
+  local stem="${real%.*}" transcript="$real.meetingrec.srt" copy="$real.meetingrec.16k.wav"
+  local dest="" tdest=""
   case "$mode" in
     delete)
       rm -f "$real" "$transcript" "$copy" && echo "DELETED $real" ;;
     keep-transcript)
       has_words "$transcript" || die "no transcript text for $real (missing, empty or only silence), so nothing was removed"
-      # Kept as <name>.srt: the .meetingrec part only kept it apart in the inbox.
-      local dest; dest="$(keep_path "$stem.srt" "$date")"
-      mv -n "$transcript" "$dest" || die "couldn't move $transcript"
+      dest="$(keep_path "$stem.srt" "$date")"
+      move_to "$transcript" "$dest" || die "couldn't move $transcript to $dest, so nothing was removed"
       rm -f "$real" "$copy"
       echo "KEPT $dest" ;;
     keep-recording)
-      local dest
-      dest="$(keep_path "$real" "$date")"
-      mv -n "$real" "$dest" && echo "KEPT $dest"
+      # The transcript first: if the recording then can't move, the next try
+      # finds it on its own and finishes the job.
       if [ -f "$transcript" ]; then
-        dest="$(keep_path "$stem.srt" "$date")"
-        mv -n "$transcript" "$dest" && echo "KEPT $dest"
+        tdest="$(keep_path "$stem.srt" "$date")"
+        move_to "$transcript" "$tdest" || die "couldn't move $transcript to $tdest, so nothing was moved"
       fi
+      dest="$(keep_path "$real" "$date")"
+      move_to "$real" "$dest" || die "couldn't move $real to $dest, so it's still in the inbox${tdest:+ (its transcript was kept as $tdest)}"
+      echo "KEPT $dest"
+      [ -z "$tdest" ] || echo "KEPT $tdest"
       rm -f "$copy" ;;
   esac
 }

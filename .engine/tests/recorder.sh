@@ -371,7 +371,7 @@ for mode in delete keep-transcript keep-recording; do
 done
 rm -f "$INBOX/brief.srt" "$REPO/scribe/transcripts/brief"*
 
-# An audio file: what transcribing it made (<name>.meetingrec.*) goes with it.
+# An audio file: what transcribing it made (<file name>.meetingrec.*) goes with it.
 # A <name>.srt beside it is a file of the user's (a phone app's own
 # transcript), never meetingrec's, and stays whatever the choice.
 theirs='1
@@ -383,11 +383,11 @@ hello'
 for mode in delete keep-transcript keep-recording; do
   rm -f "$INBOX/call."* "$REPO/scribe/transcripts/call"*
   echo x > "$INBOX/call.m4a"; printf '%s\n' "$theirs" > "$INBOX/call.srt"
-  printf '%s\n' "$words" > "$INBOX/call.meetingrec.srt"; echo x > "$INBOX/call.meetingrec.16k.wav"
+  printf '%s\n' "$words" > "$INBOX/call.m4a.meetingrec.srt"; echo x > "$INBOX/call.m4a.meetingrec.16k.wav"
   out="$("$MR" clear-input "$INBOX/call.m4a" --$mode --note "$note" 2>&1)" \
     || bad "--$mode on call.m4a succeeds" "$out"
   check "--$mode on audio takes it, its transcript and its 16 kHz copy out of the inbox" \
-    absent "$INBOX/call.m4a" "$INBOX/call.meetingrec.srt" "$INBOX/call.meetingrec.16k.wav"
+    absent "$INBOX/call.m4a" "$INBOX/call.m4a.meetingrec.srt" "$INBOX/call.m4a.meetingrec.16k.wav"
   check "...and leaves the user's call.srt as it was" [ "$(cat "$INBOX/call.srt")" = "$theirs" ]
 done
 check "--keep-transcript keeps Whisper's words, named call.srt" \
@@ -399,9 +399,9 @@ rm -f "$INBOX/call."* "$REPO/scribe/transcripts/call"*
 for kind in empty timings blank; do
   echo x > "$INBOX/call.m4a"
   case "$kind" in
-    empty)   : > "$INBOX/call.meetingrec.srt" ;;
-    timings) printf '1\n00:00:00,000 --> 00:00:05,000\n\n' > "$INBOX/call.meetingrec.srt" ;;
-    blank)   printf '1\n00:00:00,000 --> 00:00:30,000\n[BLANK_AUDIO]\n\n' > "$INBOX/call.meetingrec.srt" ;;
+    empty)   : > "$INBOX/call.m4a.meetingrec.srt" ;;
+    timings) printf '1\n00:00:00,000 --> 00:00:05,000\n\n' > "$INBOX/call.m4a.meetingrec.srt" ;;
+    blank)   printf '1\n00:00:00,000 --> 00:00:30,000\n[BLANK_AUDIO]\n\n' > "$INBOX/call.m4a.meetingrec.srt" ;;
   esac
   out="$("$MR" clear-input "$INBOX/call.m4a" --keep-transcript --note "$note" 2>&1)"; rc=$?
   check "--keep-transcript on audio whose transcript is $kind refuses" [ "$rc" -ne 0 ]
@@ -416,6 +416,44 @@ check "a session whose only transcript is [BLANK_AUDIO] refuses" [ "$rc" -ne 0 ]
 check "...and keeps the recording" exist "$s/mic.wav"
 rm -rf "$s"
 
+# Two audio files with one name: each keeps its own transcript.
+echo x > "$INBOX/call.wav"; echo x > "$INBOX/call.m4a"
+printf '1\n00:00:01,000 --> 00:00:02,000\nthe wav words\n' > "$INBOX/call.wav.meetingrec.srt"
+printf '1\n00:00:01,000 --> 00:00:02,000\nthe m4a words\n' > "$INBOX/call.m4a.meetingrec.srt"
+out="$("$MR" prepare scribe 2>&1 | grep "^INPUT")"
+check "the inbox lists both recordings" has "$out" 'call\.wav$'
+check "...but not meetingrec's own transcripts" hasnt "$out" 'meetingrec\.srt'
+"$MR" clear-input "$INBOX/call.wav" --keep-transcript --note "$note" >/dev/null 2>&1
+check "--keep-transcript on call.wav keeps the wav's words" \
+  grep -q "the wav words" "$REPO/scribe/transcripts/call.srt"
+check "...and leaves call.m4a and its transcript" exist "$INBOX/call.m4a" "$INBOX/call.m4a.meetingrec.srt"
+rm -f "$INBOX/call."* "$REPO/scribe/transcripts/call"*
+
+# A move that fails is a failure, and the next try finishes the job.
+echo x > "$INBOX/call.m4a"
+printf '1\n00:00:01,000 --> 00:00:02,000\nhello\n' > "$INBOX/call.m4a.meetingrec.srt"
+chmod 555 "$REPO/scribe/transcripts"
+out="$("$MR" clear-input "$INBOX/call.m4a" --keep-recording --note "$note" 2>&1)"; rc=$?
+chmod 755 "$REPO/scribe/transcripts"
+check "--keep-recording that can't move exits non-zero" [ "$rc" -ne 0 ]
+check "...says it's still in the inbox" has "$out" "nothing was moved"
+check "...and leaves both in the inbox" exist "$INBOX/call.m4a" "$INBOX/call.m4a.meetingrec.srt"
+out="$("$MR" clear-input "$INBOX/call.m4a" --keep-recording --note "$note" 2>&1)" \
+  || bad "...and the next try succeeds" "$out"
+check "...keeping both" exist "$REPO/scribe/transcripts/call.m4a" "$REPO/scribe/transcripts/call.srt"
+check "...out of the inbox" absent "$INBOX/call.m4a" "$INBOX/call.m4a.meetingrec.srt"
+rm -f "$REPO/scribe/transcripts/call"*
+for kind in text session; do
+  if [ "$kind" = text ]; then s="$INBOX/brief.txt"; echo hi > "$s"
+  else s="$INBOX/2026-01-07T10-00_stuck"; mkdir -p "$s"; echo x > "$s/mic.wav"; fi
+  chmod 555 "$REPO/scribe/transcripts"
+  "$MR" clear-input "$s" --keep-recording --note "$note" >/dev/null 2>&1; rc=$?
+  chmod 755 "$REPO/scribe/transcripts"
+  check "--keep-recording of a $kind that can't move exits non-zero" [ "$rc" -ne 0 ]
+  check "...and leaves it in the inbox" exist "$s"
+  rm -rf "$s"
+done
+
 echo "clear-input on a folder that isn't a recording"
 s="$INBOX/Project handouts"
 mkdir -p "$s"; echo "# agenda" > "$s/agenda.md"
@@ -425,7 +463,21 @@ for mode in delete keep-transcript keep-recording; do
   check "...and leaves it where it is" exist "$s/agenda.md"
 done
 check "...and says why" has "$out" "isn't a meetingrec recording"
+# Another app's session.json is no reason to call it a recording.
+for json in '{}' '{"tracks": ["slides"], "started": "x"}' 'not json'; do
+  printf '%s' "$json" > "$s/session.json"
+  "$MR" clear-input "$s" --delete --note "$note" >/dev/null 2>&1; rc=$?
+  check "a session.json of $json: --delete refuses" [ "$rc" -ne 0 ]
+  check "...and leaves the folder" exist "$s/agenda.md"
+done
 rm -rf "$s"
+# meetingrec's own session.json counts, even with no track yet (a start that
+# stopped half-way).
+s="$INBOX/2026-01-08T10-00_halfway"
+mkdir -p "$s"; printf '{"title": "x", "started": "2026-01-08T15:00:00Z", "tracks": ["mic"]}' > "$s/session.json"
+"$MR" clear-input "$s" --delete --note "$note" >/dev/null 2>&1; rc=$?
+check "meetingrec's session.json alone: --delete removes it" [ "$rc" -eq 0 ]
+check "...and it's gone" absent "$s"
 
 echo "silence detection"
 out="$(STUB_FFMPEG_FAIL=1 python3 -c '
@@ -813,7 +865,8 @@ check "...and works the title, date and tracks out from the folder" \
 echo "prepare"
 inbox2="$T/inbox-prepare"
 mkdir -p "$inbox2/2026-01-04T10-00_standup" "$inbox2/Project handouts"
-: > "$inbox2/2026-01-04T10-00_standup/session.json"; : > "$inbox2/Project handouts/agenda.md"
+printf '{"started": "2026-01-04T15:00:00Z", "tracks": ["mic", "system"]}' \
+  > "$inbox2/2026-01-04T10-00_standup/session.json"; : > "$inbox2/Project handouts/agenda.md"
 : > "$inbox2/phone call.m4a"; : > "$inbox2/agenda.pdf"
 mrc config set OUTPUT_ROOT "$inbox2" >/dev/null
 out="$(mrc prepare scribe 2>&1)"
