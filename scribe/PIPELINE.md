@@ -72,8 +72,9 @@ go the same way every time: `prepare`, `session-info`, `transcribe`, `note-path`
 
 ## Key architectural notes
 
-- Transcription is a **local external dependency** (Whisper via shell) — the skill only runs
-  in Claude Code on your machine, not a web sandbox.
+- Transcription is a **local external dependency** (Whisper via shell) — the skill runs in
+  a coding agent on your machine (any of those in the README's
+  [Coding agents](../README.md#coding-agents)), not a web sandbox.
 - Obsidian-specific conventions (wikilinks-in-frontmatter, Bases, callouts, Tasks-plugin
   checkboxes) are central — output is not generic Markdown.
 - The type vocabulary and the name-correction table are living and open-ended. At the end of

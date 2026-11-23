@@ -17,7 +17,7 @@ into Markdown notes with to-dos, decisions and follow-ups. No meeting bot joins 
 
 It works with the agent you already use: [Claude Code, Codex or Antigravity](#coding-agents).
 
-Feel free to email with any [feedback](#feedback), suggestions, or questions at **goblin_outlet@icloud.com**.
+Feel free to email with any [feedback](#feedback), suggestions, or questions at **goblin_outlet.3x@icloud.com**.
 
 *meetingrec is a vibe-coded app.*
 

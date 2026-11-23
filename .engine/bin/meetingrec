@@ -1489,6 +1489,11 @@ keep_path() {
   echo "$try"
 }
 
+# Whether a transcript file exists, can be read, and holds more than whitespace.
+has_text() {
+  [ -f "$1" ] && grep -q '[^[:space:]]' "$1" 2>/dev/null
+}
+
 # Takes a used recording or transcript out of the inbox once the note is
 # written, so the next run doesn't write it up again. Refuses unless every
 # --note exists and isn't empty, and touches only things in an inbox.
@@ -1543,9 +1548,12 @@ cmd_clear_input() {
         # The text and the session file that explains it; the audio goes.
         # Copied, checked, and only then is the recording removed: a move that
         # fails half-way (a full disk) must not cost the files not yet moved.
+        # At least one of them must hold words. transcribe writes an empty .srt
+        # for a track with no speech before it gives up, and "no speech" is
+        # a loudness guess: the audio may be all that's left of the meeting.
         local dest f found=0
-        for f in merged.txt mic.srt system.srt; do [ -f "$real/$f" ] && found=1; done
-        [ "$found" -eq 1 ] || die "no transcript found in $real, so nothing was removed"
+        for f in merged.txt mic.srt system.srt; do has_text "$real/$f" && found=1; done
+        [ "$found" -eq 1 ] || die "no transcript text in $real (missing or empty), so nothing was removed"
         dest="$(keep_path "$real" "$date")"
         mkdir "$dest" || die "couldn't create $dest"
         for f in merged.txt mic.srt system.srt session.json; do
@@ -1560,19 +1568,31 @@ cmd_clear_input() {
     return
   fi
 
-  # A single file, plus what transcribing it made: <name>.srt next to it, and
+  # A text file is its own transcript: nothing else is touched, not even a
+  # file beside it with the same name (brief.txt and brief.srt can be two
+  # different imports).
+  if echo "$real" | grep -qiE "\.($TEXT_EXT)$"; then
+    case "$mode" in
+      delete) rm -f "$real" && echo "DELETED $real" ;;
+      keep-transcript|keep-recording)
+        local dest; dest="$(keep_path "$real" "$date")"
+        mv -n "$real" "$dest" || die "couldn't move $real"
+        echo "KEPT $dest" ;;
+    esac
+    return
+  fi
+
+  # An audio file, plus what transcribing it made: <name>.srt next to it, and
   # the 16 kHz copy if a run stopped half-way.
-  local stem="${real%.*}" transcript
-  if echo "$real" | grep -qiE "\.($TEXT_EXT)$"; then transcript="$real"; else transcript="$stem.srt"; fi
+  local stem="${real%.*}" transcript="${real%.*}.srt"
   case "$mode" in
     delete)
       rm -f "$real" "$stem.srt" "$stem.16k.wav" && echo "DELETED $real" ;;
     keep-transcript)
-      [ -f "$transcript" ] || die "no transcript found for $real, so nothing was removed"
+      has_text "$transcript" || die "no transcript text for $real (missing or empty), so nothing was removed"
       local dest; dest="$(keep_path "$transcript" "$date")"
       mv -n "$transcript" "$dest" || die "couldn't move $transcript"
-      [ "$transcript" = "$real" ] || rm -f "$real"
-      rm -f "$stem.16k.wav"
+      rm -f "$real" "$stem.16k.wav"
       echo "KEPT $dest" ;;
     keep-recording)
       local dest f

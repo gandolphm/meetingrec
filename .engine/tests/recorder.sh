@@ -340,6 +340,48 @@ mkdir -p "$s"; echo x > "$s/mic.wav"
 check "no transcript: refuses" [ "$rc" -ne 0 ]
 check "...and keeps the recording" exist "$s/mic.wav"
 
+# What transcribe leaves when neither track had speech: empty .srt files, no merged.txt.
+s="$INBOX/2026-01-04T10-00_empty"
+mkdir -p "$s"; echo x > "$s/mic.wav"; : > "$s/mic.srt"; printf '\n  \n' > "$s/system.srt"
+out="$("$MR" clear-input "$s" --keep-transcript --note "$note" 2>&1)"; rc=$?
+check "empty transcripts: refuses" [ "$rc" -ne 0 ]
+check "...says why" has "$out" 'no transcript text'
+check "...and keeps the recording" exist "$s/mic.wav"
+check "...and keeps nothing" absent "$REPO/scribe/transcripts/2026-01-04T10-00_empty"
+
+# A one-sided call: the other track is empty, but this one has words.
+s="$INBOX/2026-01-05T10-00_onesided"
+mkdir -p "$s"; echo x > "$s/mic.wav"; : > "$s/system.srt"
+printf '1\n00:00:01,000 --> 00:00:02,000\nhello\n\n' > "$s/mic.srt"
+"$MR" clear-input "$s" --keep-transcript --note "$note" >/dev/null 2>&1; rc=$?
+check "one-sided call: keeps the transcript" [ "$rc" -eq 0 ]
+check "...with the words in it" exist "$REPO/scribe/transcripts/2026-01-05T10-00_onesided/mic.srt"
+
+echo "clear-input on a single file"
+# Two different imports with one name: clearing one leaves the other alone.
+for mode in delete keep-transcript keep-recording; do
+  rm -f "$INBOX/brief.txt" "$INBOX/brief.srt" "$REPO/scribe/transcripts/brief"*
+  echo "the text import" > "$INBOX/brief.txt"
+  echo "a different import" > "$INBOX/brief.srt"
+  out="$("$MR" clear-input "$INBOX/brief.txt" --$mode --note "$note" 2>&1)" \
+    || bad "--$mode on brief.txt succeeds" "$out"
+  check "--$mode on brief.txt removes it from the inbox" absent "$INBOX/brief.txt"
+  check "...and leaves brief.srt where it is" exist "$INBOX/brief.srt"
+  check "...untouched" [ "$(cat "$INBOX/brief.srt")" = "a different import" ]
+done
+rm -f "$INBOX/brief.srt" "$REPO/scribe/transcripts/brief"*
+
+# An audio file: its .srt is what transcribing it made, so it goes with it.
+echo x > "$INBOX/call.m4a"; echo "1" > "$INBOX/call.srt"; echo x > "$INBOX/call.16k.wav"
+"$MR" clear-input "$INBOX/call.m4a" --delete --note "$note" >/dev/null 2>&1
+check "--delete on audio removes it, its .srt and its 16 kHz copy" \
+  absent "$INBOX/call.m4a" "$INBOX/call.srt" "$INBOX/call.16k.wav"
+echo x > "$INBOX/call.m4a"; : > "$INBOX/call.srt"
+"$MR" clear-input "$INBOX/call.m4a" --keep-transcript --note "$note" >/dev/null 2>&1; rc=$?
+check "--keep-transcript on audio with an empty .srt refuses" [ "$rc" -ne 0 ]
+check "...and keeps the audio" exist "$INBOX/call.m4a"
+rm -f "$INBOX/call.m4a" "$INBOX/call.srt"
+
 echo "silence detection"
 out="$(STUB_FFMPEG_FAIL=1 python3 -c '
 import sys; sys.path.insert(0, sys.argv[1])
