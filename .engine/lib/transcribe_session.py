@@ -149,7 +149,8 @@ def to_real(t, mapping):
 
 def parse_srt(path):
     try:
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        with open(path, encoding="utf-8", errors="replace") as f:
+            raw = f.read()
     except OSError:
         return []
     cues = []
@@ -192,7 +193,8 @@ def track_timelines(session, names):
     ...]. No entry means the file can be read as it is.
     """
     try:
-        checks = json.load(open(os.path.join(session, "session.json"))).get("checks") or {}
+        with open(os.path.join(session, "session.json")) as f:
+            checks = json.load(f).get("checks") or {}
     except Exception:
         return {}
     found = {}
@@ -233,7 +235,8 @@ def track_offsets(session, names):
     meetingrec started writing the offsets should be transcribed in place.
     """
     try:
-        doc = json.load(open(os.path.join(session, "session.json")))
+        with open(os.path.join(session, "session.json")) as f:
+            doc = json.load(f)
         checks = doc.get("checks") or {}
         found = {n: checks[n + ".wav"]["start_offset_seconds"]
                  for n in names

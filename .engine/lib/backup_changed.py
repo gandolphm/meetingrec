@@ -3,11 +3,14 @@
 # Run by meetingrec (settle_backup); kept out of the bash script so it can be linted
 # and tested on its own.
 import hashlib, json, os, sys
-root, sums = sys.argv[1], json.load(open(sys.argv[2]))
+root = sys.argv[1]
+with open(sys.argv[2]) as f:
+    sums = json.load(f)
 for name, digest in sorted(sums.items()):
     path = os.path.join(root, name)
     try:
-        same = hashlib.sha256(open(path, "rb").read()).hexdigest() == digest
+        with open(path, "rb") as f:
+            same = hashlib.sha256(f.read()).hexdigest() == digest
     except OSError:
         same = False
     if not same:

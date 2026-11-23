@@ -75,7 +75,8 @@ def clock_error_ppm(log):
     already corrected, a diverging one cannot be.
     """
     try:
-        raw = open(log, encoding="utf-8", errors="replace").read()
+        with open(log, encoding="utf-8", errors="replace") as f:
+            raw = f.read()
     except OSError:
         return None
     pts = []
@@ -124,7 +125,8 @@ def capture_progress(log, bytes_per_sec):
     Also returns the mic's input sample rate, which is what decides it.
     """
     try:
-        raw = open(log, encoding="utf-8", errors="replace").read()
+        with open(log, encoding="utf-8", errors="replace") as f:
+            raw = f.read()
     except OSError:
         return [], None
     pts = []
@@ -187,7 +189,8 @@ def peak_dbfs(path):
     return 20 * math.log10(peak / 32768.0)
 p = os.path.join(d, "session.json")
 try:
-    doc = json.load(open(p))
+    with open(p) as f:
+        doc = json.load(f)
 except Exception:
     doc = {}
 doc["ended"] = (datetime.datetime.now(datetime.timezone.utc)
@@ -197,7 +200,8 @@ doc["duration_seconds"] = dur
 checks = {}
 cf = os.path.join(d, "format-check.txt")
 if os.path.exists(cf):
-    checks["startup_format"] = [l for l in open(cf).read().splitlines() if l.strip()]
+    with open(cf) as f:
+        checks["startup_format"] = [l for l in f.read().splitlines() if l.strip()]
 # Track start offsets. The two tracks do NOT begin at the same instant: each
 # ffmpeg only starts capturing once its device is open, and opening the mic can
 # take seconds — a Bluetooth headset renegotiates to the HFP voice profile

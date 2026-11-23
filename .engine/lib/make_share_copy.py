@@ -144,7 +144,8 @@ def main():
 
     if not os.path.isfile(args.note):
         die(f"no such file: {args.note}")
-    text = open(args.note, encoding="utf-8").read()
+    with open(args.note, encoding="utf-8") as f:
+        text = f.read()
     fm_lines, body = split_frontmatter(text)
     if not fm_lines:
         die("note has no frontmatter — is this a vault note?")

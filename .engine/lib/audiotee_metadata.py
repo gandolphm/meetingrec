@@ -6,17 +6,18 @@ import json, os, sys
 want = int(os.environ["MR_RATE"])
 meta = None
 try:
-    for line in open(os.environ["MR_LOG"], encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            msg = json.loads(line)
-        except ValueError:
-            continue
-        if msg.get("message_type") == "metadata" and msg.get("data"):
-            meta = msg["data"]
-            break
+    with open(os.environ["MR_LOG"], encoding="utf-8", errors="replace") as log:
+        for line in log:
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if msg.get("message_type") == "metadata" and msg.get("data"):
+                meta = msg["data"]
+                break
 except OSError:
     pass
 if not meta:

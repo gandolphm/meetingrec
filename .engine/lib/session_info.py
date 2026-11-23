@@ -6,7 +6,8 @@ import datetime, json, os, sys
 d = sys.argv[1]
 name = os.path.basename(os.path.normpath(d))
 try:
-    doc = json.load(open(os.path.join(d, "session.json")))
+    with open(os.path.join(d, "session.json")) as f:
+        doc = json.load(f)
 except (OSError, ValueError):
     doc = None
 if doc is None:

@@ -1502,6 +1502,23 @@ is_session() {
     || python3 "$LIB/session_json_ok.py" "$1/session.json"
 }
 
+# What's in a recording's folder that meetingrec didn't put there (an agenda
+# saved beside the tracks), one name per line. Every version has written only
+# these: the tracks, their transcripts, session.json, format-check.txt, *.log,
+# and hidden working files. A subfolder is never meetingrec's.
+foreign_files() {
+  local f name
+  for f in "$1"/* "$1"/.[!.]*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    name="$(basename "$f")"
+    if [ -d "$f" ]; then echo "$name/"; continue; fi
+    case "$name" in
+      mic.wav|system.wav|session.json|merged.txt|mic.srt|system.srt|format-check.txt|*.log|.*) ;;
+      *) echo "$name" ;;
+    esac
+  done
+}
+
 # mv that only counts when the file really went: mv -n can skip a move
 # without an error, and every caller stops rather than report a move that
 # didn't happen.
@@ -1556,6 +1573,14 @@ cmd_clear_input() {
   if [ -d "$real" ] && ! is_session "$real"; then
     die "$input isn't a meetingrec recording (no mic.wav or system.wav, and no session.json from meetingrec), so it was left where it is"
   fi
+  # Deleting the folder (or keeping only its text) would take a file of the
+  # user's with it. Nothing is split up: they move it out and run this again.
+  # --keep-recording keeps the folder whole, so it goes ahead.
+  if [ -d "$real" ] && [ "$mode" != keep-recording ]; then
+    local foreign
+    foreign="$(foreign_files "$real")"
+    [ -z "$foreign" ] || die "$input holds files meetingrec didn't make, so nothing was removed: $(printf '%s' "$foreign" | paste -sd ',' - | sed 's/,/, /g'). Move them out of the folder, then run this again."
+  fi
   if [ "$mode" != delete ]; then
     [ -d "$KEEP_DIR" ] || die "the transcripts folder $KEEP_DIR is missing, so nothing was moved or removed"
   fi
@@ -1588,7 +1613,8 @@ cmd_clear_input() {
             die "couldn't copy $f to $dest, so nothing was removed"
           fi
         done
-        rm -rf "$real" && echo "KEPT $dest" ;;
+        rm -rf "$real" || die "kept the transcript in $dest, but couldn't remove all of $real; what's left is still in the inbox"
+        echo "KEPT $dest" ;;
     esac
     return
   fi
@@ -1621,7 +1647,10 @@ cmd_clear_input() {
       has_words "$transcript" || die "no transcript text for $real (missing, empty or only silence), so nothing was removed"
       dest="$(keep_path "$stem.srt" "$date")"
       move_to "$transcript" "$dest" || die "couldn't move $transcript to $dest, so nothing was removed"
-      rm -f "$real" "$copy"
+      # A file locked in Finder can't be removed. Said, not hidden behind KEPT:
+      # whoever chose "keep the transcript" expects the audio gone.
+      rm -f "$real" "$copy" \
+        || die "kept the transcript as $dest, but couldn't remove $real (locked in Finder?), so the recording is still in the inbox. To finish once it can be removed: meetingrec clear-input \"$input\" --delete --note <the note>"
       echo "KEPT $dest" ;;
     keep-recording)
       # The transcript first: if the recording then can't move, the next try

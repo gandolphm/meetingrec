@@ -454,6 +454,49 @@ for kind in text session; do
   rm -rf "$s"
 done
 
+# Files of the user's in a recording's folder: nothing is removed, and they're named.
+s="$INBOX/2026-01-09T10-00_withagenda"
+mkdir -p "$s/slides"; echo x > "$s/mic.wav"; echo "# agenda" > "$s/agenda.md"
+printf '1\n00:00:01,000 --> 00:00:02,000\nhello\n' > "$s/mic.srt"
+for mode in delete keep-transcript; do
+  out="$("$MR" clear-input "$s" --$mode --note "$note" 2>&1)"; rc=$?
+  check "--$mode on a recording with a file of yours in it refuses" [ "$rc" -ne 0 ]
+  check "...names it and the subfolder" bash -c 'grep -q "agenda.md" <<< "$1" && grep -q "slides/" <<< "$1"' _ "$out"
+  check "...and leaves everything" exist "$s/agenda.md" "$s/slides" "$s/mic.wav" "$s/mic.srt"
+done
+check "...and keeps nothing" absent "$REPO/scribe/transcripts/2026-01-09T10-00_withagenda"
+"$MR" clear-input "$s" --keep-recording --note "$note" >/dev/null 2>&1; rc=$?
+check "--keep-recording keeps it whole" [ "$rc" -eq 0 ]
+check "...agenda and all" exist "$REPO/scribe/transcripts/2026-01-09T10-00_withagenda/agenda.md"
+rm -rf "$REPO/scribe/transcripts/2026-01-09T10-00_withagenda"
+# Everything meetingrec writes, and Finder's .DS_Store, is no reason to stop.
+s="$INBOX/2026-01-10T10-00_full"
+mkdir -p "$s"
+for f in mic.wav system.wav session.json format-check.txt mic-ffmpeg.log system-ffmpeg.log \
+         audiotee.log .tap.pcm .DS_Store; do echo x > "$s/$f"; done
+printf '1\n00:00:01,000 --> 00:00:02,000\nhello\n' > "$s/mic.srt"
+"$MR" clear-input "$s" --keep-transcript --note "$note" >/dev/null 2>&1; rc=$?
+check "a folder of only meetingrec's files: --keep-transcript goes ahead" [ "$rc" -eq 0 ]
+check "...and empties the inbox of it" absent "$s"
+rm -rf "$REPO/scribe/transcripts/2026-01-10T10-00_full"
+
+# Audio locked in Finder: the transcript is kept, the failure is said, and
+# --delete finishes once it's unlocked.
+echo x > "$INBOX/locked.m4a"
+printf '1\n00:00:01,000 --> 00:00:02,000\nhello\n' > "$INBOX/locked.m4a.meetingrec.srt"
+chflags uchg "$INBOX/locked.m4a"
+out="$("$MR" clear-input "$INBOX/locked.m4a" --keep-transcript --note "$note" 2>&1)"; rc=$?
+chflags nouchg "$INBOX/locked.m4a"
+check "--keep-transcript with locked audio exits non-zero" [ "$rc" -ne 0 ]
+check "...says the recording is still there, and how to finish" \
+  bash -c 'grep -q "still in the inbox" <<< "$1" && grep -q -- "--delete" <<< "$1"' _ "$out"
+check "...keeps the transcript" exist "$REPO/scribe/transcripts/locked.srt"
+check "...and the audio" exist "$INBOX/locked.m4a"
+"$MR" clear-input "$INBOX/locked.m4a" --delete --note "$note" >/dev/null 2>&1; rc=$?
+check "...and --delete finishes once it's unlocked" [ "$rc" -eq 0 ]
+check "...leaving nothing in the inbox" absent "$INBOX/locked.m4a"
+rm -f "$REPO/scribe/transcripts/locked.srt"
+
 echo "clear-input on a folder that isn't a recording"
 s="$INBOX/Project handouts"
 mkdir -p "$s"; echo "# agenda" > "$s/agenda.md"

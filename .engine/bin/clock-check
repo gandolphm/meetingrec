@@ -54,7 +54,8 @@ def die(msg):
 def samples(path):
     """[(elapsed, time - elapsed)] from an ffmpeg progress log."""
     try:
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        with open(path, encoding="utf-8", errors="replace") as f:
+            raw = f.read()
     except OSError:
         return []
     out = []
@@ -99,7 +100,8 @@ def verdict(rel, span_secs, span_label):
 def from_session_json(d, missing):
     p = os.path.join(d, "session.json")
     try:
-        doc = json.load(open(p))
+        with open(p) as f:
+            doc = json.load(f)
         checks = doc["checks"]
         err = {n: checks[f"{n}.wav"]["clock_error_ppm"] / 1e6 for n, _ in TRACKS}
     except Exception:

@@ -62,10 +62,10 @@ MADE_WAV=0
 if ! python3 -c '
 import sys, wave
 try:
-    w = wave.open(sys.argv[1], "rb")
+    with wave.open(sys.argv[1], "rb") as w:
+        ok = (w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getcomptype()) == (16000, 1, 2, "NONE")
 except Exception:
     sys.exit(1)
-ok = (w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getcomptype()) == (16000, 1, 2, "NONE")
 sys.exit(0 if ok else 1)' "$AUDIO" 2>/dev/null; then
   if ! command -v ffmpeg >/dev/null 2>&1; then
     echo "NO_FFMPEG  (run meetingrec's install.sh again, or: meetingrec update)" >&2; exit 2
