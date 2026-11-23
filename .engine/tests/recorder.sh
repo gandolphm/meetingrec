@@ -371,16 +371,61 @@ for mode in delete keep-transcript keep-recording; do
 done
 rm -f "$INBOX/brief.srt" "$REPO/scribe/transcripts/brief"*
 
-# An audio file: its .srt is what transcribing it made, so it goes with it.
-echo x > "$INBOX/call.m4a"; echo "1" > "$INBOX/call.srt"; echo x > "$INBOX/call.16k.wav"
-"$MR" clear-input "$INBOX/call.m4a" --delete --note "$note" >/dev/null 2>&1
-check "--delete on audio removes it, its .srt and its 16 kHz copy" \
-  absent "$INBOX/call.m4a" "$INBOX/call.srt" "$INBOX/call.16k.wav"
-echo x > "$INBOX/call.m4a"; : > "$INBOX/call.srt"
-"$MR" clear-input "$INBOX/call.m4a" --keep-transcript --note "$note" >/dev/null 2>&1; rc=$?
-check "--keep-transcript on audio with an empty .srt refuses" [ "$rc" -ne 0 ]
-check "...and keeps the audio" exist "$INBOX/call.m4a"
-rm -f "$INBOX/call.m4a" "$INBOX/call.srt"
+# An audio file: what transcribing it made (<name>.meetingrec.*) goes with it.
+# A <name>.srt beside it is a file of the user's (a phone app's own
+# transcript), never meetingrec's, and stays whatever the choice.
+theirs='1
+00:00:00,000 --> 00:00:01,000
+the app'"'"'s own words'
+words='1
+00:00:01,000 --> 00:00:02,000
+hello'
+for mode in delete keep-transcript keep-recording; do
+  rm -f "$INBOX/call."* "$REPO/scribe/transcripts/call"*
+  echo x > "$INBOX/call.m4a"; printf '%s\n' "$theirs" > "$INBOX/call.srt"
+  printf '%s\n' "$words" > "$INBOX/call.meetingrec.srt"; echo x > "$INBOX/call.meetingrec.16k.wav"
+  out="$("$MR" clear-input "$INBOX/call.m4a" --$mode --note "$note" 2>&1)" \
+    || bad "--$mode on call.m4a succeeds" "$out"
+  check "--$mode on audio takes it, its transcript and its 16 kHz copy out of the inbox" \
+    absent "$INBOX/call.m4a" "$INBOX/call.meetingrec.srt" "$INBOX/call.meetingrec.16k.wav"
+  check "...and leaves the user's call.srt as it was" [ "$(cat "$INBOX/call.srt")" = "$theirs" ]
+done
+check "--keep-transcript keeps Whisper's words, named call.srt" \
+  bash -c '[ "$(cat "$1")" = "$2" ]' _ "$REPO/scribe/transcripts/call.srt" "$words"
+rm -f "$INBOX/call."* "$REPO/scribe/transcripts/call"*
+
+# Transcripts with no words: empty, cue numbers and timings only, or only
+# Whisper's silence marker. The audio stays.
+for kind in empty timings blank; do
+  echo x > "$INBOX/call.m4a"
+  case "$kind" in
+    empty)   : > "$INBOX/call.meetingrec.srt" ;;
+    timings) printf '1\n00:00:00,000 --> 00:00:05,000\n\n' > "$INBOX/call.meetingrec.srt" ;;
+    blank)   printf '1\n00:00:00,000 --> 00:00:30,000\n[BLANK_AUDIO]\n\n' > "$INBOX/call.meetingrec.srt" ;;
+  esac
+  out="$("$MR" clear-input "$INBOX/call.m4a" --keep-transcript --note "$note" 2>&1)"; rc=$?
+  check "--keep-transcript on audio whose transcript is $kind refuses" [ "$rc" -ne 0 ]
+  check "...and keeps the audio" exist "$INBOX/call.m4a"
+done
+rm -f "$INBOX/call."*
+s="$INBOX/2026-01-06T10-00_blank"
+mkdir -p "$s"; echo x > "$s/mic.wav"
+printf '1\n00:00:00,000 --> 00:00:30,000\n[BLANK_AUDIO]\n\n' > "$s/mic.srt"
+"$MR" clear-input "$s" --keep-transcript --note "$note" >/dev/null 2>&1; rc=$?
+check "a session whose only transcript is [BLANK_AUDIO] refuses" [ "$rc" -ne 0 ]
+check "...and keeps the recording" exist "$s/mic.wav"
+rm -rf "$s"
+
+echo "clear-input on a folder that isn't a recording"
+s="$INBOX/Project handouts"
+mkdir -p "$s"; echo "# agenda" > "$s/agenda.md"
+for mode in delete keep-transcript keep-recording; do
+  out="$("$MR" clear-input "$s" --$mode --note "$note" 2>&1)"; rc=$?
+  check "--$mode refuses" [ "$rc" -ne 0 ]
+  check "...and leaves it where it is" exist "$s/agenda.md"
+done
+check "...and says why" has "$out" "isn't a meetingrec recording"
+rm -rf "$s"
 
 echo "silence detection"
 out="$(STUB_FFMPEG_FAIL=1 python3 -c '
@@ -767,7 +812,8 @@ check "...and works the title, date and tracks out from the folder" \
 
 echo "prepare"
 inbox2="$T/inbox-prepare"
-mkdir -p "$inbox2/2026-01-04T10-00_standup"
+mkdir -p "$inbox2/2026-01-04T10-00_standup" "$inbox2/Project handouts"
+: > "$inbox2/2026-01-04T10-00_standup/session.json"; : > "$inbox2/Project handouts/agenda.md"
 : > "$inbox2/phone call.m4a"; : > "$inbox2/agenda.pdf"
 mrc config set OUTPUT_ROOT "$inbox2" >/dev/null
 out="$(mrc prepare scribe 2>&1)"
@@ -777,6 +823,7 @@ check "session folders are listed" has "$out" '^INPUT session .*_standup$'
 check "...before single files" \
   bash -c '[ "$(grep -n "^INPUT session" <<< "$1" | cut -d: -f1)" -lt "$(grep -n "^INPUT file" <<< "$1" | cut -d: -f1)" ]' _ "$out"
 check "...and files that aren't audio or text aren't" bash -c '! grep -q "agenda.pdf" <<< "$1"' _ "$out"
+check "...nor folders that aren't recordings" bash -c '! grep -q "Project handouts" <<< "$1"' _ "$out"
 rm -rf "$inbox2"
 out="$(mrc prepare scribe 2>&1)"
 check "a missing inbox says MISSING INBOX" has "$out" '^MISSING INBOX$'

@@ -1386,7 +1386,9 @@ cmd_prepare() {
   if [ -d "$inbox" ]; then
     local found=0 entry
     while IFS= read -r entry; do
-      if [ -d "$inbox/$entry" ]; then echo "INPUT session $inbox/$entry"; found=1; fi
+      if [ -d "$inbox/$entry" ] && is_session "$inbox/$entry"; then
+        echo "INPUT session $inbox/$entry"; found=1
+      fi
     done < <(ls -t "$inbox")
     while IFS= read -r entry; do
       echo "INPUT file $inbox/$entry"; found=1
@@ -1489,9 +1491,18 @@ keep_path() {
   echo "$try"
 }
 
-# Whether a transcript file exists, can be read, and holds more than whitespace.
-has_text() {
-  [ -f "$1" ] && grep -q '[^[:space:]]' "$1" 2>/dev/null
+# Whether a folder is one of meetingrec's recordings: every one has had
+# session.json since the first version, and a track or two. Anything else in
+# an inbox (a folder of handouts, in a recordings folder shared with other
+# things) is never listed as a recording or removed.
+is_session() {
+  [ -f "$1/session.json" ] || [ -f "$1/mic.wav" ] || [ -f "$1/system.wav" ]
+}
+
+# Whether a transcript file holds words: in an .srt, cue text other than
+# Whisper's [BLANK_AUDIO] (numbers and timings alone don't count).
+has_words() {
+  [ -f "$1" ] && python3 "$LIB/transcript_has_words.py" "$1"
 }
 
 # Takes a used recording or transcript out of the inbox once the note is
@@ -1532,6 +1543,9 @@ cmd_clear_input() {
     ); then
     die "$input is still recording, so it was left where it is (stop the recording first)"
   fi
+  if [ -d "$real" ] && ! is_session "$real"; then
+    die "$input isn't a meetingrec recording (no session.json, mic.wav or system.wav), so it was left where it is"
+  fi
   if [ "$mode" != delete ]; then
     [ -d "$KEEP_DIR" ] || die "the transcripts folder $KEEP_DIR is missing, so nothing was moved or removed"
   fi
@@ -1552,8 +1566,8 @@ cmd_clear_input() {
         # for a track with no speech before it gives up, and "no speech" is
         # a loudness guess: the audio may be all that's left of the meeting.
         local dest f found=0
-        for f in merged.txt mic.srt system.srt; do has_text "$real/$f" && found=1; done
-        [ "$found" -eq 1 ] || die "no transcript text in $real (missing or empty), so nothing was removed"
+        for f in merged.txt mic.srt system.srt; do has_words "$real/$f" && found=1; done
+        [ "$found" -eq 1 ] || die "no transcript text in $real (missing, empty or only silence), so nothing was removed"
         dest="$(keep_path "$real" "$date")"
         mkdir "$dest" || die "couldn't create $dest"
         for f in merged.txt mic.srt system.srt session.json; do
@@ -1582,26 +1596,30 @@ cmd_clear_input() {
     return
   fi
 
-  # An audio file, plus what transcribing it made: <name>.srt next to it, and
-  # the 16 kHz copy if a run stopped half-way.
-  local stem="${real%.*}" transcript="${real%.*}.srt"
+  # An audio file, plus what transcribing it made: <name>.meetingrec.srt next
+  # to it, and the 16 kHz copy if a run stopped half-way. Not <name>.srt: that
+  # is a file of the user's (transcribe.sh never writes one), and stays.
+  local stem="${real%.*}" transcript="${real%.*}.meetingrec.srt"
+  local copy="${real%.*}.meetingrec.16k.wav"
   case "$mode" in
     delete)
-      rm -f "$real" "$stem.srt" "$stem.16k.wav" && echo "DELETED $real" ;;
+      rm -f "$real" "$transcript" "$copy" && echo "DELETED $real" ;;
     keep-transcript)
-      has_text "$transcript" || die "no transcript text for $real (missing or empty), so nothing was removed"
-      local dest; dest="$(keep_path "$transcript" "$date")"
+      has_words "$transcript" || die "no transcript text for $real (missing, empty or only silence), so nothing was removed"
+      # Kept as <name>.srt: the .meetingrec part only kept it apart in the inbox.
+      local dest; dest="$(keep_path "$stem.srt" "$date")"
       mv -n "$transcript" "$dest" || die "couldn't move $transcript"
-      rm -f "$real" "$stem.16k.wav"
+      rm -f "$real" "$copy"
       echo "KEPT $dest" ;;
     keep-recording)
-      local dest f
-      for f in "$real" "$stem.srt"; do
-        [ -f "$f" ] || continue
-        dest="$(keep_path "$f" "$date")"
-        mv -n "$f" "$dest" && echo "KEPT $dest"
-      done
-      rm -f "$stem.16k.wav" ;;
+      local dest
+      dest="$(keep_path "$real" "$date")"
+      mv -n "$real" "$dest" && echo "KEPT $dest"
+      if [ -f "$transcript" ]; then
+        dest="$(keep_path "$stem.srt" "$date")"
+        mv -n "$transcript" "$dest" && echo "KEPT $dest"
+      fi
+      rm -f "$copy" ;;
   esac
 }
 

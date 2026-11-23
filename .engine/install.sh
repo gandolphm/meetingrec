@@ -183,6 +183,14 @@ install_tool() {
   fi
   # No prebuilt copy yet, or the download failed: Homebrew, if this Mac has it.
   if [ -x "$BREW" ]; then
+    # Homebrew's ffmpeg lacks meetingrec's microphone patch. Nobody chose that
+    # here (USE_HOMEBREW is off), so say what it costs and how to undo it.
+    if [ "$name" = ffmpeg ] && [ -n "$sha256" ]; then
+      note "using Homebrew's ffmpeg instead. It lacks meetingrec's microphone fix, so on"
+      note "a 44.1 or 48 kHz microphone (a MacBook's own, AirPods on most calls) it can lose"
+      note "7 to 11% of your voice; stop tells you when it has. To get meetingrec's copy, run"
+      note "this again when the download works: bash \"$REPO/.engine/install.sh\""
+    fi
     brew_formula "$formula"
     return
   fi

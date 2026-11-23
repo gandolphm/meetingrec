@@ -5,7 +5,7 @@
 #   transcribe.sh <audio_path> <out_dir> [model] [prompt]
 #
 #   audio_path : .m4a/.mp3/.wav/.mp4/etc.
-#   out_dir    : where the .srt lands
+#   out_dir    : where <name>.meetingrec.srt lands
 #   model      : whisper model name (default: small.en)
 #   prompt     : optional priming text (names/jargon) to improve recognition
 #
@@ -26,7 +26,10 @@ MODEL="${3:-small.en}"
 PROMPT="${4:-}"
 
 mkdir -p "$OUTDIR"
-BASE="$(basename "${AUDIO%.*}")"
+# Everything this writes is named <name>.meetingrec.*, never <name>.srt: a
+# call.srt beside call.m4a may be a transcript the user dropped in too (a phone
+# app's export), and Whisper's output must not replace it.
+BASE="$(basename "${AUDIO%.*}").meetingrec"
 SRT="$OUTDIR/$BASE.srt"
 
 if ! command -v whisper-cli >/dev/null 2>&1; then
