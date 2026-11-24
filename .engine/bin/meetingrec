@@ -1510,13 +1510,21 @@ foreign_files() {
   local f name
   for f in "$1"/* "$1"/.[!.]*; do
     [ -e "$f" ] || [ -L "$f" ] || continue
-    name="$(basename "$f")"
+    name="${f##*/}"
     if [ -d "$f" ]; then echo "$name/"; continue; fi
     case "$name" in
       mic.wav|system.wav|session.json|merged.txt|mic.srt|system.srt|format-check.txt|*.log|.*) ;;
       *) echo "$name" ;;
     esac
   done
+}
+
+# Lines joined with ", " for a message. A comma or space inside a name stays
+# as it is.
+join_lines() {
+  local line out=""
+  while IFS= read -r line; do out="${out:+$out, }$line"; done <<<"$1"
+  printf '%s' "$out"
 }
 
 # mv that only counts when the file really went: mv -n can skip a move
@@ -1579,7 +1587,7 @@ cmd_clear_input() {
   if [ -d "$real" ] && [ "$mode" != keep-recording ]; then
     local foreign
     foreign="$(foreign_files "$real")"
-    [ -z "$foreign" ] || die "$input holds files meetingrec didn't make, so nothing was removed: $(printf '%s' "$foreign" | paste -sd ',' - | sed 's/,/, /g'). Move them out of the folder, then run this again."
+    [ -z "$foreign" ] || die "$input holds files meetingrec didn't make, so nothing was removed: $(join_lines "$foreign"). Move them out of the folder, then run this again."
   fi
   if [ "$mode" != delete ]; then
     [ -d "$KEEP_DIR" ] || die "the transcripts folder $KEEP_DIR is missing, so nothing was moved or removed"
@@ -1613,7 +1621,7 @@ cmd_clear_input() {
             die "couldn't copy $f to $dest, so nothing was removed"
           fi
         done
-        rm -rf "$real" || die "kept the transcript in $dest, but couldn't remove all of $real; what's left is still in the inbox"
+        rm -rf "$real" || die "kept the transcript in $dest, but couldn't remove all of $real (a file locked in Finder?); what's left is still in the inbox. To finish once it can be removed: meetingrec clear-input \"$input\" --delete --note <the note>"
         echo "KEPT $dest" ;;
     esac
     return
@@ -1649,8 +1657,10 @@ cmd_clear_input() {
       move_to "$transcript" "$dest" || die "couldn't move $transcript to $dest, so nothing was removed"
       # A file locked in Finder can't be removed. Said, not hidden behind KEPT:
       # whoever chose "keep the transcript" expects the audio gone.
-      rm -f "$real" "$copy" \
+      rm -f "$real" \
         || die "kept the transcript as $dest, but couldn't remove $real (locked in Finder?), so the recording is still in the inbox. To finish once it can be removed: meetingrec clear-input \"$input\" --delete --note <the note>"
+      # Only a leftover from a transcription that stopped half-way.
+      rm -f "$copy" || die "kept the transcript as $dest and removed $real, but couldn't remove the temporary copy $copy"
       echo "KEPT $dest" ;;
     keep-recording)
       # The transcript first: if the recording then can't move, the next try
